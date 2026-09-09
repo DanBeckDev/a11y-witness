@@ -333,7 +333,8 @@ export function renderMergedChecks(merged, required) {
  * hours ago is indistinguishable from a host swapping right now.
  *
  * @typedef {{compressedMb: number, inactiveMb: number, freeMb: number, pageouts: number,
- *   load: number | null, gitProcesses: number | null, worktrees: number}} HostState
+ *   load: number | null, gitProcesses: number | null, worktrees: number,
+ *   topConsumers?: {pid: string, cpu: number, command: string}[] | null}} HostState
  *
  * `load` and `gitProcesses` are declared NULLABLE even though `os.loadavg()` cannot fail today. The
  * type is what stops the next reader writing `host.load > LOAD_CEILING` and getting `false` from a
@@ -342,11 +343,27 @@ export function renderMergedChecks(merged, required) {
  *
  * @returns {HostState | null}
  */
-/** Whether `pgrep` can be run at all, so a failed count is told apart from a count of none. */
-function gitIsAskable() {
-  return ask(() => execFileSync("pgrep", ["-x", "definitely-no-such-process-name"],
-    { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })) !== null
-    || ask(() => execFileSync("pgrep", ["-V"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })) !== null;
+/**
+ * Concurrent `git` processes, or null when `pgrep` could not be ASKED -- and the two are told apart by
+ * pgrep's own exit status rather than by a second probe.
+ *
+ * `pgrep` exits 1 for "no process matched" and 2+ (or ENOENT) for "I could not look", so a plain
+ * try/catch folds a real count of none into a failure, and `?? 0` folds a failure into a count of none.
+ * The first draft of this asked a control question instead -- `pgrep -x <a name nothing has>` -- which
+ * has the identical exit status as the real query and so answered nothing at all. **A control that
+ * shares the failure mode of the thing it controls for is not a control**, which is the same shape as a
+ * verification sharing a failure mode with its action (#645).
+ *
+ * @returns {number | null}
+ */
+function gitProcessCount() {
+  try {
+    return execFileSync("pgrep", ["-x", "git"], { encoding: "utf8" })
+      .trim().split("\n").filter(Boolean).length;
+  } catch (err) {
+    // Exit 1 is pgrep's documented "nothing matched" -- a real measurement of zero.
+    return /** @type {{status?: number}} */ (err).status === 1 ? 0 : null;
+  }
 }
 
 export function hostState() {
@@ -378,11 +395,40 @@ export function hostState() {
     // folded "I could not ask" into "there are none" -- and none is the reassuring answer. Kept
     // separate, and `hostContention` below refuses to call a host uncontended on a count it does not
     // have.
-    gitProcesses: ask(() => execFileSync("pgrep", ["-x", "git"], { encoding: "utf8" })
-      .trim().split("\n").filter(Boolean).length) ?? (gitIsAskable() ? 0 : null),
+    gitProcesses: gitProcessCount(),
     worktrees: ask(() => execFileSync("git", ["worktree", "list"],
       { encoding: "utf8", env: sandboxGitEnv() }).trim().split("\n").length) ?? 0,
+    topConsumers: topConsumers(),
   };
+}
+
+/** How many processes to name. Enough to see a pattern, few enough to read in a table. */
+const CONSUMERS_SHOWN = 5;
+
+/**
+ * The five processes actually using the CPU, because **"contended" without the consumer is a verdict
+ * without a cause** -- and the remedy differs completely depending on the answer. Nine sessions running
+ * `npm test` at once is fixed by serialising pushes; Spotlight indexing 107 worktrees is fixed by pruning
+ * and an exclusion file, and serialising pushes would do nothing at all.
+ *
+ * `ps -r`, NOT `top -l 1`. A single `top` sample has no interval to measure a percentage against, so it
+ * reports `0.0` for every process on a host at load 35 -- measured 2026-09-09T11:07Z, five processes all
+ * reading 0.0% while `ps` put `mds_stores` at 52%. That is this file's own defect class arriving through
+ * a sampling window instead of a missing PATH: **an unmeasurable value printed as a small number reads as
+ * good news.** `top -l 2` and discarding the first sample works, and costs a second of wall clock for a
+ * number `ps` already has.
+ *
+ * @returns {{pid: string, cpu: number, command: string}[] | null}
+ */
+export function topConsumers() {
+  const out = ask(() => execFileSync("ps", ["-Ao", "pid,pcpu,comm", "-r"], { encoding: "utf8" }));
+  if (out === null) return null;
+  return out.split("\n").slice(1, CONSUMERS_SHOWN + 1).flatMap((line) => {
+    const m = /^\s*(\d+)\s+([\d.]+)\s+(.+)$/.exec(line);
+    // The command is a full path; the basename is what a reader recognises, and `mds_stores` says more
+    // than the 96 characters of framework path in front of it.
+    return m ? [{ pid: m[1], cpu: Number(m[2]), command: m[3].split("/").pop() ?? m[3] }] : [];
+  });
 }
 
 /** Concurrent git processes above which a carry is contending rather than working. */
@@ -390,6 +436,51 @@ export const GIT_PROCESS_CEILING = 10;
 
 /** Load average above which the gate is slow because the host is, not because anything is wrong. */
 export const LOAD_CEILING = 12;
+
+/** Processes that are this org's own work, so the relief advice can tell ours from everyone else's. */
+const OURS = /^(node|npm|git|tsc|tsx|esbuild|Claude|claude)/;
+
+/** A user application whose presence means a person is USING this machine, not just sharing it. */
+const A_PERSON_IS_USING_THIS_MACHINE = /^(zoom\.us|Google Chrome|Safari|Firefox|Slack|Teams|obs|QuickTime)/i;
+
+/**
+ * WHAT TO ACTUALLY DO, derived from WHO IS USING THE CPU -- because the remedies are disjoint and
+ * picking the wrong one costs the whole cycle. Nine sessions running `npm test` at once is fixed by
+ * serialising pushes. `mds_stores` indexing 106 worktrees is fixed by pruning, and serialising pushes
+ * would do nothing whatever. A virtual machine somebody else started is not ours to fix at all.
+ *
+ * Measured 2026-09-09T11:30Z, which is why this stopped being one fixed paragraph: the table said
+ * "stop running `npm test` locally" while the top five were Docker's VM at 134%, Spotlight at 61%,
+ * WindowServer at 51% and Zoom at 39% -- **not one of them ours**. Advice that names the wrong cause is
+ * worse than none, because sessions act on it and the load does not move.
+ *
+ * @param {{command: string, cpu: number}[] | null} consumers
+ * @returns {string[]}
+ */
+export function reliefFor(consumers) {
+  if (consumers === null) return ["     No CPU reading, so no cause -- do not guess at a remedy."];
+  const ours = consumers.filter((c) => OURS.test(c.command));
+  const person = consumers.filter((c) => A_PERSON_IS_USING_THIS_MACHINE.test(c.command));
+  const spotlight = consumers.filter((c) => c.command.startsWith("mds"));
+  const lines = [];
+  if (person.length > 0) {
+    lines.push(`     SOMEBODY IS USING THIS MACHINE (${person.map((c) => c.command).join(", ")}). Our`,
+      "     load is competing with their session, not just with itself: one push at a time across all",
+      "     sessions, no local suites, sweeps paused, until the next table shows it gone.");
+  }
+  if (spotlight.length > 0) {
+    lines.push("     Spotlight is indexing the worktrees. Prune every one whose PR has merged; a",
+      "     `.metadata_never_index` in a worktree root stops it being indexed at all.");
+  }
+  if (ours.length > 0) {
+    lines.push(`     Ours, and stoppable now: ${ours.map((c) => `${c.command} ${c.cpu.toFixed(0)}%`)
+      .join(", ")}. A full local suite belongs in CI -- the pre-push gate is enough.`);
+  } else {
+    lines.push("     NONE of the top five is ours. Serialising our own work will not move this load;",
+      "     the cost is being paid by something we do not control, so wait rather than throttle harder.");
+  }
+  return lines;
+}
 
 /**
  * Whether the host is contended, and -- the part a boolean alone destroys -- WHICH readings are missing.
@@ -428,6 +519,13 @@ export function renderHost(host, previousPageouts = null) {
       + `git ${host.gitProcesses ?? "?"}   `
       + `worktrees ${host.worktrees}`,
   ];
+  const consumers = host.topConsumers ?? null;
+  if (consumers === null) {
+    lines.push("   ? could not read the CPU consumers -- contention below is a verdict without a cause");
+  } else if (consumers.length > 0) {
+    lines.push("   using the CPU: "
+      + consumers.map((c) => `${c.command} ${c.cpu.toFixed(0)}%`).join("   "));
+  }
   const { contended, unknown } = hostContention(host);
   if (unknown.length > 0) {
     lines.push(`   ^ COULD NOT READ: ${unknown.join(", ")} -- not a reading of zero, and not a`,
@@ -436,9 +534,8 @@ export function renderHost(host, previousPageouts = null) {
   if (contended) {
     lines.push("   ^ THE HOST IS CONTENDED. A carry is a merge plus a pre-push gate running lint and",
       "     typecheck; at this load those are minutes rather than seconds. A PR that is not carried",
-      "     right now is a busy machine, NOT an idle owner -- do not name people for it.",
-      "     Cheapest relief, in order: remove every worktree whose PR has merged (Spotlight indexes",
-      "     every one of them), and stop running `npm test` locally -- the pre-push gate is enough.");
+      "     right now is a busy machine, NOT an idle owner -- do not name people for it.");
+    lines.push(...reliefFor(consumers));
   }
   return { lines, incomplete: false };
 }
