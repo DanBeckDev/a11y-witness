@@ -12,7 +12,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/board-report.mjs` — generate the daily board report from GitHub and git, never from what an agent said
 - `node scripts/board-schedule-liveness.mjs` — say whether the board report's cron is still arriving, and comment once if not
 - `node scripts/board-snapshot.mjs` — snapshot every Project item before any board-mutating call, so a bad mutation is recoverable
-- `node scripts/board-summary-check.mjs` — check at 21:00 whether tomorrow's hand-written board summary has been written yet
+- `node scripts/board-summary-check.mjs` — check on the morning of an edition whether that day's hand-written board summary exists
 - `node scripts/build-packages.mjs` — run tsc --build across every package under packages/ in dependency order
 - `node scripts/changed-packages.mjs` — list which packages/<name> directories a branch touched against origin/main
 - `node scripts/changeset-precise.mjs` — say whether this diff touches a file npm pack actually ships for a published package
