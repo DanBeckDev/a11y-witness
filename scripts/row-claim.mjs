@@ -135,8 +135,13 @@ const defaultRun = (cmd, args) => execFileSync(cmd, args, { encoding: "utf8", en
 // (#665, the identical shape one field over) was found to be exactly as unwritten while fixing this.
 // `--force` makes creation idempotent (updates color/description rather than erroring) so this never
 // fails on a label a previous claim already made.
-/** @param {string[]} labels @param {{ run?: typeof defaultRun }} [deps] */
-function ensureLabelsExist(labels, { run = defaultRun } = {}) {
+/**
+ * #883: EXPORTED, not module-private -- `row-file.mjs` needs the identical creation for the `lane:<owner>`
+ * labels it derives, and a second copy of "create a label idempotently before adding it" is the same
+ * fact-stated-twice shape #749 itself exists to name. Behaviour is unchanged for every existing caller.
+ * @param {string[]} labels @param {{ run?: typeof defaultRun }} [deps]
+ */
+export function ensureLabelsExist(labels, { run = defaultRun } = {}) {
   for (const label of labels) run("gh", ["label", "create", label, "--repo", REPO, "--force"]);
 }
 
