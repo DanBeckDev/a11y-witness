@@ -229,6 +229,67 @@ export function testFileRequirements(text) {
   return match[1].split(",").map((s) => s.trim()).filter(Boolean);
 }
 
+// #731: `runsRoot()` MEANS TWO DIFFERENT THINGS, and the closure walk below could only ask one question of
+// it -- "does this file call `runsRoot()`" -- which reads BOTH as "needs the corpus". `git-fixture-cache.mjs`
+// (#660) calls it to CHOOSE A LOCATION IT CREATES ITSELF (a cache it rebuilds on a miss); it never reads
+// pre-existing evidence there. #718 merged that file, and #722 -- a PR that never touched it -- inherited a
+// refusal for a chain it does not own, because the closure's `corpus` verdict is unconditional on the call
+// alone.
+//
+// `// writes: runs/<subdir>` is the write-side counterpart to `// requires: <list>` above, and it is
+// DECLARED, THEN VERIFIED, NEVER SUBSTITUTED FOR THE CLOSURE'S OWN ANSWER: a file naming this header still
+// has its `runsRoot()` hit inspected exactly as before, and the declaration is trusted only when the same
+// file's own text actually names the declared subdirectory AND contains a real write call there. A rule
+// that skipped verification would let ANY file talking its way out of `corpus` by adding a comment; a rule
+// that only widened the pattern (matching on "write-shaped" runsRoot calls generally) would still be asking
+// the closure to guess intent from shape, the exact defect this row exists to end. So the file's own
+// declaration is what decides -- and when a file claims a write path its own code does not actually use,
+// that mismatch is named as A WRONG DECLARATION, a DIFFERENT and MORE SPECIFIC refusal than plain `corpus`,
+// rather than the closure silently trusting or silently overriding it either way.
+//
+// #731, THE BUG FOUND WHILE FIXING THE BUG: a verified write-only hit that is merely SKIPPED (not
+// recorded) lets the walk carry on into that file's OWN imports -- and `runsRoot()` is not only CALLED by
+// a writer, it is also DEFINED, in `dataset-paths.mjs`, whose `export function runsRoot() {` line matches
+// the identical call-shaped pattern as any real call. The first version of this fix skipped
+// `git-fixture-cache.mjs`'s own verified hit and let the walk recurse into its imports as normal, which
+// reached `dataset-paths.mjs` next and matched ITS definition line as a fresh, unexempted `corpus` hit --
+// reproducing the exact refusal this row exists to end, one hop further down the identical chain. A regex
+// for a call shape matching the definition of the function it looks for fails in the direction that looks
+// like success: the exemption appears to work, and the walk quietly finds the same requirement one hop
+// later. THE PROPERTY IS ABOUT THE CHAIN, NOT ABOUT A LINE -- so `deriveClosureRequirements`'s own
+// `exemptCorpus` flag marks the WHOLE closure exempt once a verified write is found, rather than
+// suppressing one file's occurrence and leaving the requirement free to be rediscovered downstream.
+const WRITES_HEADER = /^\/\/\s*writes:\s*(\S+)\s*$/m;
+
+/**
+ * @param {string} text
+ * @returns {string | null} the declared path (e.g. `runs/git-fixture-cache`), or null if undeclared.
+ */
+function declaredWritePath(text) {
+  const match = WRITES_HEADER.exec(text);
+  return match ? match[1] : null;
+}
+
+// A REAL write, not a path merely computed and never used. Deliberately narrow -- built to catch a WRONG
+// declaration (a `// writes:` line naming a location this file's code does not actually touch), never to
+// enumerate every way a file could write, so it only needs to recognise the shapes this repo's own
+// runs/-writing code actually takes: `mkdirSync`/`writeFileSync` for a plain cache file, or a spawned `git
+// bundle create` for `git-fixture-cache.mjs` itself.
+const WRITE_CALL_PATTERN = /\b(?:mkdirSync|writeFileSync|createWriteStream)\s*\(|\bbundle\b[^)]*\bcreate\b/;
+
+/**
+ * Does `writesPath`'s claim actually hold of `codeOnly` -- the declared subdirectory is one this file's own
+ * `runsRoot()`-based path construction names, AND the file genuinely writes there? Both must hold, or the
+ * declaration is wrong rather than merely unverifiable: naming a real subdirectory this file never writes
+ * to is exactly as wrong as naming one it does not even mention.
+ * @param {string} codeOnly
+ * @param {string} writesPath
+ */
+function writeDeclarationHolds(codeOnly, writesPath) {
+  const subdir = writesPath.replace(/^runs\//, "");
+  return subdir.length > 0 && codeOnly.includes(subdir) && WRITE_CALL_PATTERN.test(codeOnly);
+}
+
 // #621: DERIVED, NOT DECLARED. `board-style.test.ts` reaches `gh` with no `// requires:` header at all --
 // the fourth instance in two days of the identical shape #382 already named: "an opt-in declaration
 // cannot catch the file whose author did not know there was something to declare, which is the whole
@@ -284,19 +345,35 @@ function lineNumberOf(text, index) {
   return text.slice(0, index).split("\n").length;
 }
 
-/** @typedef {{ requirement: "token" | "corpus" | "history", file: string, line: number, chain: string[] }} ClosureHit */
+/** @typedef {{ requirement: "token" | "corpus" | "history", file: string, line: number, chain: string[],
+ *              wrongDeclaration?: boolean }} ClosureHit */
 
 /**
  * Every requirement reachable from `entry`'s local-import closure, each named by the FIRST file (in walk
  * order) that proves it, the line it was found on, and the full chain of files from `entry` down to it --
  * #621's own stated acceptance is naming the HOP, not just the capability: "this test needs a token" sends
  * a reader to the test; naming the module that spawns `gh` sends them to the cause.
+ *
+ * #731: A `corpus` HIT IS CHECKED AGAINST THAT SAME FILE'S OWN `// writes:` DECLARATION before being
+ * recorded -- a file whose `runsRoot()` call is verified as choosing a location it creates itself is not
+ * corpus-dependent at all, and is skipped rather than recorded. A file that DECLARES `// writes:` but whose
+ * own text does not bear it out is still recorded as `corpus`, flagged `wrongDeclaration: true` -- named as
+ * a bad declaration, never silently trusted and never silently overridden.
  * @param {string} entry absolute path to the entry file
  * @returns {ClosureHit[]}
  */
 export function deriveClosureRequirements(entry) {
   /** @type {Map<string, ClosureHit>} */
   const found = new Map();
+  // A VERIFIED WRITE-ONLY `corpus` HIT MARKS THE WHOLE CLOSURE EXEMPT, not just this one file's own match.
+  // `runsRoot()` is not only called by a writer -- it is also DEFINED, in dataset-paths.mjs, and that
+  // definition's `export function runsRoot() {` line matches the identical "call-shaped" pattern as any
+  // real call. Skipping a verified hit without recording anything left the requirement "not yet found," so
+  // the walk carried on into git-fixture-cache.mjs's own imports, reached dataset-paths.mjs, and matched
+  // its definition site as a fresh, unexempted `corpus` hit -- reproducing the exact refusal this fix
+  // exists to remove, one hop further down the same chain. `exemptCorpus` records that the closure has
+  // already answered "corpus" honestly and nothing further in this walk may reopen it.
+  let exemptCorpus = false;
   /** @param {string} file @param {string[]} chain @param {Set<string>} seen */
   const walk = (file, chain, seen) => {
     if (seen.has(file) || !existsSync(file)) return;
@@ -305,9 +382,15 @@ export function deriveClosureRequirements(entry) {
     const codeOnly = stripComments(text);
     const hereChain = [...chain, file];
     for (const [pattern, requirement] of CLOSURE_REQUIREMENT_PATTERNS) {
-      if (found.has(requirement)) continue;
+      if (found.has(requirement) || (requirement === "corpus" && exemptCorpus)) continue;
       const match = pattern.exec(codeOnly);
-      if (match) found.set(requirement, { requirement, file, line: lineNumberOf(text, match.index), chain: hereChain });
+      if (!match) continue;
+      const hit = { requirement, file, line: lineNumberOf(text, match.index), chain: hereChain };
+      if (requirement !== "corpus") { found.set(requirement, hit); continue; }
+      const writesPath = declaredWritePath(text);
+      if (writesPath === null) { found.set(requirement, hit); continue; }
+      if (writeDeclarationHolds(codeOnly, writesPath)) { exemptCorpus = true; continue; }
+      found.set(requirement, { ...hit, wrongDeclaration: true });
     }
     for (const next of localImports(file)) walk(next, hereChain, seen);
   };
@@ -319,20 +402,28 @@ export function deriveClosureRequirements(entry) {
  * The human-facing form of a `ClosureHit` -- `"board-style.test.ts requires token via collect →
  * board-data.mjs:72"` for a one-hop chain, matching #621's own worked example verbatim. A direct hit (the
  * entry file itself matches, zero hops) reads as `"<entry> requires <req>, at <entry>:<line>"`.
+ *
+ * #731: A `wrongDeclaration` HIT SAYS SO, naming the file's OWN claim as the thing that failed -- a reader
+ * fixing a plain `corpus` refusal edits the test; a reader fixing a wrong `// writes:` edits the comment
+ * that no longer describes what the file does, a different fix at a different spot.
  * @param {ClosureHit} hit
  * @returns {string}
  */
 export function closureRequirementMessage(hit) {
-  const { requirement, file, line, chain } = hit;
+  const { requirement, file, line, chain, wrongDeclaration } = hit;
   const entryLabel = basename(chain[0]);
   const fileLabel = basename(file);
-  if (chain.length <= 1) return `${entryLabel} requires ${requirement}, at ${fileLabel}:${line}`;
+  const suffix = wrongDeclaration
+    ? ` -- ${fileLabel} declares \`// writes:\` a path its own code does not bear out; refusing rather `
+      + "than trusting an unverified claim"
+    : "";
+  if (chain.length <= 1) return `${entryLabel} requires ${requirement}, at ${fileLabel}:${line}${suffix}`;
   const hops = [];
   for (let i = 0; i < chain.length - 1; i++) {
     const names = importedNamesFor(chain[i], chain[i + 1]);
     hops.push(names[0] ?? basename(chain[i + 1]));
   }
-  return `${entryLabel} requires ${requirement} via ${hops.join(" → ")} → ${fileLabel}:${line}`;
+  return `${entryLabel} requires ${requirement} via ${hops.join(" → ")} → ${fileLabel}:${line}${suffix}`;
 }
 
 /**
