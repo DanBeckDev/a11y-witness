@@ -209,10 +209,19 @@ test("acceptanceReport: a command that exits zero passes the report", () => {
 });
 
 test("acceptanceReport: a REFUSED command never calls run(), and does not fail the report on its own", () => {
-  let called = false;
-  const report = acceptanceReport("Acceptance:\nnpm run fleet:deploy\n", () => { called = true; return 0; });
-  assert.equal(called, false, "a refused command must never actually execute");
-  assert.equal(report.ok, true, "REFUSED is not a pass and not a failure -- but it must not block a merge either");
+  // PAIRED WITH A RUNNABLE COMMAND since 2026-09-09. A section in which NOTHING ran now fails on its own,
+  // because 55 of the 145 PRs merged that day reported success having executed no command. This test's
+  // subject is unchanged: a refused command must never EXECUTE, and must not by itself sink a section
+  // that examined something.
+  /** @type {string[]} */
+  const called: string[] = [];
+  const report = acceptanceReport(
+    "Acceptance:\nnpm run fleet:deploy\nnode -e \"process.exit(0)\"\n",
+    (cmd) => { called.push(cmd); return 0; });
+  assert.deepEqual(called.filter((c) => c.includes("fleet")), [],
+    "a refused command must never actually execute");
+  assert.equal(report.ok, true,
+    "REFUSED is not a pass and not a failure -- beside a command that RAN it must not block a merge");
   assert.match(report.lines[0], /^ACCEPTANCE: REFUSED npm run fleet:deploy -> /);
 });
 
@@ -645,7 +654,9 @@ test("#497 jobCapabilities: history follows the body declaration; token/fleet/co
 
 test("#510 acceptanceReport: the history fixture is REFUSED (named), not RAN, with no `History: full` "
   + "declared -- and REFUSED never fails the report on its own", () => {
-  const body = `Closes #1\nAcceptance: npx tsx --test ${HISTORY_FIXTURE}\n`;
+  // The runnable second command is what keeps this a test about `history` rather than about a section
+  // that examined nothing -- see the EXECUTED NOTHING rule below.
+  const body = `Closes #1\nAcceptance:\nnpx tsx --test ${HISTORY_FIXTURE}\nnode -e "process.exit(0)"\n`;
   const report = acceptanceReport(body, () => 0);
   assert.equal(report.ok, true);
   assert.match(report.lines[0], /^ACCEPTANCE: REFUSED/);
@@ -974,6 +985,158 @@ test("#731 MUTATION: point a write-only corpus-root user's declared write path a
   }
 });
 
+// --- #827: `token` means TWO things too -- a file whose OWN operation needs it, and a file that merely
+// SHARES A MODULE with one that does. `board-markdown.test.ts`/`board-achievement-retirement.test.ts` each
+// import only `document` from `board-document.mjs`, render it from a literal fixture, and pass with `gh`
+// stubbed to exit 4 -- but the walk scans the WHOLE FILE's text for every pattern, not the one export a
+// caller actually imports, so reaching `board-document.mjs` at all charges every test for its OTHER
+// export (`todaysReleaseExists`, a real `gh release view` spawn) even when that export is never imported.
+//
+// SAME SELF-REFERENCE DISCIPLINE AS THE #731 SECTION ABOVE: this file is walked by its own #621
+// self-reference test (`REAL_FILE`, above), so nothing here spells `execFileSync("gh"` contiguously --
+// every fixture builds it through `spell()`, exactly as the corpus section builds `runsRoot(`. ---
+
+/**
+ * A SYNTHETIC board-document.mjs-SHAPED module: one file exporting a SAFE function (pure, no `gh`) beside
+ * a RISKY one (spawns `gh`) -- the real shape #827 fixes. `riskyFnName` is a parameter, never a shared
+ * default, so a mutation test below can be sure it is naming the SAME identifier it declares against.
+ */
+function writeSyntheticMixedModule(dir: string, riskyFnName: string): string {
+  const fixture = join(dir, "mixed-module.mjs");
+  writeFileSync(fixture, [
+    "import { execFileSync } from \"node:child_process\";",
+    "export function safeRender(x) { return String(x); }",
+    `export function ${riskyFnName}() { execFileSync("${spell("g", "h")}", ["release", "view"]); }`,
+  ].join("\n"));
+  return fixture;
+}
+
+test("#827 REGRESSION: an entry importing ONLY the safe export of a mixed module is STILL charged token, "
+  + "with no declaration -- the exact live shape (board-markdown.test.ts before this row) proving the "
+  + "fix below is earned, not merely a walk that stopped looking", () => {
+  const dir = mkdtempSync(join(tmpdir(), "acceptance-token-"));
+  try {
+    writeSyntheticMixedModule(dir, "checkRelease");
+    const entry = join(dir, "consumer.test.mjs");
+    writeFileSync(entry, [
+      "import { safeRender } from \"./mixed-module.mjs\";",
+      "safeRender(1);",
+    ].join("\n"));
+    const hits = deriveClosureRequirements(entry);
+    assert.deepEqual(hits.map((h) => h.requirement), ["token"],
+      `expected a token hit with no declaration; got: ${hits.map(closureRequirementMessage).join("; ")}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("#827: an entry that declares `// no-token: <fn>` and genuinely never calls that function derives NO "
+  + "requirement at all, even though the module it imports contains a real `gh` spawn elsewhere", () => {
+  const dir = mkdtempSync(join(tmpdir(), "acceptance-token-"));
+  try {
+    writeSyntheticMixedModule(dir, "checkRelease");
+    const entry = join(dir, "consumer.test.mjs");
+    writeFileSync(entry, [
+      "// no-token: checkRelease",
+      "import { safeRender } from \"./mixed-module.mjs\";",
+      "safeRender(1);",
+    ].join("\n"));
+    const hits = deriveClosureRequirements(entry);
+    assert.deepEqual(hits, [], `expected no hits; got: ${hits.map(closureRequirementMessage).join("; ")}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("#827: `// no-token:` is checked ONCE against the entry, not per-file -- an entry TWO HOPS from the "
+  + "risky module, through a pure re-export, is exempted the same way", () => {
+  const dir = mkdtempSync(join(tmpdir(), "acceptance-token-"));
+  try {
+    writeSyntheticMixedModule(dir, "checkRelease");
+    const helper = join(dir, "helper.mjs");
+    writeFileSync(helper, [
+      "export { safeRender } from \"./mixed-module.mjs\";",
+    ].join("\n"));
+    const entry = join(dir, "consumer.test.mjs");
+    writeFileSync(entry, [
+      "// no-token: checkRelease",
+      "import { safeRender } from \"./helper.mjs\";",
+      "safeRender(1);",
+    ].join("\n"));
+    const hits = deriveClosureRequirements(entry);
+    assert.deepEqual(hits, [], `expected no hits two hops deep; got: ${hits.map(closureRequirementMessage).join("; ")}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("#827: a `// no-token:` declaration naming a function the entry's OWN code DOES call is named as "
+  + "WRONG, never silently trusted -- a file claiming it avoids a call it actually makes must still refuse "
+  + "as token, with a message pointing at the bad declaration rather than a generic one", () => {
+  const dir = mkdtempSync(join(tmpdir(), "acceptance-token-"));
+  try {
+    writeSyntheticMixedModule(dir, "checkRelease");
+    const entry = join(dir, "consumer.test.mjs");
+    writeFileSync(entry, [
+      "// no-token: checkRelease",
+      "import { checkRelease } from \"./mixed-module.mjs\";",
+      "checkRelease();",
+    ].join("\n"));
+    const hits = deriveClosureRequirements(entry);
+    assert.equal(hits.length, 1);
+    assert.equal(hits[0].requirement, "token");
+    assert.equal(hits[0].wrongDeclaration, true);
+    assert.match(closureRequirementMessage(hits[0]), /declares `\/\/ no-token:`.*DOES call/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("#827 MUTATION: an entry that genuinely earns its exemption, then edited to also call the risky "
+  + "function, must lose it -- proving the exemption is EARNED by the entry's own code, not granted by "
+  + "the header alone", () => {
+  const dir = mkdtempSync(join(tmpdir(), "acceptance-token-"));
+  try {
+    writeSyntheticMixedModule(dir, "checkRelease");
+    const entry = join(dir, "consumer.test.mjs");
+    const clean = [
+      "// no-token: checkRelease",
+      "import { safeRender, checkRelease } from \"./mixed-module.mjs\";",
+      "safeRender(1);",
+    ].join("\n");
+    writeFileSync(entry, clean);
+    assert.deepEqual(deriveClosureRequirements(entry), [], "sanity: the clean fixture must be exempt first");
+    const mutated = `${clean}\ncheckRelease();\n`;
+    assert.notEqual(mutated, clean, "the mutation must actually land, or this proves nothing");
+    writeFileSync(entry, mutated);
+    const hits = deriveClosureRequirements(entry);
+    assert.equal(hits.length, 1, `expected the token hit to return; got: ${JSON.stringify(hits)}`);
+    assert.equal(hits[0].wrongDeclaration, true);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("#827: removing every runnable command from a body must still not report success -- #826's own rule, "
+  + "unaffected by this row's declaration mechanism (a REFUSED-only report is its own state, never `ok`)", () => {
+  const body = "Closes #1\nAcceptance: npm test\n";
+  const report = acceptanceReport(body, () => 0);
+  assert.equal(report.ok, false, "a whole-suite command naming no file must still fail the job");
+});
+
+test("#827 ACCEPTANCE, against the REAL files this row was filed over: board-markdown.test.ts and "
+  + "board-achievement-retirement.test.ts each carry `// no-token:` now, and each derives NO token "
+  + "requirement from board-document.mjs's own `gh release view` spawn", () => {
+  for (const file of [
+    "packages/lab/src/packaging/board-markdown.test.ts",
+    "packages/lab/src/packaging/board-achievement-retirement.test.ts",
+  ]) {
+    const hits = deriveClosureRequirements(file);
+    assert.deepEqual(hits, [], `${file} must derive no requirement now that it declares \`// no-token:\` `
+      + `and never calls the function it names; got: ${hits.map(closureRequirementMessage).join("; ")}`);
+  }
+});
+
 // --- #513's OTHER HALF: the command everybody actually types ---
 //
 // `unmetCommandRequirements` and `unmetCommandClosureRequirements` both opened with
@@ -1057,8 +1220,78 @@ test("CONTROL: a refusal of a NAMED file stays a pass -- the author did their pa
   + "run that one file. Failing both would make the two indistinguishable, and they need opposite fixes", () => {
   const caps = { history: false, token: false, fleet: false, corpus: false };
   const named = acceptanceReport(
-    "Acceptance: npx tsx --test packages/lab/src/packaging/queue-table.test.ts", () => 0, { capabilities: caps });
+    'Acceptance:\nnpx tsx --test packages/lab/src/packaging/queue-table.test.ts\n'
+    + 'node -e "process.exit(0)"\n', () => 0, { capabilities: caps });
   assert.equal(named.ok, true);
   assert.match(named.lines[0], /REFUSED/);
   assert.doesNotMatch(named.lines[0], /Name the files/);
+});
+
+// --- A SECTION THAT EXECUTED NOTHING IS NOT A SECTION THAT PASSED ---
+//
+// `evidence:check`'s examined-nothing shape, in the acceptance job. MEASURED 2026-09-09: 55 of the 145
+// PRs merged that day had an acceptance job that executed no command and concluded success. Almost every
+// one was `tsx --test packages/lab/src/packaging/<x>.test.ts` refused for `token` -- the tracker and
+// pipeline tooling, which is exactly the code the rest of the org now relies on.
+//
+// Three of the 55 were found by the PM re-running the declared commands at the merge commit by hand. The
+// shape is generic to the closure walk, not to those three, which is why this is a rule rather than
+// three fixes.
+
+test("EXECUTED NOTHING FAILS: every command refused and none run is the absence of an answer, not a pass", () => {
+  const caps = { history: false, token: false, fleet: false, corpus: false };
+  const report = acceptanceReport(
+    "Acceptance: npx tsx --test packages/lab/src/packaging/row-claim-live.test.ts", () => 0,
+    { capabilities: caps });
+  assert.equal(report.ok, false);
+  assert.ok(report.lines.some((l) => l.startsWith("ACCEPTANCE: EXECUTED NOTHING")),
+    "the verdict must be its own line, not a modifier on the refusal -- a reader scanning for a failure "
+    + "reads line starts");
+  assert.match(report.lines.join("\n"), /no token, no fleet and no corpus/,
+    "and it must say what this job cannot do, or the author reads it as the tool being broken");
+});
+
+test("A REFUSED LINE PASSES ONLY BESIDE A RAN LINE -- refusing one named file while another actually "
+  + "runs is a partial answer; refusing every one is no answer at all", () => {
+  const caps = { history: false, token: false, fleet: false, corpus: false };
+  const mixed = acceptanceReport(
+    'Acceptance:\nnpx tsx --test packages/lab/src/packaging/row-claim-live.test.ts\n'
+    + 'node -e "process.exit(0)"\n', () => 0, { capabilities: caps });
+  assert.equal(mixed.ok, true, "one command ran, so the section examined something");
+  assert.ok(!mixed.lines.some((l) => l.startsWith("ACCEPTANCE: EXECUTED NOTHING")));
+});
+
+test("CONTROL: a section with commands that all RUN is untouched, and an empty section is not this "
+  + "verdict -- MISSING and NONE are their own answers and must not be renamed", () => {
+  const caps = { history: false, token: false, fleet: false, corpus: false };
+  const ran = acceptanceReport('Acceptance: node -e "process.exit(0)"', () => 0, { capabilities: caps });
+  assert.equal(ran.ok, true);
+  assert.ok(!ran.lines.some((l) => /EXECUTED NOTHING/.test(l)));
+
+  assert.deepEqual(acceptanceReport("no sections here", () => 0, { capabilities: caps }).lines,
+    ["ACCEPTANCE: MISSING"], "MISSING is not EXECUTED NOTHING: one is a body with no declaration, the "
+    + "other a declaration this job cannot act on");
+});
+
+/**
+ * THE BOUNDARY, and it is #516's rather than a convenience. I wrote this test asserting the opposite
+ * first -- "the rule is about a section examining nothing, not about the word Acceptance" -- and the
+ * suite refused it, correctly.
+ *
+ * `Refutation:` is OPTIONAL, and this repo's own rule tells authors to declare `npm run mutate` there,
+ * which the classifier refuses BY DESIGN: mutate's exit 0 means the guard BITES, while `Refutation:`
+ * reads success as a non-zero exit, so running it would invert the verdict. A rule that failed a section
+ * for executing nothing would refuse the body the tree itself asks the author to write.
+ *
+ * An Acceptance section has no such case: every refusal there is a capability this job lacks.
+ */
+test("THE BOUNDARY: a REFUTATION section that executed nothing does NOT fail -- the tree tells authors "
+  + "to declare a command it refuses by design there, and refusing their body for obeying it is worse", () => {
+  const caps = { history: false, token: false, fleet: false, corpus: false };
+  const report = acceptanceReport(
+    'Acceptance:\nnode -e "process.exit(0)"\n'
+    + "Refutation:\nnpx tsx --test packages/lab/src/packaging/row-claim-live.test.ts\n", () => 0,
+    { capabilities: caps });
+  assert.equal(report.ok, true);
+  assert.ok(!report.lines.some((l) => /EXECUTED NOTHING/.test(l)));
 });
