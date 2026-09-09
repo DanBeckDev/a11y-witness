@@ -90,6 +90,13 @@ export function prRow(pr, behind, now) {
     // pushing fixes keeps `updatedAt` fresh, so such a PR is never "untouched" and never reads as stalled,
     // while being the one that can least escape. Measured 2026-09-09: #564 was carried to zero behind at
     // 07:30:30Z and read 14 behind eight minutes and seven merges later.
+    //
+    // AND THE OLD PREDICATE'S FALSE NEGATIVES WERE CONCENTRATED WHERE THE EFFORT WAS -- product-manager's
+    // sentence, and it is the reason this is a defect rather than a gap: "behind AND untouched for 90
+    // minutes" encodes an assumption that an unattended PR is the one in trouble. An absorbed PR is the
+    // opposite; its owner is attending to it constantly, which is exactly what keeps it out of the table.
+    // A predicate whose false negatives sit in the cases with the most human effort behind them is worse
+    // than no predicate, because it converts effort into invisibility.
     absorbed: (behind ?? 0) > 0 && (pr.redChecks?.length ?? 0) > 0,
     red: pr.redChecks,
   };
