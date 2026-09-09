@@ -1111,14 +1111,23 @@ const MIN_HEADINGS_REACHED = 0.1;
  * A gate built on either would have fired constantly on healthy captures and been switched off. Headings
  * are the one comparator measured as sound: 37 of 38 on that same capture.
  */
+/**
+ * The bare threshold comparison, extracted so an EARLY reader (`earlyContainmentVerdict` below, #426) can
+ * apply the IDENTICAL decision to the same two numbers read off in-flight marks, rather than re-deriving a
+ * second threshold that could silently drift from this one. `captureReachedThePage` is the only other
+ * caller, and stays the sole place a finished capture asks the question.
+ *
+ * No census means no oracle, and no oracle means no verdict — `true` (reached) either way, so a capture
+ * predating the census, or one whose CDP call failed, is treated as fine rather than accused.
+ */
+function reachedEnoughHeadings(exposed: number | undefined, reached: number): boolean {
+  if (typeof exposed !== "number" || exposed < CENSUS_HEADINGS_TO_JUDGE) return true;
+  return reached >= exposed * MIN_HEADINGS_REACHED;
+}
+
 export function captureReachedThePage(capture: CapturedAnnouncements): boolean {
   const census = pageCensus(capture);
-  const exposed = census?.heading;
-  // No census means no oracle, and no oracle means no verdict. Every capture taken before the census
-  // existed lands here and must be unaffected.
-  if (typeof exposed !== "number" || exposed < CENSUS_HEADINGS_TO_JUDGE) return true;
-  const reached = capture.structure?.headings.length ?? 0;
-  return reached >= exposed * MIN_HEADINGS_REACHED;
+  return reachedEnoughHeadings(census?.heading, capture.structure?.headings.length ?? 0);
 }
 
 /**
@@ -1274,6 +1283,63 @@ export function captureDoubt(capture: CapturedAnnouncements, title: string | und
   if (title && !captureMentionsTitle(capture, title)) return "wrong-content";
   if (!captureReachedThePage(capture)) return "contained";
   return null;
+}
+
+/**
+ * `captureDoubt`'s "contained" half, read off an IN-FLIGHT capture's marks instead of a finished one —
+ * #426's second half. `/progress`'s `phases` array (`server.mjs`'s `respondWithProgress`, #627) already
+ * carries both numbers this needs — `structureCensus`'s exposed heading count and `structural`'s reached
+ * count — and both are marked well before a capture's later probes (route-change, forms) run, because
+ * `sweepEveryStructuralType` marks `structural` mid-sweep and `navigateByStructure` takes its one census
+ * reading right after. Nothing new is recorded to answer this: it is `reachedEnoughHeadings` applied to
+ * the SAME two numbers `captureReachedThePage` would read from the finished result, so a future change to
+ * the threshold has exactly one place to happen, never two that could drift apart.
+ *
+ * `wrong-content` has no early equivalent here on purpose — it needs a title comparison across retries
+ * this file's own retry loop (`recaptureUntilItReadsThePage`, `cli.ts`) only completes once the capture is
+ * done, so there is no sound early reading of it to offer.
+ *
+ * `decided: false` until BOTH marks have arrived, and that must stay distinct from "decided, not
+ * contained" — the same rule `census.heading === 0` needed against "the probe has not run yet"
+ * (CLAUDE.md's own record of that incident). A caller must never read "no doubt yet" as "cleared": the
+ * verdict can still flip to `contained` once the marks do arrive.
+ */
+export type EarlyContainmentVerdict =
+  | { decided: false }
+  | { decided: true; contained: false }
+  | { decided: true; contained: true; observedAtMs: number };
+
+/** `sweepEveryStructuralType`'s own mark (`capture-probes.mjs`) — the REACHED side. */
+function structuralMark(phases: readonly unknown[]): { headings?: unknown; atMs?: unknown } | undefined {
+  return phases.find(
+    (m): m is Record<string, unknown> =>
+      typeof m === "object" && m !== null && (m as { event?: unknown }).event === "structural",
+  );
+}
+
+/**
+ * Has a `structureCensus` mark arrived at all — regardless of whether it turns out usable. `pageCensus`
+ * collapses "not yet arrived" and "arrived but suspect" into the same `null`, which is right for a
+ * FINISHED capture (both mean "cannot judge", so `reachedEnoughHeadings` treats them alike) but wrong
+ * here, where the two need different verdicts: "not yet" must stay `decided: false` rather than reading
+ * as an early "not contained".
+ */
+function censusMarkArrived(phases: readonly unknown[]): boolean {
+  return phases.some(
+    (m) => typeof m === "object" && m !== null && (m as { event?: unknown }).event === "structureCensus",
+  );
+}
+
+export function earlyContainmentVerdict(phases: readonly unknown[]): EarlyContainmentVerdict {
+  const structural = structuralMark(phases);
+  if (!structural || !censusMarkArrived(phases)) return { decided: false };
+  const reached = typeof structural.headings === "number" ? structural.headings : 0;
+  const census = pageCensus({ diagnostics: phases as unknown[] } as CapturedAnnouncements);
+  if (reachedEnoughHeadings(census?.heading, reached)) return { decided: true, contained: false };
+  return {
+    decided: true, contained: true,
+    observedAtMs: typeof structural.atMs === "number" ? structural.atMs : 0,
+  };
 }
 
 /** The <title> of a served page, or "" if it has none. */
