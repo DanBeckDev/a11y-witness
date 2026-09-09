@@ -15,20 +15,27 @@ later, with less context than whoever filed it had.
 ## Use this instead of `gh issue create` directly
 
 ```sh
-npm run row-file -- --title "..." --body "## Region\n\n...\n\n## Acceptance\n\n...\n\n## Open-check\n\n..." [any other gh issue create flag]
+npm run row-file -- --title "..." --body "## Region\n\n...\n\n## Acceptance\n\n...\n\n## Open-check\n\n..." --session=<your-session-name> [any other gh issue create flag]
 # or
-npm run row-file -- --title "..." --body-file /path/to/body.md [any other gh issue create flag]
+npm run row-file -- --title "..." --body-file /path/to/body.md --session=<your-session-name> [any other gh issue create flag]
 ```
 
-`scripts/row-file.mjs` reads exactly the body this invocation would file — from `--body`/`--body=` or
-`--body-file`/`--body-file=` — and checks it against the **same rule** `row-claim` already enforces at
-claim time (`missingTemplateFields`, imported unchanged from `scripts/row-claim/template-fields-rule.mjs`,
-#707). If a required section is missing, it refuses and names which one, before `gh` ever runs. If the body
-is complete, every argument is forwarded to the real `gh issue create` unchanged — this wrapper adds
-exactly one check and nothing else.
+`--session=<name>` is **required** — the same flag `row-claim.mjs` already uses for dispatch/claim/decline,
+reused rather than a second, independently-typed one. `scripts/row-file.mjs` reads exactly the body this
+invocation would file — from `--body`/`--body=` or `--body-file`/`--body-file=` — and checks it against the
+**same rule** `row-claim` already enforces at claim time (`missingTemplateFields`, imported unchanged from
+`scripts/row-claim/template-fields-rule.mjs`, #707). If a required section is missing, it refuses and names
+which one, before `gh` ever runs.
+
+If the body is complete, it is filed with a `Filed-by: <session>` line appended (#771) — a body line, never
+a label, since a `filed-by:*` label would collide with `session:*`'s existing meaning of *claimed* (the
+2026-09-09 ruling; see #683 for the identical collision that removing `session:` on close would otherwise
+have caused). `row-claim check`/`--row=` prints it: `Filed-by: unrecorded` on any row filed without this
+tool, never inferred from prose that happens to say who filed it — GitHub's `author` is one fleet account
+for every row, so nothing else can answer this question at all.
 
 Every other flag `gh issue create` accepts (`--label`, `--assignee`, `--milestone`, `--project`, …) passes
-straight through; this tool does not enumerate or restrict them.
+straight through unchanged; this tool does not enumerate or restrict them.
 
 ## Why this and not a stricter check
 
