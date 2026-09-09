@@ -47,22 +47,20 @@ import { fetchBoardItems, PROJECT_NUMBER } from "./board-snapshot.mjs";
 import { fetchClosedRowEvents, claimsFromEvents, describeClaims, unattributableClosedRows,
   PROVENANCE_REQUIRED_FROM } from "./claim-provenance.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
+import { READY_LABEL, WAS_READY_LABEL } from "./claim-labels.mjs";
 // #782: THE PURE DECISION ONLY -- `labelsToStrip` classifies a label, it never calls `gh`. Importing it
 // does NOT give this file a mutation capability; the header above's ruling ("this audit REPORTS the
 // debris; it does not strip it... a bulk label mutation is product-manager's deliberate act") is
-// untouched. `close-rows-for-merged-pr.mjs` no longer imports FROM this file (moved `READY_LABEL` to its
-// own local duplicate, see that file's comment) specifically so this import does not create a cycle.
+// untouched. Safe from a cycle (#804): `close-rows-for-merged-pr.mjs` imports its own label constants
+// from the leaf `claim-labels.mjs`, never from this file, so this file importing FROM it forms no loop.
 import { labelsToStrip } from "./close-rows-for-merged-pr.mjs";
 
-export const READY_LABEL = "ready";
-
-// #449: THE RECORD THAT A ROW WAS `ready` IMMEDIATELY BEFORE A CLAIM REMOVED IT. `declineRow`
-// (row-claim.mjs) is the only writer of this label -- it always removes it in the same edit that
-// restores `ready`, mirroring `session:<name>`/`runner:<name>`'s own shape: a label recording a FACT
-// about the row's history, not a state a human sets by hand. See `strandedByIncompleteDecline` below for
-// the audit this enables: a row carrying it while neither `ready` nor claimed is the #171 shape --
-// a correct decline whose restore silently did not happen.
-export const WAS_READY_LABEL = "was-ready";
+// #804: READY_LABEL/WAS_READY_LABEL are IMPORTED (above) from the leaf claim-labels.mjs and re-exported
+// here, not declared in this file -- see claim-labels.mjs's own header for why. Every existing
+// `import { READY_LABEL } from "./ready-label-audit.mjs"` call site is unchanged. A bare `export {...}
+// from` would forward the binding WITHOUT creating a local one, and this file's own code below needs the
+// local name -- hence import-then-export as two separate statements rather than one re-export line.
+export { READY_LABEL, WAS_READY_LABEL };
 
 /**
  * Every label that already means "not actually pickable", independent of `ready`.
