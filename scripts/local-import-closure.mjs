@@ -24,6 +24,15 @@ import { dirname, join, resolve } from "node:path";
  * without this, `localImports` read its own JSDoc as a real import -- a self-reference one level deeper
  * than the mention-versus-use trap `acceptance-commands.mjs`'s own header already names: not "a comment
  * MENTIONING an operation," but "a comment CONTAINING syntactically valid code that performs one."
+ *
+ * NOT `@a11ign/evidence/source-text`'s own `stripComments`, deliberately -- checked, not assumed. That one
+ * is a real tokenizer (it correctly skips `//` inside a string literal, which this one does not) but it
+ * REMOVES a block comment's interior newlines rather than blanking them, so its output is SHORTER than its
+ * input whenever one spans multiple lines -- exactly the property `closureRequirementMessage` needs never
+ * to hold, since `lineNumberOf` reads an offset into the STRIPPED text as a line number in the REAL file.
+ * Different downstream questions ("does a quoted path string exist anywhere", `select-changed-tests.mjs`'s
+ * use, vs. "which real line performed this operation") tolerate different tradeoffs; sharing the wrong one
+ * would trade a visible self-reference bug for an invisible off-by-several-lines one.
  * @param {string} text
  * @returns {string}
  */
