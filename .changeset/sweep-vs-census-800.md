@@ -47,7 +47,8 @@ ratio above 1 is the page growing between two reads, and nothing here can tell t
 announces **80 on all five captures** while the census reports 83 then 69. A numerator holding still under
 a denominator that moves 17% is not that numerator's control.
 
-**The gate is not permanent and not a placeholder.** It opens on `readAtMs` — a field no capture carries,
+**The gate is not permanent and not a placeholder.** It opens on `readAt.startedAtMs` — the field #854
+adds, which no capture on disk carries,
 because `structureCensus.atMs` is stamped at MARK time and the census is read at the top of
 `navigateByStructure` and marked after it returns, so that field is off by the whole capture. A test pins
 the behaviour the fix unlocks so the gate cannot quietly become permanent.
