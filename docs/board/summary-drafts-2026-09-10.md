@@ -202,12 +202,49 @@ reading the current state of the code rather than the state it meant to ask abou
 both times, and the defect is identified.* **Do not offer a date for the fix** — it is another session's
 row and this document does not promise other people's work.
 
+### The outside-user rehearsal ran, and the reading is what it produced
+
+**A session that built none of the release followed only the public documentation, from a fresh clone,
+against a site we do not own, with a real task — and got a report back in under nine minutes.** That is
+the thing the 20 September publish rests on, and it had never been done end to end before today.
+
+**It found five faults in what a stranger receives**, none of which any internal run had surfaced: broken
+links and missing permissions in the quickstarts; a first line reading *"no blocking findings"* directly
+above six serious ones; a finding list that **under-reported**, detecting seven focus losses and printing
+five; and a finding whose quoted evidence compares two different controls.
+
+**The under-reporting is the one to lead with if the board gets only one.** A correction that only ever
+shrinks a claim teaches a reader that findings are inflated. **This one grew** — the tool had found more
+than it said. Four of the five are fixed or being fixed; the fifth is being traced.
+
+**Board sentence:** *the first outside run of our own published instructions worked, and it found five
+faults in what a stranger sees — including one where the tool reported less than it had found.*
+
+**Do not name the site.** It is a real company's page and we did not ask them.
+
 ### Everything else
 
 - **The fleet is at ten of ten** — the settled figure in section 3, `fleet:status` 13:21:19Z.
-- **Merges since midnight: 437**, `git log origin/main --since=2026-09-09T00:00:00Z --merges`. **Re-measure
-  at 07:25 and state the window in the same breath as the number** — a peer's 17 and this script's 42
-  were both right on edition 1, over different windows.
+- **Merges: 495** in the window **2026-09-09T00:00:00Z to the last merge at 16:59:27+01:00**
+  (`git log origin/main --since=… --merges`). **State the window in the same breath as the number** — a
+  peer's 17 and this script's 42 were both right on edition 1, over different windows. It read 437 at
+  14:2xZ, which is the same day and not a contradiction.
+- **The tracker's milestone figures were undercounting, and the board read the smaller ones yesterday.**
+  Thirty-seven open rows carried neither a milestone nor an out-of-release marker — no third state is
+  allowed, so they were invisible to every milestone count. Classified at 16:1xZ:
+
+  | | before | after |
+  |---|---|---|
+  | first publish | 5 | 8 |
+  | road to version one | 25 | 33 |
+  | capture throughput | 1 | 1 |
+  | the September move | 3 | 3 |
+  | deliberately outside the release | 2 | 29 |
+
+  **So the release and the road were under-reported by two and eight**, and the other twenty-seven were
+  never release work. **Say the correction, not just the new number** — the board saw the smaller figures
+  yesterday and the difference is theirs to see. Capture throughput stayed at one deliberately: its own
+  definition excludes correctness of what a capture records, and every candidate was correctness.
 
 ### What this section must NOT become
 
@@ -236,9 +273,10 @@ without acknowledging it has been asked before is how a decision request stops b
 
 | | 9 Sep | re-measure with |
 |---|---|---|
-| merges since midnight | 437 at 14:2xZ | `git log origin/main --since=<today>T00:00:00Z --merges --oneline \| wc -l` |
+| merges, window stated | 495 to 16:59:27+01:00 | `git log origin/main --since=<today>T00:00:00Z --merges --oneline \| wc -l` |
 | open pull requests | 6 | `gh pr list --state open --json number --jq 'length'` |
-| pickable rows | 22 | `gh issue list --state open --label ready --json number --jq 'length'` |
+| pickable rows | 15 at 17:0xZ | `gh issue list --state open --label ready --json number --jq 'length'` |
+| the September move | 3 open, 1 pickable | `gh api repos/.../milestones/5` |
 
 ## 8. One thing the summary must NOT claim
 
