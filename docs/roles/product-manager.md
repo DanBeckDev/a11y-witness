@@ -73,6 +73,13 @@ Three constraints from that date, enforced rather than remembered:
 
 A second incident of the same shape moves the role to another session.
 
+**Fourth Acceptance-line slip, 2026-09-09 (ceo).** #576, #587, #599 and #619 each named a correct check
+for the wrong job: `board-style.test.ts` imports `collect`, which shells out to `gh`, and the acceptance
+job's token is contents-only, so the check cannot run where it was named. The role's own rule from it,
+kept here in its words: **before naming a check, read what the JOB can do, not what the check does.**
+The class is closed mechanically by B8 deriving a test's requirements from its import closure (a row,
+worker-config); until that lands, this line is the reminder.
+
 ## What this role must NEVER do
 
 > Do not run anything that reaches the fleet or the lab: no `fleet:*`, no `lab:*`, no `training:capture*`,
