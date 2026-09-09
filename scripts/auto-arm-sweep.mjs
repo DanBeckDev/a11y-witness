@@ -112,6 +112,27 @@ export function sweepDecision({ labels, checkRunCount, holdReason = null }) {
   return { arm: true, reason: `${checkRunCount} check run(s) on its head` };
 }
 
+/**
+ * DID THIS PR MERGE BETWEEN THE CANDIDATE READ AND THE ARM? Asked of the API, never inferred from the
+ * failure's message: `gh pr merge --auto` exits non-zero for a merged PR, an unmergeable one and a
+ * network fault alike.
+ *
+ * UNREADABLE IS NOT MERGED. A lookup that fails returns false, so the caller reports FAILED TO ARM --
+ * which is the honest answer, because not knowing why an arm failed is not the same as knowing it was
+ * harmless. This is `armabilityOf`'s "Unreadable is not unheld" pointed at a different question.
+ *
+ * @param {string} number @param {string} repo
+ * @returns {boolean}
+ */
+function mergedMeanwhile(number, repo) {
+  try {
+    const pr = JSON.parse(gh(["api", `repos/${repo}/pulls/${number}`, "--jq", "{merged: .merged}"]));
+    return pr?.merged === true;
+  } catch {
+    return false;
+  }
+}
+
 /** @param {string[]} args */
 const gh = (args) => execFileSync("gh", args, { encoding: "utf8" }).trim();
 
@@ -165,6 +186,21 @@ function main() {
       gh(["pr", "merge", "--auto", "--merge", number, "--repo", repo]);
       console.log(`SWEEP: #${number} ARMED -- ${reason}`);
     } catch (cause) {
+      // MERGED MEANWHILE IS THE ORDINARY CASE ON A FAST MAIN, NOT A FAILURE. The candidate list is read
+      // at the top of this run; on a main taking eight merges in half an hour, a PR can go green, arm
+      // itself and land between that read and this line. `gh pr merge --auto` then exits non-zero, and
+      // reporting it as FAILED TO ARM makes `sweep` red on main's tip for a PR that did exactly what it
+      // was supposed to. Measured on #845 at 17:25:53Z.
+      //
+      // THE STATE IS READ, NEVER THE EXIT CODE. `gh` exits 1 for a merged PR, an unmergeable one and a
+      // network fault alike, so the message text cannot be trusted to tell them apart -- the same rule
+      // `disarmVerdict` follows for the mirror case, and the reason this asks the API rather than
+      // matching on `cause.message`.
+      if (mergedMeanwhile(number, repo)) {
+        console.log(`SWEEP: #${number} SKIPPED -- merged meanwhile, between this run's candidate read `
+          + "and its arm. Nothing to arm and nothing wrong.");
+        continue;
+      }
       console.log(`SWEEP: #${number} FAILED TO ARM -- ${cause instanceof Error ? cause.message : cause}`);
       failed.push(number);
     }
