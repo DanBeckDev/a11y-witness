@@ -169,6 +169,8 @@ OS-bound desktop application, so something has to run Windows — but it does no
 jobs:
   a11y:
     runs-on: windows-2022          # NVDA needs Windows; GitHub hosts these
+    permissions:
+      pull-requests: write         # for the PR comment below; omit it and the report still runs, only quieter
     steps:
       - uses: actions/checkout@v4
       - uses: DanBeckDev/a11y-witness@main
@@ -183,6 +185,8 @@ a PR comment; `fail-on` decides whether *findings* fail the build, and defaults 
 cannot break your pipeline on day one. `.github/workflows/action-smoke.yml` runs exactly this shape
 against two W3C pages on every push, as a consumer would.
 
+**→ [Try it against your own page](./docs/try-it.md)** — the shortest honest path to a real run, what to
+expect from a long marketing page (consent banners, forms), and the four questions we would like back.
 **→ [Full getting-started guide](./docs/getting-started.md)** — including running it locally.
 
 ### Locally instead
