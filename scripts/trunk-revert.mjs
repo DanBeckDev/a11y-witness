@@ -103,6 +103,21 @@ export function newestRunFor(runs, job) {
 }
 
 /**
+ * The argv for opening the revert PR, exported so the DRAFT can be asserted without a network.
+ *
+ * A one-flag decision is exactly the kind that gets lost in a refactor and cannot be seen in a diff of a
+ * function nothing drives -- `performRevert` spawns git and `gh`, so it has no unit test and never will.
+ * Pulling the argument list out is what makes the hold checkable at all.
+ *
+ * @param {{title: string, body: string, branch: string}} pr
+ * @returns {string[]}
+ */
+export function prCreateArgs({ title, body, branch }) {
+  return ["pr", "create", "--repo", REPO, "--title", title, "--body", body,
+    "--base", "main", "--head", branch, "--draft"];
+}
+
+/**
  * THE VERDICT, PURE -- so both refusal shapes and the ready shape can be driven without a network.
  *
  * @param {{ beforeConclusions: Record<string, string | null> | null, currentMainSha: string | null,
@@ -288,22 +303,40 @@ function performRevert({ pushSha, runUrl }) {
   const originPr = lookupOriginPr(pushSha);
   const title = originPr ? `revert: "${originPr.title}" broke main` : `revert: ${pushSha.slice(0, 10)} broke main`;
   const body = revertPrBody({ pushSha, originPr, runUrl });
-  const created = gh(["pr", "create", "--repo", REPO, "--title", title, "--body", body,
-    "--base", "main", "--head", branch]).trim();
-  console.log(`Opened ${created}`);
+  // OPENS AS A DRAFT, AND A DRAFT IS THE ONLY HOLD THIS PIPELINE OFFERS -- ceo's ruling, #616, the hour
+  // this decision reverted innocent work for the first time.
+  //
+  // On 2026-09-09 `main` went red on a WALL-CLOCK assertion ("the summary states WHEN it was written, and
+  // that time is within 60 minutes of the render"). The previous commit was green -- verifiably, in its
+  // own run, sixty-one minutes earlier. So this decision reached READY correctly and wrote a sentence
+  // that was true of its inputs and false of the world, and opened #615 against a merge that touched only
+  // the merge-guard rules. It was ARMED, and would have merged on green.
+  //
+  // #582 taught this decision to recognise a failure that ALREADY EXISTED and was being attributed to the
+  // wrong commit. It still cannot recognise a failure that DID NOT EXIST when the previous commit was
+  // measured. Both produce "the commit before was green"; only one of them means it. #616 is the real
+  // remedy -- re-run the failing job on the parent before reverting -- and until that lands, the draft is
+  // what stops a wrong verdict having consequences while keeping the decision executing end to end.
+  //
+  // A DRAFT RATHER THAN NOT OPENING AT ALL, deliberately. The verdict, the branch and the reasoning are
+  // all produced and readable; what is withheld is only the merge. `auto-arm.yml` refuses a draft
+  // outright, so nothing arms it by another route -- which is exactly why the draft is the hold rather
+  // than an unarmed PR: unarmed is a state anything can change, draft is a state something must.
+  const created = gh(prCreateArgs({ title, body, branch })).trim();
+  console.log(`Opened ${created} AS A DRAFT -- a human reads the attribution before this can merge (#616).`);
 
-  // ARMED HERE DIRECTLY, NOT LEFT TO `auto-arm.yml`'s OWN `pull_request: opened` TRIGGER -- a PR created
-  // with the workflow's own `GITHUB_TOKEN` does not fire a NEW workflow run for other workflows listening
-  // on `pull_request` (GitHub's own documented anti-recursion behaviour), so relying on unit 1 to arm this
-  // PR would silently never happen. Arming it here makes "opens armed" a fact about this job, not a hope
-  // about a second workflow noticing.
-  const number = created.split("/").pop();
-  gh(["pr", "merge", String(number), "--repo", REPO, "--auto", "--merge"]);
-
+  // NOT ARMED, and the comment that used to explain the arming is kept below because its FACT is still
+  // true and still load-bearing: a PR created with `GITHUB_TOKEN` fires no `pull_request` event, so
+  // `auto-arm.yml` will never see this PR at all. That means un-drafting alone does not arm it either --
+  // whoever confirms the attribution must arm it by hand, which is the right amount of friction for an
+  // action that deletes somebody's merged work.
   if (originPr) {
     gh(["pr", "comment", String(originPr.number), "--repo", REPO, "--body",
-      `This merge's own trunk-guard run failed on \`main\`'s tip and was verified NOT inherited -- `
-      + `reverted automatically in ${created}.`]);
+      `This merge's own trunk-guard run failed on \`main\`'s tip and the commit before it was green, so `
+      + `a revert is PROPOSED in ${created} -- opened as a DRAFT and NOT armed. Nothing is reverted yet. `
+      + `If this failure is the world's rather than this merge's (a wall-clock assertion, an outage, a `
+      + `dependency moving underneath), close that draft and say why; #616 is the row for teaching the `
+      + `decision to tell those apart by itself.`]);
   }
   process.exit(EXIT.READY);
 }
