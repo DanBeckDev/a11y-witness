@@ -381,6 +381,38 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: node scripts/closes-mismatch-check.mjs ${{ github.event.pull_request.number }}
 
+      # A LANE IS WHO MAY CHANGE A PATH -- ceo's ruling 2026-09-08, after a `pull_request` trigger added
+      # from outside the pipeline's lane attached a failing `audit` check to seven merged PRs and sat red
+      # for ninety minutes before anyone in the org read the view the chairman reads. Nobody was careless:
+      # the change was reasoned and the reasoning was sound, and its cost -- a red mark on every merged PR
+      # -- is visible from the merge queue and from nowhere else. A boundary nobody can see from where they
+      # sit is not enforced by a reminder.
+      #
+      # A SEPARATE STEP FROM `ownedPaths`, and the two questions must not be folded together: that job asks
+      # what a change to a path must DECLARE and lets anyone make it; this asks who may make it at all. A
+      # path can be lane-owned and fact-free, or fact-heavy and open to everyone, and one owner's edit to
+      # their own data file must never silently move the other's rule.
+      #
+      # The lane list is `docs/lane-ownership.json`, which `ceo` owns -- data, so a lane can move without
+      # touching the mechanism, and so the mechanism cannot quietly decide who owns what. A crossing is
+      # allowed and RECORDED rather than forbidden: a `Lane-exception:` line naming the lane, the assigner
+      # and the reason passes, and the check echoes the line into this log.
+      - name: A change in another session's lane was assigned, or it is refused
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          # THROUGH AN ENV VAR, NOT INLINE. A branch name is author-controlled text, and interpolating it
+          # into the script would let a branch called `x'; rm -rf /; '` run as shell. actionlint refuses
+          # the inline form by name, and it is right to: the flag parser downstream is not the boundary.
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          git fetch --depth=1 origin "$GITHUB_BASE_REF"
+          git diff --name-only FETCH_HEAD...HEAD > /tmp/lane-changed.txt
+          printf '%s' "$PR_BODY" > /tmp/lane-body.txt
+          node scripts/workflow-lane-check.mjs \
+            --diff=/tmp/lane-changed.txt \
+            --branch="$HEAD_REF" \
+            --body=/tmp/lane-body.txt
+
   # #353 (pipeline unit 2): NOTHING HAS EVER RUN A ROW'S ACCEPTANCE COMMAND. Every PR body carries an
   # `Acceptance:` line and argues its own case; the only thing that has ever executed it is the author,
   # reporting the result in prose. `capture-check` was mandatory after any `capture-core.mjs` change and
