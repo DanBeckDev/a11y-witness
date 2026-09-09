@@ -39,6 +39,7 @@ import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 import { refuseUnknownFlags, flagValue } from "@a11ign/worker-fleet/cli-flags";
+import { disarmVerdict } from "./pr-hold-state.mjs";
 import { claimStatus } from "./row-claim.mjs";
 import { REPO } from "./repo-identity.mjs";
 
@@ -190,9 +191,48 @@ function takeHold(number, session, holders, steal) {
       + "  Fix it by hand with `gh pr edit --add-label/--remove-label` before anyone acts on this PR.\n");
     return EXIT.CANNOT_ASK;
   }
+  const disarm = disarmAutoMerge(number);
+  if (!disarm.disarmed) {
+    process.stderr.write(`#${number}: ${disarm.reason}\n`);
+    return EXIT.CANNOT_ASK;
+  }
   process.stdout.write(`#${number} is now held by ${session}${decision.displaces.length
-    ? `, and ${decision.displaces.join(", ")} no longer holds it` : ""}.\n`);
+    ? `, and ${decision.displaces.join(", ")} no longer holds it` : ""}. ${disarm.reason}.\n`);
   return EXIT.DONE;
+}
+
+/**
+ * TURN AUTO-MERGE OFF, AND READ THE STATE BACK RATHER THAN THE EXIT CODE.
+ *
+ * #645: a hold that only labelled did not stop anything. Nothing in this repository disarmed a PR --
+ * `git grep "disable-auto"` was EMPTY -- so once `gh pr merge --auto` had been enabled, GitHub completed
+ * the merge when the checks went green and no label was consulted. A ruling at 09:05 could not stop a
+ * merge at 09:16 on a PR armed at 09:00.
+ *
+ * The read-back is `autoMergeRequest` FROM THE API, never this command's exit status: a disarm on a PR
+ * that is already merging returns success having changed nothing, which is a verification sharing a
+ * failure mode with the action. And the write is attempted even when the PR is not armed, because
+ * "already off" and "turned off" are the same end state and asking first would be one more round trip
+ * that can race.
+ *
+ * @param {number} number
+ * @returns {{ disarmed: boolean, reason: string }}
+ */
+function disarmAutoMerge(number) {
+  try {
+    gh(["pr", "merge", "--disable-auto", String(number)]);
+  } catch {
+    // NOT a failure on its own: `gh` exits non-zero when auto-merge was never enabled. The state read
+    // below is what decides, which is the whole point of not trusting the exit code in either direction.
+  }
+  let after;
+  try {
+    after = JSON.parse(gh(["pr", "view", String(number), "--json", "autoMergeRequest"]));
+  } catch (cause) {
+    return { disarmed: false, reason: "COULD NOT READ `autoMergeRequest` back after disarming: "
+      + `${/** @type {Error} */ (cause).message}. Unverified is not disarmed -- check by hand.` };
+  }
+  return disarmVerdict(after);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) main();
