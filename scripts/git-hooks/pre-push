@@ -785,4 +785,40 @@ if [ ${#failed[@]} -gt 0 ]; then
   exit 1
 fi
 
+# BEGIN #760 DIRTY-TREE PASS NOTE -- extraction markers for pre-push-dirty-tree-note.test.ts; keep both if edited.
+# #721's note above only prints on FAILURE -- a PASS on a dirty tree said nothing, the dangerous direction:
+# nothing follows a false pass. Measured twice in one day. worker-judge (#748) rewrote a test file's
+# fixtures, ran the suite against the working tree (passed), then `fetch`/`merge`/`push` WITHOUT staging
+# the edit -- incoming commits never touched that file, so the merge was clean and left the rewrite
+# uncommitted, and every commit and push since carried the ORIGINAL tests. dispatcher hit the identical
+# shape the same morning: a fix to `trunk-revert-guard.test.ts` sat uncommitted while three other files
+# were staged and pushed. Both local runs passed; neither push carried what was verified. Worker-judge's
+# own sentence for it: "a local pass proves the working tree, never proves what got pushed."
+pass_dirty="$(git status --porcelain 2>/dev/null | sed -n '1,20p')"
+if [ -n "$pass_dirty" ]; then
+  echo "" >&2
+  echo "NOTE: the working tree was NOT CLEAN, and these checks read the TREE, not the commits being" >&2
+  echo "pushed. Uncommitted, and therefore NOT in this push:" >&2
+  echo "$pass_dirty" | sed 's/^/    /' >&2
+  # LOUDER when a file is BOTH dirty right now AND in the push's own diff -- worker-judge's #748 case
+  # precisely: verified in one state, pushed in another. `push_remote_sha`/`push_local_sha` come from the
+  # stdin loop above, read once for this whole hook; skipped on a brand-new branch (`push_remote_sha` all
+  # zeros, no prior remote state to diff against) since the general note above already covers that case.
+  if [ -n "${push_remote_sha:-}" ] && [ "$push_remote_sha" != "0000000000000000000000000000000000000000" ] \
+    && [ -n "${push_local_sha:-}" ]; then
+    dirty_paths="$(echo "$pass_dirty" | cut -c4-)"
+    pushed_paths="$(git diff --name-only "$push_remote_sha".."$push_local_sha" 2>/dev/null)"
+    both_dirty_and_pushed="$(comm -12 <(printf '%s\n' "$dirty_paths" | sort -u) \
+      <(printf '%s\n' "$pushed_paths" | sort -u) 2>/dev/null)"
+    if [ -n "$both_dirty_and_pushed" ]; then
+      echo "" >&2
+      echo "  LOUDER: the file(s) below are BOTH uncommitted right now AND changed by the commit(s) you" >&2
+      echo "  are pushing -- verified in one state, pushed in another:" >&2
+      echo "$both_dirty_and_pushed" | sed 's/^/      /' >&2
+    fi
+  fi
+  echo "  A local pass proves the working tree, never what got pushed." >&2
+fi
+# END #760 DIRTY-TREE PASS NOTE
+
 echo "pre-push: ok${skipped+ (with ${#skipped[@]} skipped, listed above)}"
