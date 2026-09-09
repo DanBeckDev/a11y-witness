@@ -762,13 +762,25 @@ page by quick-navigation and that is how this tool sees structure at all.
 **`focusOrder` is not ~8 s here either** — 72.5 s, 16.3 s, and outside ikea's top six. Wrong in both
 directions against the corpus figure, and by an order of magnitude on hubspot.
 
-> **AND CALENDLY SERVED TWO DIFFERENT PAGES, so its column above is a near-empty render.**
-> `structureCensus` — the browser's own count, not the sweep's — reads `link=5 graphic=1 heading=1
-> tabbable=11` on the 08:12 capture and on a 10:42 re-run, and `link=64 graphic=28 heading=15
-> tabbable=98` on a 10:50 re-run eight minutes later. A page with eleven tabbable elements and one
-> heading is a wall or a stub, not calendly. Nothing in the capture options can cause that; it is what
-> the site served. Treat every calendly figure in this section, in #397 and in #311 as describing
-> whichever of the two it got, and prefer hubspot and IKEA, which both reproduced exactly.
+> **AND THE CENSUS ON EVERY CALENDLY CAPTURE DESCRIBES A PAGE WE NAVIGATED TO, NOT CALENDLY.** This
+> paragraph said the site served two different renders, from 11:35Z to 12:1xZ on 2026-09-09, and that was
+> wrong — `worker-audit` challenged it and the artefacts settle it against me.
+>
+> **`domCensus.targetMatch` reads `fallback` on all four calendly captures and `matched` on every hubspot
+> and ikea capture.** The sweep read the full calendly every time — `structural` gives 44–45 headings at
+> ~150 s — and the census ran ~110 s later, by which point the capture's own probes had navigated away:
+> `routeChange` records `titleBefore: "Sign in - Google Accounts"`, `titleAfter: "Privacy Notice
+> Calendly"`. So `link=5 heading=1 tabbable=11` is the census of a privacy notice, and reading it as the
+> page under test is what produced the "two renders" claim.
+>
+> **The consequence is a defect of ours, not a property of the site.** `structureCrossCheck` then reported
+> `heading: sweepEntries 44, oracleDistinctNames 1` — the sweep's calendly against a census of another
+> document — and the coverage sentence printed reach of 44 against a ground truth of 1, which is absurd on
+> its face and nothing refused. **A capture whose `targetMatch` is `fallback` must refuse to compare its
+> sweep against that census at all.** Filed as #685.
+>
+> hubspot and IKEA are `matched` on every capture, so their figures here, in #397 and in #311 are
+> unaffected, and so is the IKEA truncation in #677.
 
 n=1 per page, one fleet, one day; every split except `windowsActivate` and the `sweep` share is a
 single observation. The captures are on disk and re-readable — the first time this question could be
