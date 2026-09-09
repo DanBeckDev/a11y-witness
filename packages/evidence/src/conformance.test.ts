@@ -15,7 +15,8 @@ import {
   notAConformanceClaim,
   NON_INTERFERENCE_CRITERIA,
   sweepOutcomes,
-  truncatedSweeps, sweepCoverage, censusCountsDistinctNames, censusFromDiagnostics } from "./conformance.js";
+  truncatedSweeps, sweepCoverage, censusCountsDistinctNames, censusFromDiagnostics,
+  examinationState } from "./conformance.js";
 
 const CLEAN = {
   assessedCriteria: ["1.1.1", "1.3.1", "2.4.4", "2.4.6", "3.3.1", "4.1.2", "4.1.3", "2.1.2"],
@@ -212,7 +213,9 @@ test("states reach per type against the browser's own count", () => {
     swept: { heading: 10, landmark: 5, link: 46, graphic: 12 },
   });
   assert.deepEqual(coverage.find((c) => c.type === "link"),
-    { type: "link", reached: 46, present: 57, complete: false });
+    // `examined: "examined"` with NO sweep outcomes given, and that is the deliberate default (#677):
+    // a capture predating the stop marks must not be relabelled as truncated on a field it never had.
+    { type: "link", reached: 46, present: 57, complete: false, examined: "examined" });
   assert.equal(coverage.every((c) => c.type === "link" || c.complete), true);
 });
 
@@ -293,4 +296,43 @@ test("censusFromDiagnostics PREFERS the distinct-name count, which is what the s
 test("and falls back to the element count when the capture predates `distinct`", () => {
   const census = censusFromDiagnostics([{ event: "structureCensus", graphic: 66 }]);
   assert.equal(census?.graphic, 66, "an older capture keeps its only number, and the sentence says so");
+});
+
+
+// --- #677: the absence of a measurement is not the measurement zero ---
+
+test("NOT EXAMINED is distinct from found-nothing, and PARTIAL is distinct from both -- the three states "
+  + "read off the stop reasons every capture already carries", () => {
+  // The real shape of `2026-09-09T08-20-19-020Z-www-ikea-com.json`: one sweep spent the whole budget and
+  // five never ran. `formField` is the case a BINARY would report wrongly -- it also stopped on
+  // `deadline`, and it found 100.
+  assert.equal(examinationState(["exhausted", "exhausted"], 80), "examined");
+  assert.equal(examinationState(["deadline", "deadline"], 100), "partial",
+    "it examined a great deal and then ran out; calling that NOT EXAMINED is false in the other direction");
+  assert.equal(examinationState(["deadline", "deadline"], 0), "not-examined");
+  assert.equal(examinationState(["exhausted", "deadline"], 0), "not-examined",
+    "a sweep walks both directions and either can truncate independently");
+  assert.equal(examinationState([undefined, undefined], 0), "examined",
+    "a capture predating the stop marks has no stop reason, and reading that silence as truncation would "
+    + "relabel the whole corpus on a field that did not exist when it was taken");
+});
+
+test("THE REPORT SAYS SO: a type whose sweep never ran renders as NOT EXAMINED, never as `0/340` -- the "
+  + "sentence a reader acts on is where this defect was survivable", () => {
+  const input = {
+    assessedCriteria: ["1.1.1"], screenReader: "NVDA", ruleLayerRan: true,
+    census: { heading: 80, link: 340 },
+    swept: { heading: 80, link: 0 },
+    sweeps: [
+      { type: "heading", stop: "exhausted" }, { type: "heading", stop: "exhausted" },
+      { type: "link", stop: "deadline" }, { type: "link", stop: "deadline" },
+    ],
+  };
+  const sentence = conformanceScope(input).map((r) => r.establishes + " " + r.limitation).join(" ");
+  assert.match(sentence, /link NOT EXAMINED \(of 340\)/,
+    "`link 0/340` is a true number answering a question nobody asked: it reads as a coverage shortfall "
+    + "and means the capture is truncated");
+  assert.match(sentence, /TRUNCATED/);
+  assert.doesNotMatch(sentence, /link 0\/340/);
+  assert.match(sentence, /heading 80\/80/, "a type that DID run still reports its reach normally");
 });

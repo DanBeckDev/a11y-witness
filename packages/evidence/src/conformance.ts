@@ -86,7 +86,14 @@ export interface TypeCoverage {
   type: string;
   reached: number;
   present: number;
+  /** Did the sweep reach as many as the census counted? A COVERAGE question. */
   complete: boolean;
+  /**
+   * Did the sweep EXAMINE the page at all? A different question from `complete`, and #677 is the
+   * distance between them: a sweep that never ran reports `reached: 0`, which reads as a coverage
+   * shortfall on a page with none. Absent on captures predating the stop marks.
+   */
+  examined?: ExaminationState;
 }
 
 /**
@@ -119,6 +126,11 @@ export function sweepCoverage(input: ConformanceScopeInput): TypeCoverage[] {
       reached: swept[type] as number,
       present: census[key] as number,
       complete: (swept[type] as number) >= (census[key] as number),
+      // BOTH DIRECTIONS of this type's sweep. A sweep walks backwards and forwards and either can
+      // truncate independently, so a type is only fully examined when neither direction stopped first.
+      examined: examinationState(
+        (input.sweeps ?? []).filter((sweep) => sweep.type === type).map((sweep) => sweep.stop),
+        swept[type] as number),
     }));
 }
 
@@ -164,8 +176,14 @@ function coverageSentence(input: ConformanceScopeInput): string {
         + "page the sweeps reached is unknown."
       : "";
   }
-  const parts = coverage.map((c) => `${c.type} ${c.reached}/${c.present}`);
-  const gaps = coverage.filter((c) => !c.complete);
+  // NOT EXAMINED IS NOT ZERO (#677). `link 0/340` on a page whose link sweep never ran is a true number
+  // answering a question nobody asked -- it reads as a coverage shortfall and means the capture is
+  // truncated. The three states are rendered differently because they need different responses.
+  const parts = coverage.map((c) => c.examined === "not-examined"
+    ? `${c.type} NOT EXAMINED (of ${c.present})`
+    : `${c.type} ${c.reached}/${c.present}${c.examined === "partial" ? " (partial)" : ""}`);
+  const unexamined = coverage.filter((c) => c.examined === "not-examined");
+  const gaps = coverage.filter((c) => !c.complete && c.examined !== "not-examined");
   // Say WHAT the numerator is. The sweep de-duplicates by announcement (`seenKeys`), so two images with the
   // same alt text collapse to one entry, while the census counts elements. On a page with 66 images and 47
   // distinct alt values those are different denominators, and reporting "5 of 66" as though it were elements
@@ -176,9 +194,14 @@ function coverageSentence(input: ConformanceScopeInput): string {
       + ` reports — like compared with like: ${parts.join(", ")}.`
     : " Reach, as DISTINCT announcements the screen reader produced against elements the browser reports"
       + ` (the two differ where identical announcements collapse): ${parts.join(", ")}.`)
+    + (unexamined.length
+      ? ` ${unexamined.length} type(s) were NOT EXAMINED AT ALL -- their sweeps stopped before running, so`
+        + " this capture is TRUNCATED and every conclusion drawn from it is bounded by the same budget."
+        + " That is not a statement about the page."
+      : "")
     + (gaps.length
       ? " A shortfall here is a coverage question about this tool, not a finding about the page."
-      : " Every type with ground truth was reached in full.");
+      : unexamined.length ? "" : " Every type with ground truth was reached in full.");
 }
 
 /**
@@ -197,6 +220,53 @@ export function censusCountsDistinctNames(diagnostics: readonly unknown[]): bool
       typeof d === "object" && d !== null && (d as { event?: unknown }).event === "structureCensus");
   const distinct = (mark as { distinct?: unknown } | undefined)?.distinct;
   return typeof distinct === "object" && distinct !== null;
+}
+
+/**
+ * THE ABSENCE OF A MEASUREMENT IS NOT THE MEASUREMENT ZERO — #677, a publish blocker.
+ *
+ * On `2026-09-09T08-20-19-020Z-www-ikea-com.json` the per-field activation probe spent the whole
+ * 471-second budget on `formField`, and **five of eight structural sweeps never ran**. Their entries read
+ * `found: 0, 0 ms, 2 trips, deadline` — and against a census of **340 links and 165 graphics**, the
+ * report said `link 0/340`. A completed walk that found nothing and a walk that never started were the
+ * same sentence, and they need opposite responses: the first is a page fact or a sweep defect, the second
+ * means the capture is TRUNCATED and every conclusion drawn from it is bounded by the same budget.
+ *
+ * **The information was already on every capture and nothing read it.** `observed.<type>.stop` carries
+ * `deadline`, and has since the mark was added. This repository's most-recorded shape is a diagnostic
+ * written and never consumed — `sweepLog`'s 604 silent crashes are the same sentence.
+ *
+ * ## THREE states, not two, and the third one matters
+ *
+ * The row asked for NOT EXAMINED distinct from `found: 0`. Reading the capture showed a middle state that
+ * a binary would report wrongly: **`formField` also stopped on `deadline`, and it found 100.** Calling
+ * that "not examined" would be false in the other direction — it examined a great deal and then ran out.
+ *
+ *   `examined`     the sweep ran out of ELEMENTS (`exhausted`/`repeat`) -- the page ended first
+ *   `partial`      it stopped first, having found some -- a floor on the page, not a count of it
+ *   `not-examined` it stopped first, having found NOTHING -- this number is about the tool, not the page
+ *
+ * Only the third is the defect this row names; the second is the one a binary would have got wrong.
+ */
+export type ExaminationState = "examined" | "partial" | "not-examined";
+
+/**
+ * How completely one type was examined, from the stop reasons the capture already carries.
+ *
+ * `undefined` stop is `examined`, and that default is a decision rather than a fallback. Captures
+ * predating the mark have no stop reason, so reading their silence as truncation would relabel the whole
+ * corpus on a field that did not exist when the evidence was taken. **Inventing a defect in old evidence
+ * is the wrong direction to be wrong in** — the same rule as a record of the past never being renamed
+ * (#534's ten rewritten capture URLs, #531's rewritten ansible transcript). A capture says what it said;
+ * a field added later cannot make it say something new about itself.
+ *
+ * @param stops every direction's stop reason for one type
+ * @param found how many entries that type's sweep produced
+ */
+export function examinationState(stops: readonly (string | undefined)[], found: number): ExaminationState {
+  const stoppedEarly = stops.some((stop) => stop !== undefined && !SWEEP_RAN_OUT.includes(stop as SweepStop));
+  if (!stoppedEarly) return "examined";
+  return found > 0 ? "partial" : "not-examined";
 }
 
 /** Sweeps that stopped before the page did, i.e. examined only part of it. */
