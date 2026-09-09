@@ -147,10 +147,16 @@ person about to type `publish-for-real` is the one whose judgement the release i
 
 **Most recent rehearsal:** 2026-09-09, run
 [34364673899](https://github.com/DanBeckDev/a11ign-v1-rehearsal/actions/runs/34364673899), against
-`a11y-witness@8849f92d` (the commit `DanBeckDev/a11y-witness@main` resolved to at the time). Full reading:
-[#324](https://github.com/DanBeckDev/a11y-witness/issues/324). It produced **five** filed defects, every
-one surviving a fully green internal suite — the argument for why this gate exists rather than a good
-idea:
+`a11y-witness@8849f92d` (the commit `DanBeckDev/a11y-witness@main` resolved to at the time).
+<!-- REHEARSAL:COMMIT 8849f92df9903660315d0cdc9037e7e04276eece -->
+<!-- The marker above is what `npm run release:rehearsal-check` reads -- checked by
+     `rehearsal-currency-gate.test.ts` against `check-rehearsal-currency.mjs`'s own regex, so a rewording
+     of the prose above can never silently stop the gate from finding the commit it names. Update BOTH the
+     prose and the marker together when a fresh rehearsal runs; a mismatch between them is caught by
+     `rehearsal-currency.test.ts`'s own "the marker names the same sha the prose does" check. -->
+Full reading: [#324](https://github.com/DanBeckDev/a11y-witness/issues/324). It produced **five** filed
+defects, every one surviving a fully green internal suite — the argument for why this gate exists rather
+than a good idea:
 
 | | |
 |---|---|
@@ -169,8 +175,10 @@ names a newer commit here.
 
 - **This release, if its commit is not `8849f92d` (the rehearsal above).** A rehearsal names the one
   commit it actually ran against; it does not extend forward by assumption to whatever HEAD has become
-  since. Run the rehearsal again and update the entry above with its date, run URL and commit before
-  treating the outward-facing path as covered.
+  since. `npm run release:rehearsal-check` is in `release:gate:ci` and REFUSES (prints both shas) when the
+  commit being released is not the one the marker above names — a command failing, not a reader who forgot
+  to check the date. Run the rehearsal again and update the entry above with its date, run URL, commit and
+  marker before treating the outward-facing path as covered.
 
 - **The `anthropic` and `openai` judge backends.** Written to their SDK specs and unexercised; this project
   keeps no metered key. They are opt-in, never the default.
