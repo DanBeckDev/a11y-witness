@@ -919,3 +919,48 @@ test("`checked: false` is 'cannot say', never 'no findings' -- must never read a
 test("a real, checked, empty log is a real zero: the oracle ran and found nothing", () => {
   assert.equal(focusFindings([]).length, 0);
 });
+
+/**
+ * #812 — A BEFORE/AFTER PAIR NAMING TWO DIFFERENT CONTROLS IS NOT EVIDENCE ABOUT EITHER.
+ *
+ * The V1 rehearsal's only 4.1.2 finding came from `interaction.stateChanges[1]` in `a11ign-result.json`
+ * (`DanBeckDev/a11ign-v1-rehearsal`, run 34364673899), quoted verbatim below. `probeDisclosure` activates
+ * a control and records `after` from `reportCurrentFocus` — **whatever holds focus afterwards** — so
+ * activating a nav button that reveals a submenu recorded the submenu's own button as `after`.
+ *
+ * The literal `focused` token in that string is `reportCurrentFocus`'s own output: the capture was saying
+ * which question it answered, and nothing read it.
+ */
+const REHEARSAL_PLATFORM =
+  "clickable, banner landmark, Global, navigation landmark, list, with 6 items, Platform, button, collapsed";
+const REHEARSAL_OUTLINE = "Outline, menu button, focused, collapsed, sub Menu";
+
+const stateChange = (control: string, after: string) =>
+  ({ transcript: [], interaction: { stateChanges: [{ control, after }] } });
+
+test("#812: two different controls sharing a state word produce NO 4.1.2 finding", () => {
+  assert.deepEqual(ruleFindings(stateChange(REHEARSAL_PLATFORM, REHEARSAL_OUTLINE)), [],
+    "both sides say `collapsed`, which is a true statement about two strings describing two controls — "
+    + "the capture never re-read Platform, so nothing here is evidence about Platform's state");
+});
+
+test("#812 MUTATION TARGET: a genuine same-control pair still fails 4.1.2", () => {
+  // The guard must not have bought its silence by refusing everything. This is the finding the rule
+  // exists for, and it is the flagship one: a control activated and still announcing its old state.
+  const found = ruleFindings(stateChange("Platform, button, collapsed", "Platform, button, focused, collapsed"));
+  assert.equal(found.length, 1, "a real silent state change stopped being asserted");
+  assert.match(found[0].wcag, /^4\.1\.2/);
+});
+
+test("#812: a same-control pair whose state DID change stays silent, as before", () => {
+  assert.deepEqual(
+    ruleFindings(stateChange("Platform, button, collapsed", "Platform, button, focused, expanded")), []);
+});
+
+test("#812: two UNNAMED controls do not establish identity by both being unnamed", () => {
+  // `parseAnnouncement` returns "" when NVDA announced no name, so comparing "" with "" would establish
+  // identity from the absence of the thing that establishes it. An unnamed control is a 4.1.2 finding in
+  // its own right (`addUnnamedControls`) and is not evidence about another unnamed control.
+  assert.deepEqual(ruleFindings(stateChange("button, collapsed", "button, focused, collapsed")), [],
+    "an empty name is not an identity");
+});

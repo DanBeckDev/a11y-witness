@@ -335,6 +335,47 @@ const CLOSURE_REQUIREMENT_PATTERNS =
     [new RegExp(fingerprint("--is-shallow-repo", "sitory") + "\\b"), "history"],
   ]);
 
+// #827: THE MIRROR OF `// writes:`, ON THE TEST FILE RATHER THAN THE FILE THAT CALLS THE RISKY FUNCTION --
+// `board-markdown.test.ts` and `board-achievement-retirement.test.ts` each import only `document` from
+// `board-document.mjs`, render it from a literal fixture object, and pass 5/5 and 7/7 with `gh` stubbed to
+// exit 4 on every call. Neither calls `todaysReleaseExists` (`board-document.mjs`'s own `gh release view`
+// spawn, line ~1190) -- but the walk scans the WHOLE FILE'S text for every requirement pattern, not the
+// one export a caller actually imports, so any test reaching `board-document.mjs` at all is charged for
+// EVERY spawn anywhere in it, including ones its own import never uses.
+//
+// `// writes:` sits where the RISKY CALL lives (git-fixture-cache.mjs calls `runsRoot()` itself, so its own
+// declaration is checked right there, mid-walk). `token`'s risky call lives in an IMPORTED file the test
+// does not control, so the declaration cannot live beside the call the same way -- it has to live on the
+// file that actually knows which of its own imports it exercises: the entry itself. So `// no-token: <fn>`
+// is checked ONCE, against `entry`'s own text, before the walk begins, rather than incrementally at each
+// file the way `// writes:` is -- the shape differs because WHERE the two declarations can honestly live
+// differs, not because the discipline does: declared, then verified, never substituted, exactly as #731's
+// own rule states it. A file naming a function it does not itself call is judged wrong the same way a file
+// naming a subdirectory it does not itself write to is -- a DIFFERENT, MORE SPECIFIC refusal than plain
+// `token`, never a silent pass and never a silent override.
+const NO_TOKEN_HEADER = /^\/\/\s*no-token:\s*(\S+)\s*$/m;
+
+/**
+ * @param {string} text
+ * @returns {string | null} the declared function name (e.g. `todaysReleaseExists`), or null if undeclared.
+ */
+function declaredNoTokenFn(text) {
+  const match = NO_TOKEN_HEADER.exec(text);
+  return match ? match[1] : null;
+}
+
+/**
+ * Does `entry`'s own code genuinely never call the function it claims not to need -- a real call SHAPE
+ * (`fnName(`), never a bare mention a comment or a string could contain just as easily. Shallow, exactly
+ * as `writeDeclarationHolds` is shallow: this proves the declaring file's OWN text does not call it, not
+ * that nothing it calls calls it in turn -- the same scope #731's own write-side check keeps.
+ * @param {string} entryCodeOnly
+ * @param {string} fnName
+ */
+function noTokenDeclarationHolds(entryCodeOnly, fnName) {
+  return !new RegExp(`\\b${fnName}\\s*\\(`).test(entryCodeOnly);
+}
+
 /**
  * Where in `text` a 1-indexed line number sits for a given match index.
  * @param {string} text
@@ -359,6 +400,9 @@ function lineNumberOf(text, index) {
  * corpus-dependent at all, and is skipped rather than recorded. A file that DECLARES `// writes:` but whose
  * own text does not bear it out is still recorded as `corpus`, flagged `wrongDeclaration: true` -- named as
  * a bad declaration, never silently trusted and never silently overridden.
+ *
+ * #827: `token`'s mirror, checked once against `entry` itself before the walk begins -- see `NO_TOKEN_HEADER`'s
+ * own header for why the declaration cannot live beside the risky call the way `// writes:` does.
  * @param {string} entry absolute path to the entry file
  * @returns {ClosureHit[]}
  */
@@ -374,6 +418,22 @@ export function deriveClosureRequirements(entry) {
   // exists to remove, one hop further down the same chain. `exemptCorpus` records that the closure has
   // already answered "corpus" honestly and nothing further in this walk may reopen it.
   let exemptCorpus = false;
+  // #827: the `token` counterpart, decided ONCE before the walk starts (see `NO_TOKEN_HEADER`'s header for
+  // why token's declaration is checked at the entry rather than incrementally like `// writes:` is).
+  let exemptToken = false;
+  if (existsSync(entry)) {
+    const entryText = readFileSync(entry, "utf8");
+    const entryCodeOnly = stripComments(entryText);
+    const noTokenFn = declaredNoTokenFn(entryText);
+    if (noTokenFn !== null) {
+      if (noTokenDeclarationHolds(entryCodeOnly, noTokenFn)) {
+        exemptToken = true;
+      } else {
+        const line = lineNumberOf(entryText, /** @type {RegExpExecArray} */ (NO_TOKEN_HEADER.exec(entryText)).index);
+        found.set("token", { requirement: "token", file: entry, line, chain: [entry], wrongDeclaration: true });
+      }
+    }
+  }
   /** @param {string} file @param {string[]} chain @param {Set<string>} seen */
   const walk = (file, chain, seen) => {
     if (seen.has(file) || !existsSync(file)) return;
@@ -382,7 +442,8 @@ export function deriveClosureRequirements(entry) {
     const codeOnly = stripComments(text);
     const hereChain = [...chain, file];
     for (const [pattern, requirement] of CLOSURE_REQUIREMENT_PATTERNS) {
-      if (found.has(requirement) || (requirement === "corpus" && exemptCorpus)) continue;
+      if (found.has(requirement) || (requirement === "corpus" && exemptCorpus)
+        || (requirement === "token" && exemptToken)) continue;
       const match = pattern.exec(codeOnly);
       if (!match) continue;
       const hit = { requirement, file, line: lineNumberOf(text, match.index), chain: hereChain };
@@ -404,8 +465,9 @@ export function deriveClosureRequirements(entry) {
  * entry file itself matches, zero hops) reads as `"<entry> requires <req>, at <entry>:<line>"`.
  *
  * #731: A `wrongDeclaration` HIT SAYS SO, naming the file's OWN claim as the thing that failed -- a reader
- * fixing a plain `corpus` refusal edits the test; a reader fixing a wrong `// writes:` edits the comment
- * that no longer describes what the file does, a different fix at a different spot.
+ * fixing a plain `corpus` refusal edits the test; a reader fixing a wrong `// writes:` (or, #827, `// no-
+ * token:`) edits the comment that no longer describes what the file does, a different fix at a different
+ * spot.
  * @param {ClosureHit} hit
  * @returns {string}
  */
@@ -413,10 +475,11 @@ export function closureRequirementMessage(hit) {
   const { requirement, file, line, chain, wrongDeclaration } = hit;
   const entryLabel = basename(chain[0]);
   const fileLabel = basename(file);
-  const suffix = wrongDeclaration
-    ? ` -- ${fileLabel} declares \`// writes:\` a path its own code does not bear out; refusing rather `
-      + "than trusting an unverified claim"
-    : "";
+  const suffix = !wrongDeclaration ? "" : requirement === "token"
+    ? ` -- ${fileLabel} declares \`// no-token:\` a function its own code DOES call; refusing rather than `
+      + "trusting an unverified claim"
+    : ` -- ${fileLabel} declares \`// writes:\` a path its own code does not bear out; refusing rather `
+      + "than trusting an unverified claim";
   if (chain.length <= 1) return `${entryLabel} requires ${requirement}, at ${fileLabel}:${line}${suffix}`;
   const hops = [];
   for (let i = 0; i < chain.length - 1; i++) {
@@ -453,6 +516,79 @@ export function unmetRequirements(requirements, capabilities) {
 }
 
 /**
+ * A COMMAND THAT RUNS THE WHOLE SUITE, which the capability gate could not see until 2026-09-09.
+ *
+ * `unmetCommandRequirements` and `unmetCommandClosureRequirements` both opened with
+ * `if (!/tsx --test/.test(command)) return []`, so they asked whether the command NAMED a file needing a
+ * capability. `npm test` names none and runs them all.
+ *
+ * THAT IS THE ADJACENT-PROPERTY SHAPE AGAIN, and it cost the whole afternoon's PR checks. #513 split
+ * `row-claim-live.test.ts` out precisely so a `tsx --test` command naming it could be refused, and that
+ * half worked. The half nobody had is the command everybody actually types: on 2026-09-09 four PRs at
+ * once were red on `acceptance / run`, every one of them for `gh: To use GitHub CLI in a GitHub Actions
+ * workflow, set the GH_TOKEN environment variable`, in a job that passes no token BY DESIGN because it
+ * runs commands taken from a stranger's PR body. None of the four had touched the code that failed.
+ *
+ * The failure mode is the bad one: not a refusal naming the capability, but a red check naming the
+ * PR's author for a line they never wrote. Refused, it is green with a printed reason.
+ *
+ * `npm test` is `pretest` (build) then `test:ts` then `test:python`; `test:ts` runs
+ * the recursive `.test.ts` glob under every package's `src`. So the suite's population is that glob,
+ * and a whole-suite command
+ * requires the UNION of what every file in it requires.
+ *
+ * @param {string} command
+ * @returns {boolean}
+ */
+export function runsTheWholeSuite(command) {
+  // `(?![:\w-])` AND NOT `\b`: `\b` after `test` matches `npm run test:python`, whose population is the
+  // pytest tree rather than the `.test.ts` glob this function's callers walk. Refusing that command for a
+  // requirement declared by a TypeScript file would be a refusal about a population it never runs.
+  return /(?:^|&&|\|\||;)\s*npm\s+(?:run\s+)?(?:test:ts|test)(?![:\w-])/.test(command.trim());
+}
+
+/**
+ * Every test file `npm test` runs, FROM `test:ts`'s OWN GLOB rather than a second copy of it.
+ *
+ * The glob is read out of `package.json`'s `test:ts` script, because a hand-written copy here would be
+ * the same fact in two places -- and the copy that drifts is the one that decides whether a PR's check
+ * goes red. If the script cannot be read or carries no glob this THROWS rather than returning `[]`: an
+ * empty population would make every whole-suite command pass the capability gate, which is exactly the
+ * hole this function was added to close.
+ *
+ * @returns {string[]}
+ */
+/** @type {string[] | null} */
+let suiteFilesCache = null;
+export function suiteTestFiles() {
+  if (suiteFilesCache) return suiteFilesCache;
+  let script;
+  try {
+    script = JSON.parse(readFileSync("package.json", "utf8")).scripts?.["test:ts"];
+  } catch (cause) {
+    throw new Error("acceptance-commands: could not read package.json to find what `npm test` runs -- "
+      + "refusing to report a whole-suite command as needing nothing.", { cause });
+  }
+  const glob = typeof script === "string" ? /"([^"]*\*[^"]*\.test\.ts)"/.exec(script)?.[1] : null;
+  if (!glob) {
+    throw new Error("acceptance-commands: `test:ts` names no `*.test.ts` glob, so the suite's population "
+      + "is unknown. Refusing to treat that as an empty population -- every `npm test` acceptance would "
+      + "then pass the capability gate having examined nothing.");
+  }
+  suiteFilesCache = globSync(glob);
+  return suiteFilesCache;
+}
+
+/**
+ * The files a command runs: the ones it NAMES, or -- for a whole-suite command -- all of them.
+ * @param {string} command
+ * @returns {string[]}
+ */
+function testFilesRunBy(command) {
+  return runsTheWholeSuite(command) ? suiteTestFiles() : tsxTestFileArgs(command);
+}
+
+/**
  * The literal file/glob arguments of a `tsx --test <...>` command, in order -- split out of
  * `testFileArgumentsResolve` so the #510 requirements check below reads the SAME tokenisation rather than
  * risking a second, independently-written answer to "what files does this command name" (this file's own
@@ -479,10 +615,10 @@ function tsxTestFileArgs(command) {
  * @returns {{ requirement: string, files: string[] }[]}
  */
 export function unmetCommandRequirements(command, capabilities) {
-  if (!/\btsx\s+--test\b/.test(command)) return [];
+  if (!/\btsx\s+--test\b/.test(command) && !runsTheWholeSuite(command)) return [];
   /** @type {Map<string, string[]>} */
   const byRequirement = new Map();
-  for (const fileArg of tsxTestFileArgs(command)) {
+  for (const fileArg of testFilesRunBy(command)) {
     if (/[*?[{]/.test(fileArg) || !existsSync(fileArg)) continue;
     const text = readFileSync(fileArg, "utf8");
     for (const req of unmetRequirements(testFileRequirements(text), capabilities)) {
@@ -503,12 +639,16 @@ export function unmetCommandRequirements(command, capabilities) {
  * @returns {{ requirement: string, message: string }[]}
  */
 export function unmetCommandClosureRequirements(command, capabilities) {
-  if (!/\btsx\s+--test\b/.test(command)) return [];
+  if (!/\btsx\s+--test\b/.test(command) && !runsTheWholeSuite(command)) return [];
   /** @type {{ requirement: string, message: string }[]} */
   const out = [];
-  for (const fileArg of tsxTestFileArgs(command)) {
+  for (const fileArg of testFilesRunBy(command)) {
     if (/[*?[{]/.test(fileArg) || !existsSync(fileArg)) continue;
     out.push(...unmetClosureRequirements(fileArg, capabilities));
+    // SHORT-CIRCUIT ON THE FIRST, and only for the whole-suite case: `classifyCommand` prints one
+    // refusal, and walking ~700 files' import closures to collect the other 699 is time spent producing
+    // a message nobody reads. A named command still reports every one of the few files it names.
+    if (out.length > 0 && runsTheWholeSuite(command)) break;
   }
   return out;
 }
@@ -977,6 +1117,18 @@ function runOneCommand(command, run, { prefix, isPass, commandExists: exists, ca
   const executable = stripTrailingCommentary(command);
   const classification = classifyCommand(executable, { commandExists: exists, capabilities, section: prefix });
   if (classification.verdict === "refused") {
+    // A WHOLE-SUITE COMMAND IS THE ONE REFUSAL THAT FAILS. Every other REFUSED is a legitimate "not this
+    // job's to run": the author named a file, and this job cannot run that particular file. `npm test`
+    // names nothing -- so a refusal of it means the PR has declared no acceptance this job can act on at
+    // all, and reporting that as a pass is how "verified" comes to mean "unexamined" (ceo, 2026-09-09).
+    // The message names the fix rather than the state, because a refusal a reader cannot follow is one
+    // they route around.
+    if (runsTheWholeSuite(executable)) {
+      return { line: `${prefix}: REFUSED ${command} -> ${classification.reason}\n`
+        + "  Name the files this change is verified by. This job has no token and no corpus, and it runs "
+        + "commands taken from a PR body, so it cannot run the whole suite -- a PR whose author cannot "
+        + "name a file that verifies it has no acceptance.", ok: false };
+    }
     return { line: `${prefix}: REFUSED ${command} -> ${classification.reason}`, ok: true };
   }
   // #446: A THIRD, DISTINCT LINE SHAPE -- neither RAN nor REFUSED, so it cannot be mistaken for either.
