@@ -1,9 +1,0 @@
-{
-  "issue": 558,
-  "claim": "A release today would have failed at a gate that had never once been run.",
-  "evidence": "The publish workflow's step 'consumer-gate.yml is current -- pinned to this exact release sha, not a stale one' (release.yml:154, `node scripts/generate-consumer-gate.mjs --check`) exists so a release cannot prove the documented path against some earlier commit and call it proof of this one. It had never run. Measured 2026-09-08 20:19Z by product-manager against main's own committed tree: it exits 1, STALE-SHA. It is structurally unable to pass in a committed tree, because regenerating the pinned file and committing it moves the very commit the pin must match. The only change merged today was a regeneration chore (a6aefa0e), which is a workaround rather than a fix and is already stale again. THIS IS NOT FIXED: #558 is an OPEN row describing it. What is settled is that the blocker is real and that the gate found it, which is the point -- a gate nobody had run was hiding a release failure.",
-  "boardClaim": "A publishing step that had never been run turned out to be one no release could have passed; it is found, not yet fixed.",
-  "reportedBy": "product-manager",
-  "at": "2026-09-08T20:20:00Z",
-  "order": 2
-}
