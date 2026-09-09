@@ -22,17 +22,25 @@
 // inherits: the Project Status field is a VIEW; the label, on the object and timestamped by GitHub's own
 // timeline, is the RECORD.
 //
-// READS `session:*` OFF THE PR, the same field `claimed-row-rule.mjs` reads off a ROW, because two
-// spellings of one fact is the shape half this repo's defects share. It deliberately does NOT reuse
-// `decideClaim`: that predicate requires the `in-progress` label, which is a row's vocabulary -- on a PR
-// the `session:` label IS the hold, and passing PR labels through a row's predicate would report every
-// held PR as unheld.
+// READS `hold:*` OFF THE PR, through `holdersOf` -- NOT `session:*`, and NOT `claimStatus`.
+//
+// IT READ `session:*` UNTIL 2026-09-09, and that was the collision. `session:<name>` also means
+// OWNERSHIP: who is working on a ROW, and, since ceo's 12:2xZ ruling, who opened a PR. orchestrator
+// hand-labelled twelve of their own PRs that afternoon to mark them as theirs and every one of them read
+// as HELD here; #725 was about to apply the label to every armed PR in the org. This module's own header
+// argued that passing PR labels through a ROW's predicate would report every held PR as unheld -- which
+// was right about the direction and wrong about the vocabulary, because the two questions had been given
+// one word. They now have two.
+//
+// `holdersOf` from `pr-hold-state.mjs` is the ONE predicate: `pr-hold` writes what it reads, and
+// `arm-pr`/`auto-arm-sweep` read the same. Two spellings of one fact is the shape half this repo's
+// defects share, and this file has now been on both sides of it.
 //
 // NO `--allow-held` ESCAPE HATCH, unlike #249's `--allow-claimed-close`, and the asymmetry is the point:
 // a row you do not hold cannot be taken from its owner, so confirming and passing a flag is the only
 // route. A PR hold CAN be handed over -- `npm run pr:release` then `pr:hold` -- so a flag here would be a
 // silent bypass standing in for an action that leaves a record. The escape hatch is taking the hold.
-import { claimStatus } from "../row-claim.mjs";
+import { holdersOf, HOLD_PREFIX } from "../pr-hold-state.mjs";
 
 /**
  * @param {{number: number}} pr
@@ -41,7 +49,9 @@ import { claimStatus } from "../row-claim.mjs";
  * @returns {string[]}
  */
 export function prHoldReasons(pr, prLabels, session) {
-  const holders = claimStatus(prLabels).sessions.filter((held) => held !== session);
+  const holders = holdersOf(prLabels)
+    .map((label) => label.slice(HOLD_PREFIX.length))
+    .filter((held) => held !== session);
   if (holders.length === 0) return [];
   return [`#${pr.number} IS HELD by ${holders.join(", ")}${session ? `, and you are ${session}` : ""}.\n`
     + "  They are working on it now -- updating, rebasing or about to arm it. Pushing into a PR somebody\n"
