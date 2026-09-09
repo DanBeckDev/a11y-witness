@@ -7,17 +7,14 @@
 // maintained by hand is a rule that lapses.
 //
 // FIVE POPULATIONS, and conflating them is the whole risk in this file:
-//   - LIST every worktree whose branch is merged into origin/main (a "gone" branch -- deleted outright --
+//   - LIST every worktree whose HEAD is merged into origin/main -- by branch where there is one, and
+//     by the commit itself where there is not (#696); a detached HEAD answers `merge-base
+//     --is-ancestor` exactly as well as a named branch does (a "gone" branch -- deleted outright --
 //     is the same population read a different way: nothing to lose either way).
 //   - REMOVE the ones that are also CLEAN -- no uncommitted changes, no commits origin/main does not have.
 //   - NAME the DIRTY ones, with their branch, and remove NOTHING from that set.
-//   - NAME (never remove) the STANDING and CHERRY-PICKED ones -- both added after `dispatcher`'s own
-//     manual pass measured them as real, not hypothetical (25 removed, 3.4 GB freed, 4 refused, one
-//     genuine near-miss each for the other two):
-//       STANDING: a worktree whose branch is not `agent/*` at all -- `a11y-wt-dispatch`
-//       (`dispatcher/merge`), `a11y-wt-lead` (`lead/*`). These are ROLE trees, not unit trees; nothing
-//       about "merged" or "clean" applies to them, and an unstated exception is exactly the kind of thing
-//       that gets applied to the exception the day someone forgets it by hand.
+//   - NAME (never remove) the CHERRY-PICKED ones -- added after `dispatcher`'s own manual pass measured
+//     them as real, not hypothetical (25 removed, 3.4 GB freed, 4 refused, one genuine near-miss):
 //       CHERRY-PICKED: `merge-base --is-ancestor` says NOT merged forever for a branch whose commits were
 //       cherry-picked onto main rather than merged -- same CONTENT, different SHAs, ahead by that reading
 //       for as long as the branch exists (measured: `agent/same-document-resolved-url`, 10 "ahead", every
@@ -165,25 +162,38 @@ export function isPrimaryWorktree(worktreePath) {
  */
 
 /**
- * A worktree whose branch is not `agent/*` is a ROLE tree, not a unit tree -- `a11y-wt-dispatch`
- * (`dispatcher/merge`), `a11y-wt-lead` (`lead/*`). Standing, never a prune candidate at all, regardless
- * of merge or clean state. A detached worktree (no branch) is not "standing" -- there is no name to
- * recognise as a role tree -- so it is not this function's business; `classify` handles it separately.
+/**
+ * #671/#696: THIS FUNCTION USED TO EXIST AND IT ASKED THE WRONG QUESTION.
  *
- * @param {string} branch
- * @returns {boolean}
+ * ```js
+ * export function isStandingBranch(branch) { return !branch.startsWith("agent/"); }
+ * ```
+ *
+ * It exempted 42 of 103 worktrees on the live host because their branch was `pm/`, `lead/`, `ceo/` or
+ * `dispatcher/` rather than `agent/` -- a ROLE tree, "never a prune candidate at all, regardless of merge
+ * or clean state." The trouble is that **merged-and-clean is not a property of a name.** A `pm/` worktree
+ * whose branch landed a week ago and whose tree is spotless is exactly as removable as an `agent/` one,
+ * and the evidence is that their owner removed nine of them by hand the same morning -- every one merged
+ * and clean -- because the tool would not.
+ *
+ * `classify` below now asks only about STATE: merged into `origin/main`, clean, not recently active, not
+ * the primary. There is no name clause and no prefix clause left in this file, and the STANDING bucket
+ * is gone with them.
+ *
+ * WHAT REPLACES IT IS NOT NOTHING. A role tree is usually somebody's CURRENT WORKING DIRECTORY, which is
+ * the real hazard, and a prefix never measured that either -- it protected a finished `lead/` tree and
+ * left a live `agent/` one exposed. The three things that actually protect a tree somebody is standing
+ * in are the ACTIVE window (#220: git activity inside the last N minutes), the announce-one-cycle rule,
+ * and `--apply` being explicit (#669). All three key on what is happening rather than on what it is
+ * called.
  */
-export function isStandingBranch(branch) {
-  return !branch.startsWith("agent/");
-}
 
 /**
- * Pure: given what is already known about a worktree, which of the SIX populations is it in?
+ * Pure: given what is already known about a worktree, which of the FIVE populations is it in?
  *
- * ORDER MATTERS. A detached worktree is refused first (no branch to reason about at all). A standing
- * branch is refused next, UNCONDITIONALLY -- a role tree that happens to look clean and merged is still
- * never a prune candidate, because "merged and clean" is not the question for a tree that is not a unit
- * tree in the first place. `"unknown"` on ANY of `merge`, `workingTreeClean` or `recentlyActive` is
+ * ORDER MATTERS, and the two clauses that used to come first are gone (#671, #696): a detached worktree
+ * was refused before anything was measured, and a non-`agent/*` branch was refused unconditionally after
+ * it. Both asked about a NAME. What is left asks only about state, and `"unknown"` on ANY of `merge`, `workingTreeClean` or `recentlyActive` is
  * checked before "remove" becomes reachable at all -- INCONCLUSIVE, never silently folded into "not
  * merged" or "dirty". That collapse is a real, measured incident, not a hypothetical: a manual prune
  * script's own `[ "$(git rev-list --count origin/main..branch 2>/dev/null)" != 0 ]` compares an EMPTY
@@ -197,12 +207,15 @@ export function isStandingBranch(branch) {
  * ACTIVE, not removed, because "clean" can mean "finished" or "mid-stash", and only recency tells them
  * apart.
  *
- * @param {Pick<WorktreeAssessment, "branch" | "merge" | "workingTreeClean" | "contentMerged" | "recentlyActive">} assessment
- * @returns {"remove" | "dirty" | "standing" | "cherry-picked" | "inconclusive" | "active"}
+ * IT NO LONGER TAKES `branch` AT ALL, and that is the change stated as plainly as it can be. Two clauses
+ * used to read a name -- `if (branch === null) return "dirty"` and `if (isStandingBranch(branch))` -- and
+ * between them they decided 54 of 103 worktrees on the live host without consulting a single fact about
+ * what those trees contained. Every input to this verdict is now a measurement.
+ *
+ * @param {Pick<WorktreeAssessment, "merge" | "workingTreeClean" | "contentMerged" | "recentlyActive">} assessment
+ * @returns {"remove" | "dirty" | "cherry-picked" | "inconclusive" | "active"}
  */
-export function classify({ branch, merge, workingTreeClean, contentMerged, recentlyActive }) {
-  if (branch === null) return "dirty";
-  if (isStandingBranch(branch)) return "standing";
+export function classify({ merge, workingTreeClean, contentMerged, recentlyActive }) {
   if (merge === "unknown" || workingTreeClean === "unknown" || recentlyActive === "unknown") return "inconclusive";
   if (merge === "merged" && workingTreeClean) return recentlyActive ? "active" : "remove";
   if (merge === "not-merged" && contentMerged) return "cherry-picked";
@@ -233,6 +246,27 @@ export function mergeStatus(repoRoot, branch, { run = defaultRun } = {}) {
   }
   try {
     run("git", ["merge-base", "--is-ancestor", branch, "origin/main"], { cwd: repoRoot });
+    return "merged";
+  } catch (error) {
+    const status = /** @type {{ status?: number }} */ (error).status;
+    return status === 1 ? "not-merged" : "unknown";
+  }
+}
+
+/**
+ * The merge status of a DETACHED worktree, asked of its HEAD commit rather than of a branch name.
+ *
+ * Identical in shape and in tristate to `mergeStatus`, and identical in what it refuses to guess: exit 1
+ * is a real "not an ancestor", anything else is `"unknown"` and reaches INCONCLUSIVE. Asked in the
+ * worktree itself, because `HEAD` means a different commit in every one.
+ *
+ * @param {string} worktreePath
+ * @param {{ run?: typeof defaultRun }} deps
+ * @returns {"merged" | "not-merged" | "unknown"}
+ */
+export function detachedMergeStatus(worktreePath, { run = defaultRun } = {}) {
+  try {
+    run("git", ["merge-base", "--is-ancestor", "HEAD", "origin/main"], { cwd: worktreePath });
     return "merged";
   } catch (error) {
     const status = /** @type {{ status?: number }} */ (error).status;
@@ -282,12 +316,14 @@ export function isContentMerged(repoRoot, branch, { run = defaultRun } = {}) {
  * to stop hiding.
  *
  * @param {string} worktreePath
- * @param {string | null} branch
  * @param {{ run?: typeof defaultRun }} [deps]
  * @returns {boolean | "unknown"}
  */
-export function isWorkingTreeClean(worktreePath, branch, { run = defaultRun } = {}) {
-  if (branch === null) return false; // detached: no branch to reason about safely either way
+export function isWorkingTreeClean(worktreePath, { run = defaultRun } = {}) {
+  // #696, THE THIRD SITE, and THE PARAMETER IS GONE WITH IT. This took a `branch` and said
+  // `if (branch === null) return false` -- asserting a detached worktree is DIRTY without running
+  // `git status`, which takes no branch name and answers identically either way. Keeping the parameter
+  // unused would leave the next reader believing the answer depends on it.
   try {
     const status = run("git", ["status", "--porcelain"], { cwd: worktreePath });
     return status.trim() === "";
@@ -301,7 +337,6 @@ export function isWorkingTreeClean(worktreePath, branch, { run = defaultRun } = 
  * @typedef {{
  *   removed: ReportedWorktree[],
  *   dirty: ReportedWorktree[],
- *   standing: ReportedWorktree[],
  *   cherryPicked: ReportedWorktree[],
  *   inconclusive: ReportedWorktree[],
  *   active: ReportedWorktree[],
@@ -310,7 +345,7 @@ export function isWorkingTreeClean(worktreePath, branch, { run = defaultRun } = 
  */
 
 /**
- * The four facts `classify` needs about one non-primary, non-standing worktree entry.
+ * The four facts `classify` needs about one non-primary worktree entry.
  *
  * `contentMerged` is only computed when `merge` is `"not-merged"` (a real, resolved "no") -- `git cherry`
  * is meaningless for a detached, already-merged, or UNKNOWN-status worktree, and skipping it there is not
@@ -328,8 +363,14 @@ export function isWorkingTreeClean(worktreePath, branch, { run = defaultRun } = 
  * @returns {Pick<WorktreeAssessment, "merge" | "workingTreeClean" | "contentMerged" | "recentlyActive">}
  */
 function assessWorktree(repoRoot, entry, { run, now }) {
-  const merge = entry.branch !== null ? mergeStatus(repoRoot, entry.branch, { run }) : "not-merged";
-  const workingTreeClean = isWorkingTreeClean(entry.path, entry.branch, { run });
+  // #696: THIS SAID `: "not-merged"` FOR A DETACHED WORKTREE -- an assertion, not a measurement, and
+  // false for twelve of the fifteen detached trees on the live host (0 uncommitted, 0 commits
+  // `origin/main` lacks). A commit's merged-ness needs no branch NAME: `merge-base --is-ancestor` takes
+  // the commit directly. Detachment makes the STANDING question unanswerable, and made nothing else so.
+  const merge = entry.branch !== null
+    ? mergeStatus(repoRoot, entry.branch, { run })
+    : detachedMergeStatus(entry.path, { run });
+  const workingTreeClean = isWorkingTreeClean(entry.path, { run });
   const contentMerged = entry.branch !== null && merge === "not-merged"
     && isContentMerged(repoRoot, entry.branch, { run });
   const recentlyActive = merge === "merged" && workingTreeClean === true
@@ -339,15 +380,12 @@ function assessWorktree(repoRoot, entry, { run, now }) {
 }
 
 /**
- * Which `PruneReport` bucket a `classify` verdict other than `"remove"` lands in. `standing` is included
- * for completeness against `classify`'s own declared return type, even though the `isStandingBranch`
- * check above already intercepts that case before `classify` is ever asked.
- * @type {Record<"dirty" | "standing" | "cherry-picked" | "inconclusive" | "active",
- *   "dirty" | "standing" | "cherryPicked" | "inconclusive" | "active">}
+ * Which `PruneReport` bucket a `classify` verdict other than `"remove"` lands in.
+ * @type {Record<"dirty" | "cherry-picked" | "inconclusive" | "active",
+ *   "dirty" | "cherryPicked" | "inconclusive" | "active">}
  */
 const VERDICT_BUCKET = {
   active: "active", "cherry-picked": "cherryPicked", inconclusive: "inconclusive", dirty: "dirty",
-  standing: "standing",
 };
 
 /**
@@ -364,7 +402,7 @@ export function pruneWorktrees(repoRoot, { run = defaultRun, remove, now = Date.
   const entries = parseWorktreeList(porcelain);
   /** @type {PruneReport} */
   const report = {
-    removed: [], dirty: [], standing: [], cherryPicked: [], inconclusive: [], active: [], skippedPrimary: null,
+    removed: [], dirty: [], cherryPicked: [], inconclusive: [], active: [], skippedPrimary: null,
   };
   const doRemove = remove ?? ((path, { run: r }) => {
     r("git", ["worktree", "remove", path], { cwd: repoRoot });
@@ -376,12 +414,8 @@ export function pruneWorktrees(repoRoot, { run = defaultRun, remove, now = Date.
       continue;
     }
     const reported = { path: entry.path, branch: entry.branch };
-    if (entry.branch !== null && isStandingBranch(entry.branch)) {
-      report.standing.push(reported);
-      continue;
-    }
     const assessment = assessWorktree(repoRoot, entry, { run, now });
-    const verdict = classify({ branch: entry.branch, ...assessment });
+    const verdict = classify(assessment);
     if (verdict === "remove") {
       // `dryRun` SKIPS THE REMOVAL AND NOTHING ELSE -- same walk, same predicate, same buckets. The
       // listing has to come from the tool that owns the decision, because the alternative was measured:
@@ -433,8 +467,6 @@ function formatReport(report, dryRun = false) {
   pushSection(lines, report.cherryPicked,
     `${report.cherryPicked.length} CHERRY-PICKED worktree(s) -- content already on main under different `
     + `commits, not a literal ancestor; a human decides, nothing removed:`);
-  pushSection(lines, report.standing,
-    `${report.standing.length} STANDING worktree(s) -- not agent/*, a role tree, never a prune candidate:`);
   if (report.skippedPrimary) lines.push(`primary checkout, never touched: ${report.skippedPrimary}`);
   return lines.join("\n");
 }
