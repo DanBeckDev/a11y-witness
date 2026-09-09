@@ -30,6 +30,7 @@ import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
+import { leakRefusalReason } from "../packages/lab/src/packaging/leak-patterns.mjs";
 import { REPO } from "./repo-identity.mjs";
 
 /** @type {(args: string[]) => string} */
@@ -100,6 +101,11 @@ export function readComment(id, { run = defaultRun } = {}) {
  * @returns {string | null}
  */
 export function editRefusal({ current, expect, next }) {
+  // #891: checked first, and independently of the compare-and-swap state below -- a leak in the proposed
+  // text is refused on its own facts, whether or not `--expect=` is even present. Same `allLeaksIn`
+  // predicate the tree-wide guards already drive, never restated.
+  const leak = leakRefusalReason(next);
+  if (leak) return `tracker-comment: ${leak}`;
   if (expect === undefined) {
     return "tracker-comment: --expect=<digest> is required.\n"
       + "Run `read` first; it prints the digest of what it read. An edit that names no prior state is a "
