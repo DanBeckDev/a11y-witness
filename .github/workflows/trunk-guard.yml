@@ -147,6 +147,62 @@ jobs:
       # Note the `git push` is NOT affected by any of this: it goes through the checkout's persisted
       # credentials under `contents: write`, which is why the push succeeded on the run above while the
       # `gh` call did not. Two different credentials in one step, and only one of them moved.
+      # #616: WAS THE PARENT GREEN BECAUSE IT WAS CORRECT, OR BECAUSE IT WAS MEASURED EARLIER?
+      #
+      # Every other input to the decision below is a RECORDED conclusion, true as of the moment it was
+      # taken. On 2026-09-09 `main` went red on a wall-clock assertion; the parent was green, verifiably,
+      # in its own run sixty-one minutes earlier; the decision reached READY and opened a revert PR
+      # against a merge that had broken nothing. The input silently encoded the time it was read, so the
+      # revert's own freshness check inherited the staleness it was measuring.
+      #
+      # NO THRESHOLD FIXES THIS. "Only trust a parent measured in the last N minutes" needs N to exceed
+      # the slowest honest gap between two trunk runs, and the case that matters fits inside it -- the
+      # same shape as #590, where a staleness threshold could not see a nineteen-hour silence because the
+      # workflow's own worst legitimate gap was twenty-two hours. The only way to turn a stale boolean
+      # into a current one is to ask again, now.
+      #
+      # WHY THE WHOLE SUITE RATHER THAN THE FAILING FILE. Re-running only the failing test file would be
+      # far cheaper and is the intended optimisation -- but the failing FILE is not reliably recoverable:
+      # `node:test`'s TAP output names the failing test (`not ok 1413 - the summary states WHEN ...`) and
+      # not the file it came from. Narrowing on a parse of that would be a guess, and a guess here decides
+      # whether somebody's merged work is deleted. One extra run on a path that fires rarely is the right
+      # trade until the runner reports the file.
+      #
+      # ONLY WHEN `trunkBuildTest` FAILED. `trunkGate` asks whether THIS PUSH silently reverted work
+      # already on main -- a question about this merge's own two parents, which has no meaning evaluated
+      # at the parent. So a trunkGate-only failure passes `pass` with that reason stated here rather than
+      # inferred: it is not "we checked and it was fine", it is "this class of failure cannot be
+      # inherited or caused by the world".
+      - name: Does the parent fail the same check NOW? (#616)
+        id: recheck
+        run: |
+          BEFORE="${{ github.event.before }}"
+          if [ -z "$BEFORE" ]; then BEFORE="$(git rev-parse HEAD^1)"; fi
+          if [ "${{ needs.trunkBuildTest.result }}" != "failure" ]; then
+            echo "trunkBuildTest did not fail, so the failure is trunkGate's -- a question about THIS"
+            echo "merge's own parents, which cannot be inherited or caused by the world. Recording pass."
+            echo "result=pass" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git worktree add /tmp/parent "$BEFORE" --detach
+          cd /tmp/parent
+          # `|| true` on each: a re-check that CANNOT RUN must report unknown rather than fail, and a
+          # non-zero from `npm ci` is not the same answer as a non-zero from the suite.
+          if ! npm ci --ignore-scripts > /tmp/parent-install.log 2>&1; then
+            echo "::warning::could not install at the parent; the re-check is UNKNOWN, not a pass."
+            echo "result=unknown" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          npm run build > /tmp/parent-build.log 2>&1 || true
+          if npm test > /tmp/parent-test.log 2>&1; then
+            echo "the parent PASSES the suite now -- its recorded green is still the answer."
+            echo "result=pass" >> "$GITHUB_OUTPUT"
+          else
+            echo "the parent FAILS the suite now, on a tree this push did not touch."
+            tail -40 /tmp/parent-test.log || true
+            echo "result=fail" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Revert this push, unless the failure is inherited or main has already moved on
         env:
           A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
@@ -167,4 +223,5 @@ jobs:
           node scripts/trunk-revert.mjs \
             --push-sha=${{ github.sha }} \
             --before-sha="$BEFORE" \
+            --parent-recheck="${{ steps.recheck.outputs.result }}" \
             --run-url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
