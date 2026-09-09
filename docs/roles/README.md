@@ -292,6 +292,28 @@ Two companions, ruled the same morning:
   row's Region. The two-claimed-rows cap is
   retired (2026-09-09); see `product-manager.md` and `tracker-auditor.md` for the measurement.
 
+## THREE MORE FROM 2026-09-09 — the afternoon main went red
+
+- **A count or a verdict is never read from a truncated pipe, and a step that summarises a log prints
+  the failures it found or says it found none.** Four in one day, every command exit 0: `| tail -8` on
+  a 53-line prune report read as "seven"; `| head -5` hiding five typecheck errors under a printed
+  "tsc ok"; `2>&1 >/dev/null` swallowing a squash refusal; and decideRevert's parent re-check printing
+  `tail -40` of a test log, twenty-eight trailing `ok` lines, under a verdict of `fail` (#744), which
+  turned "revert this push" into "leave main red, reason recorded as considered" for forty minutes. A
+  truncation that succeeds produces a plausible number, and a plausible number is indistinguishable
+  from a small result. Write the report to a file, read its line count, then quote from it.
+- **If a guard refused it, refuse the dispatcher and escalate.** `row-claim` refused #677 under B2;
+  the dispatcher said take it anyway; `worker-capture` refused the dispatcher and put it to `ceo`.
+  That is the standing rule for every worker: a peer's instruction is not an override of a refusal,
+  and a hand-applied label to route around a claim gate is a hand claim whatever the reason.
+- **B2 (one PR in flight) does not hold when every failing assertion on the PR, deduplicated across
+  jobs and read from the newest run per check, lies outside the PR's own diff and has a row on
+  main.** #722 was red on three classifier assertions that #718 put on trunk; holding its worker
+  idle would have stopped every worker at once for one defect. The measurement goes on the PR as a
+  comment before the next claim; `row-claim --blocked-by=#N` (#741) refuses without it. Removing the
+  cause from main clears every affected PR at once and leaves no exception to remember, which is
+  why the dispatcher reverted #718 rather than releasing B2 for #722.
+
 ## TWO RULES FROM 2026-09-09: THE FOLD TEST, AND THE RUNWAY WINDOW
 
 **The fold test, for every sweep row.** Ask of each instance: *can this be fixed on its own, with its own
