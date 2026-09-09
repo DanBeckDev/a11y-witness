@@ -232,6 +232,36 @@ corpus, the gates and a finding can all cite the same answer instead of three to
 reasons, `check-signals` refuses a case whose evidence cannot support the claim its signal makes, and a
 CLI finding can say *"this rests on a capture that reached the end and agreed with the tree"* or decline.
 
+## C7. A mark's timestamp is when the MARK was written, so a read time is its own field or nothing
+
+**Status: OPEN 2026-09-09.** `capture-core.mjs:132` stamps `atMs: Date.now() - startedAt` at `push`, and
+`structureCensus` is read at the top of `navigateByStructure` (`capture-probes.mjs:583`) but marked after it
+returns (`:201`). So the census reports ~450 s on a 453-second capture for a count taken at t≈0, and nothing
+in the record says otherwise. `domCensus` and `mediaCensus` are read in the same call and marked in the same
+place, so it is at least three.
+
+**The field used to date the instrument was the field the instrument misreported**, and it cost two sessions
+four published conclusions in one afternoon — including one drawn *after* naming the field unreliable.
+Any diagnostic assembled early and emitted late carries the emission time under a name that reads like the
+observation time.
+
+**Done when:** a mark that reports a moment carries the moment it OBSERVED, not the moment it was written —
+or carries neither and forces the reader to ask. See `known-gaps.md` §47 for the incident.
+
+## C8. A dataset is one build, or it is two datasets
+
+**Status: OPEN 2026-09-09.** Five captures of one URL, all `targetMatch: matched`, produced a ratio that
+changed sign — 0.45, 0.45, 2.27, 2.17, 2.12 — and it was read as a finding about the page twice. It was four
+worker builds (`74f37905`, `94e91f68`, `691969f6` ×2, `9ad992a4`) straddling `7a00f961`, which moved the
+census from after the sweeps to before them. The morning pair counted the page after the sweeps had walked
+and activated it; the afternoon three counted it at load. **Same page, two definitions of *present*.**
+
+Every capture already carries `environment.workerCode`. Nothing that compares captures reads it.
+
+**Done when:** any tool comparing captures against each other groups by build first and says so in its
+output — a ratio table prints the build beside every row, or refuses a set that spans more than one. If a
+comparison inverts, the population is the first suspect, not the subject.
+
 ---
 
 ## What this plan is NOT
@@ -240,7 +270,8 @@ CLI finding can say *"this rests on a capture that reached the end and agreed wi
   the whole point, and `docs/local-model.md` forbids the tree as a model feature. The tree is the ORACLE
   that says whether the evidence is complete. Confusing the two would turn this into an axe-core with extra
   steps.
-- **Not a recapture.** C1, C2, C5 and C6 read marks that captures already carry. Only C3's fixes and C4's
+- **Not a recapture.** C1, C2, C5, C6 and C8 read marks that captures already carry, and C7 changes
+  what a mark SAYS about itself rather than what it observed. Only C3's fixes and C4's
   decision would change what evidence MEANS, and those are the ones to bundle behind a single
   `CAPTURE_PROTOCOL_VERSION` bump.
 - **Not a rewrite of guidepup.** Considered and rejected on evidence in `determinism-plan.md`: every
