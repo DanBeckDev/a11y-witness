@@ -494,13 +494,21 @@ export function reliefFor(consumers) {
   const spotlight = consumers.filter((c) => c.command.startsWith("mds"));
   const lines = [];
   if (person.length > 0) {
-    lines.push(`     SOMEBODY IS USING THIS MACHINE (${person.map((c) => c.command).join(", ")}). Our`,
-      "     load is competing with their session, not just with itself: one push at a time across all",
-      "     sessions, no local suites, sweeps paused, until the next table shows it gone.");
+    lines.push(`     THROTTLED -- SOMEBODY IS USING THIS MACHINE (${person.map((c) => c.command).join(", ")}).`,
+      "     Our load is competing with their session, not just with itself: carries serialise,",
+      "     one push at a time across all sessions, no parallel suites from any session, sweeps",
+      "     paused -- until this line is gone. The word is here so a reader can SEE the state.");
   }
   if (spotlight.length > 0) {
-    lines.push("     Spotlight is indexing the worktrees. Prune every one whose PR has merged; a",
-      "     `.metadata_never_index` in a worktree root stops it being indexed at all.");
+    // THE MARKER DOES NOT WORK, MEASURED. This line used to recommend `.metadata_never_index` in a
+    // worktree root. Placed on all 68 worktrees at 12:47Z and verified present; `mds_stores` read 54.8%
+    // at 12:45Z and 80% at 12:52Z. On current macOS it is honoured at a VOLUME ROOT only, and
+    // per-directory exclusion is the Spotlight Privacy list -- a machine-owner action. #734 corrected
+    // that claim in `.gitignore` and `scripts/spotlight-exclude.mjs` and MISSED THIS COPY AND
+    // `docs/pipeline.md`'s, which are the two a reader actually reaches. Four copies of one fact.
+    lines.push("     Spotlight is indexing the worktrees. Prune every one whose PR has merged. The",
+      "     `.metadata_never_index` marker does NOT help -- measured, no effect; it is honoured at a",
+      "     volume root only, and per-directory exclusion is the Privacy list, a machine-owner action.");
   }
   if (ours.length > 0) {
     lines.push(`     Ours, and stoppable now: ${ours.map((c) => `${c.command} ${c.cpu.toFixed(0)}%`)

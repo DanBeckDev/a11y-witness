@@ -647,10 +647,20 @@ function reportClosedDebris() {
     process.stdout.write(`DEBRIS  #${number} "${title}" -- closed, still carries ${labels.join(", ")}\n`);
   }
   const readyOnClosed = debris.filter((d) => d.debris.includes(READY_LABEL)).length;
+  // #752: STATE-AWARE, NOT A SINGLE COMMAND FOR BOTH POPULATIONS -- `decline` needs `in-progress` (a
+  // claim to release) and only then removes labels without adding `ready` back on a closed row
+  // (row-claim.mjs's own fix for this exact incident: declining #721 while it was already closed had
+  // restored `ready`, turning one debris finding into another). A row carrying ONLY `ready`, with no
+  // claim for `decline` to act on, has nothing for it to do -- named separately so the remediation never
+  // sends a reader to a command that will refuse.
+  const claimedDebris = debris.filter((d) => d.debris.includes("in-progress"));
   process.stderr.write(`\n${debris.length} closed row(s) still carry a pickable/claimed label -- nobody `
     + `will act on these, but a Ready count taken by label rather than by state is wrong by `
-    + `${readyOnClosed} because of them. Not a contradiction to resolve: stale bookkeeping for the `
-    + `tracker owner to clear.\n`);
+    + `${readyOnClosed} because of them. Stale bookkeeping, not a contradiction: ${claimedDebris.length} `
+    + `still carry \`in-progress\` and can be cleared with \`node scripts/row-claim.mjs decline <n> `
+    + `--session=<whoever holds it>\` (safe here -- a closed row is never returned to \`ready\`); the `
+    + `rest carry only \`ready\` or a stray \`session:\`/\`runner:\` label, which decline has no claim to `
+    + `release and the tracker owner clears by hand.\n`);
   return debris.length;
 }
 
