@@ -46,8 +46,17 @@ jobs:
 
           # No key, no account, nothing leaves the runner. This is the project's own trained scorer:
           # 27 KB of weights shipped in the action, over an encoder fetched at setup. It covers EIGHT
-          # WCAG criteria precisely and stays silent on the rest — narrower than an LLM and far more
-          # trustworthy (zero false positives across 1,034 conformant records it was measured on).
+          # WCAG criteria precisely and stays silent on the rest — narrower than an LLM.
+          #
+          # <!-- CLAIM:BEGIN -- every figure between these markers is checked by public-claim.test.ts
+          #      against a gate result recorded in docs/board/reported/. Do not TYPE a number here: this
+          #      exact comment once carried "zero false positives across 1,034 conformant records" while
+          #      README.md said 1,183 and the guarded claim said 1,405 -- three documents, one measurement,
+          #      and this file wasn't even in the guarded set (#324's V1 rehearsal found the stale copy
+          #      already propagated into a real consumer's own committed workflow). -->
+          # The false-positive rate of the local judge on the conformant corpus is being re-measured, so
+          # this file does not state one.
+          # <!-- CLAIM:END -->
           #
           # Swap to an LLM if you want it to attempt every criterion, at the cost of noise and a key:
           #   judge-backend: anthropic
