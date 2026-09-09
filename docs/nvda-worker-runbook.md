@@ -180,7 +180,7 @@ utmctl exec "$UUID" --cmd powershell.exe -NoProfile -Command 'Start-ScheduledTas
 
 # read the log. Copy first: `utmctl file pull` returns NOTHING for a file still held open.
 utmctl exec "$UUID" --cmd powershell.exe -NoProfile -Command \
-  'Copy-Item C:\Users\witness\a11ign\capture-check.log C:\Users\witness\cc.log -Force'
+  'Copy-Item C:\Users\witness\a11y-witness\capture-check.log C:\Users\witness\cc.log -Force'
 utmctl file pull "$UUID" 'C:\Users\witness\cc.log' | tr -d '\r' | tail -40
 
 # PUT THE WORKER BACK
@@ -387,7 +387,7 @@ Reading the log from the host: **copy it first.** The live file is held open by 
 
 ```bash
 utmctl exec "$UUID" --cmd powershell.exe -NoProfile -Command \
-  'Copy-Item C:\Users\witness\a11ign\server.log C:\Users\witness\log-copy.txt -Force'
+  'Copy-Item C:\Users\witness\a11y-witness\server.log C:\Users\witness\log-copy.txt -Force'
 utmctl file pull "$UUID" 'C:\Users\witness\log-copy.txt'
 ```
 
