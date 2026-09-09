@@ -20,8 +20,33 @@
 //   node scripts/tree-wide-guards.mjs     one path per line, for `npm run guards:sweep`
 import { execFileSync } from "node:child_process";
 import { extname } from "node:path";
-import ts from "typescript";
+import { createRequire } from "node:module";
 import { sandboxGitEnv } from "./git-env.mjs";
+
+// LAZY, not top-level -- ceo measured #809's guards costing 8.8s more than main's tip, more than either
+// side's own noise (main's spread 6.1s, #809's 1.6s), and named the cause with a check: `node:test`
+// isolates every guard into its OWN process (18 distinct PIDs, measured directly), so a module-level
+// `import ts from "typescript"` at the TOP of this file is paid by all 18, even the ~9 that only ever call
+// `walkTree({kind: "all", ...})` and never touch a `ScriptKind`. Measured directly: `import("typescript")`
+// alone costs 170-380ms per process -- in the right range for nine seconds across nine unnecessary loads.
+// `createRequire` loads it SYNCHRONOUSLY (so `walkTree` stays sync, no API change) and LAZILY (only the
+// first time a `kind !== "all"` call actually needs it, never for a text-only guard).
+const require = createRequire(import.meta.url);
+/** @type {typeof import("typescript") | null} */
+let tsModule = null;
+/** @returns {typeof import("typescript")} */
+function typescriptModule() {
+  if (tsModule === null) tsModule = require("typescript");
+  return /** @type {typeof import("typescript")} */ (tsModule);
+}
+
+/** Test-only: has this process actually loaded `typescript` yet -- proof the laziness is real, not
+ *  merely that the returned value happens to be `undefined`. Only meaningful checked from a FRESH
+ *  process that has made no `kind !== "all"` call yet; any test file, single process, sequential tests
+ *  contaminates this the moment ANY earlier test needs a ScriptKind. */
+export function _typescriptLoadedForTests() {
+  return tsModule !== null;
+}
 
 /**
  * Call this once, at module scope, in any test whose own population is the whole tracked tree rather than
@@ -67,7 +92,11 @@ export function _lsFilesSpawnCountForTests() {
  * One tracked file `walkTree` found, paired with the `ts.ScriptKind` a correct parse must use --
  * extension-derived, never guessed. #715/#794's own bug was two INDEPENDENT, both-wrong copies of exactly
  * this ternary in `function-size.test.ts`; this is the one place it is computed now.
- * @typedef {{ path: string, scriptKind: import("typescript").ScriptKind, isSelf: boolean }} WalkedFile
+ *
+ * `scriptKind` is `undefined` for a `kind: "all"` walk -- that population isn't ts/mjs, so there is no
+ * `ScriptKind` to compute, and computing one anyway is exactly the unconditional `typescript` load #795's
+ * CPU follow-up traced nine seconds to.
+ * @typedef {{ path: string, scriptKind: import("typescript").ScriptKind | undefined, isSelf: boolean }} WalkedFile
  */
 
 /**
@@ -103,8 +132,12 @@ export function walkTree({ kind, roots = [], selfPath }, { gitLsFiles = defaultG
   if (!["ts", "mjs", "both", "all"].includes(kind)) {
     throw new Error(`walkTree: unknown kind "${kind}" -- expected "ts", "mjs", "both", or "all"`);
   }
-  /** @type {(path: string) => import("typescript").ScriptKind} */
-  const scriptKindOf = (path) => (extname(path) === ".ts" ? ts.ScriptKind.TS : ts.ScriptKind.JS);
+  // Lazy, and only for a kind that means something has a ScriptKind at all -- a `kind: "all"` caller must
+  // never pay for loading `typescript`, since it never reads this field.
+  /** @type {(path: string) => import("typescript").ScriptKind | undefined} */
+  const scriptKindOf = kind === "all"
+    ? () => undefined
+    : (path) => (extname(path) === ".ts" ? typescriptModule().ScriptKind.TS : typescriptModule().ScriptKind.JS);
   const raw = gitLsFiles(roots).split("\n").filter(Boolean);
   if (raw.length === 0) {
     throw new Error(`walkTree(${JSON.stringify(roots)}): git ls-files found zero tracked files -- wrong `
