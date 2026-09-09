@@ -26,7 +26,7 @@
 // must not block every other claim in the queue.
 import { REPO } from "../repo-identity.mjs";
 import { gh, lookup } from "../merge-guard/lookups.mjs";
-import { regionPathsFromBody } from "../region-paths.mjs";
+import { declaredRegionFiles } from "../region-paths.mjs";
 
 /** @type {(path: string) => boolean} */
 const isChangeset = (path) => path.startsWith(".changeset/");
@@ -65,10 +65,13 @@ export function fileOverlapReason(myFiles, otherPrFiles) {
 }
 
 /**
- * This row's own declared files, read from its issue body -- the SAME extraction `row-reachability.mjs`
- * uses for the STARTABLE check, so a row's Region cannot mean two different things to two different
- * tools. `null` on a failed lookup, `[]` for a row that genuinely names no source path (a docs row, or
- * one whose Region is prose) -- the two are different states and this returns the real one.
+ * This row's own declared files, read from its issue body's `## Region` section -- #710: what this row
+ * DECLARES it will change, never every path its prose merely mentions (a worked example, a fixture, a
+ * quote of someone else's file). `null` on a failed lookup OR a body with no Region section at all -- the
+ * caller (`sessionEligibilityReason`) already treats a `null` result as "cannot ask" and skips the
+ * overlap check rather than refusing, so a genuinely Region-less row is never blocked over a comparison
+ * it cannot make. `[]` for a Region section that names no source path (prose, bare directories with no
+ * file extension) -- a real, comparable answer, distinct from having nothing to read at all.
  *
  * @param {number} issueNumber
  * @param {{ run?: (args: string[]) => string }} [deps]
@@ -79,7 +82,7 @@ export function lookupMyRegionFiles(issueNumber, { run = gh } = {}) {
     const raw = run(["issue", "view", String(issueNumber), "--repo", REPO, "--json", "body"]);
     /** @type {{ body?: string }} */
     const parsed = JSON.parse(raw);
-    return regionPathsFromBody(parsed.body ?? "");
+    return declaredRegionFiles(parsed.body ?? "");
   });
 }
 
