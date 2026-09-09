@@ -188,16 +188,24 @@ job refuses.
 **Say it in that order.** *"55 reported success without running anything"* followed by *"and it was tested
 anyway"* is the truth; the reverse order reads as an excuse with a fact attached.
 
-### The one clause that is not yet settled
+### The exception, checked and closed — say it rather than deleting it
 
-**12 of today's 146 trunk runs failed** — ten of them the two red-main episodes, each with a single known
-inherited assertion. `dispatcher` is computing which of the 55 merged inside those windows and reading
-each run's own failure line. **If any failure line is not the known one, that change re-verifies tonight.**
+**Of the 55, five merged while the full suite was failing** — #718, #730, #740, #739 and #767. **Each run
+was read against its own failure line**, not against the assumption that a red main means one thing:
 
-> **FILL THIS FROM `dispatcher`'S LIST BEFORE 21:04**, as a number and not as a reassurance: *"of the 55,
-> N merged during a window when the full suite was failing; each was checked against that run's own
-> failure line, and M re-verified tonight."* If the answer is none, say none — **a clause deleted for
-> being empty reads as a clause nobody checked.**
+- **the first episode:** three assertions from #718's own closure walk, already attributed to it;
+- **the second:** #739's own test, already attributed to it and since reverted and re-landed;
+- **everything else in those runs green** — between 4,157 and 4,315 passing.
+
+**Nothing re-verifies.** Every failure was the known inherited cause and none was a fault in the change
+that merged.
+
+> **The board sentence:** five of them merged while the suite was failing for a reason already known and
+> attributed elsewhere; each was checked individually and none needed re-running.
+
+**This clause stays in even though the answer is "none".** Deleting it would leave the correction reading
+as though nobody had asked — and *"we checked five and found nothing"* is a different statement from
+silence, which is the whole of what this section is about.
 
 ### The rest of the process line
 
