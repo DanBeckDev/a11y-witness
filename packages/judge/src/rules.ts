@@ -478,6 +478,11 @@ function addSilentStateChanges(
     // The ROLE gate comes first: a combo box that stays collapsed after Enter is correct behaviour, and
     // asserting from it is this tool's worst error.
     if (!enterActivates(change.control)) continue;
+    // IDENTITY BEFORE STATE — #812, and the order is the fix. `after` is a FOCUS read (see
+    // `sameControlAnnounced`), so the two sides can legitimately describe two different controls, and
+    // "both say collapsed" is then a true statement about two strings that says nothing about either
+    // control. Checking the state word first and identity afterwards would let the same pair through.
+    if (!sameControlAnnounced(change.control, change.after)) continue;
     const before = statesOf(change.control);
     const after = statesOf(change.after);
     // Both sides must actually carry an expandable state. Absent on either side means the control is not
@@ -849,6 +854,42 @@ function addUnnamedFrames(frames: string[], add: AddFinding): void {
 }
 
 /** The expandable states a control announced, via the shared grammar rather than a fourth state vocabulary. */
+/**
+ * IS THIS BEFORE/AFTER PAIR ABOUT ONE CONTROL? — #812.
+ *
+ * `probeDisclosure` activates a control and then records `after` from `reportCurrentFocus`, which
+ * announces **whatever holds focus afterwards** — not a re-read of the control it activated. The two
+ * coincide only when activation leaves focus put, which is why this held for 2,000+ corpus captures and
+ * broke on a menu that moves focus into what it reveals. Measured on the V1 rehearsal artefact:
+ *
+ *     control  "…, list, with 6 items, Platform, button, collapsed"   -> name "Platform"
+ *     after    "Outline, menu button, focused, collapsed, sub Menu"   -> name "Outline"
+ *
+ * Both carry `collapsed`, so the state comparison passed **across two different controls**. That is not a
+ * near-miss in the state check; it is the state check being asked a question it cannot answer.
+ *
+ * **The guard is about IDENTITY, never about the state word.** A pair whose identity cannot be
+ * established produces no finding — the capture never made the observation such a finding would rest on,
+ * and "we could not tell" must not read as "the state did not change".
+ *
+ * NAME, NOT ROLE. A control's role can be announced differently in two contexts (`button` here,
+ * `menu button` there) without being a different element, so requiring role equality would refuse
+ * genuine pairs. The name is what identifies the control to the user, which is also what 4.1.2 is about.
+ *
+ * AN EMPTY NAME IS NOT AN IDENTITY. `parseAnnouncement` returns `""` when NVDA announced no name, and two
+ * unnamed controls would then compare equal — establishing identity from the absence of the thing that
+ * establishes it. Unnamed controls are 4.1.2 findings in their own right (`addUnnamedControls`); they are
+ * not evidence about each other.
+ */
+function sameControlAnnounced(control: string | null | undefined, after: string | null | undefined): boolean {
+  const nameIn = (raw: string | null | undefined): string =>
+    (typeof raw === "string" && raw
+      ? parseAnnouncement(raw, "sweep").objects.map((object) => object.name).find(Boolean) ?? ""
+      : "");
+  const before = nameIn(control);
+  return before !== "" && before === nameIn(after);
+}
+
 function statesOf(announcement: string | null | undefined): string[] {
   if (typeof announcement !== "string" || !announcement) return [];
   return parseAnnouncement(announcement, "sweep").objects
