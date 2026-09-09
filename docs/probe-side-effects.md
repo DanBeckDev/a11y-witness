@@ -189,6 +189,20 @@ Elements List — the exact "two things compared that describe different moments
 left in the one place that predates §40's own fix (this cross-check call site did not move when the
 censuses did).
 
+> **CORRECTED, #685/#691: the premise quoted above — "probeRouteChange is the only probe below that can
+> leave the page under measurement" — is wrong, and a real capture proved it.** The opportunistic FORM
+> probe, running INSIDE the sweep (`onFormField` → `operateControl`) and therefore well before
+> `probeRouteChange` gets a turn, activated a real calendly page's own "Continue with Google" button and
+> navigated to `accounts.google.com`'s sign-in screen. The census — still placed just above
+> `probeRouteChange` at the time this note was written — described Google's page (`heading:1`) while
+> NVDA's sweep, moments earlier, had genuinely read calendly's real 44 headings.
+> `censusBeforeNavigating` now runs before `runProbeSequence` (the sweep and the focus probe) as well, so
+> it precedes every probe this function calls, not a named subset. **`crossCheckAgainstElementsList`'s own
+> exposure, described in this same finding, is unchanged by that fix and stays open** — it still cannot
+> move ahead of the sweep, for the reason already stated (it reads `structure`, which the sweep populates),
+> so a sweep-time navigation reaching it is still live. Recorded here so this finding is not read as closed
+> by a fix that only closed the census's half of it.
+
 Severity depends on how often `probeNavigation` and `probeElementsList` are requested together — I did not
 find a fixture or call site forcing both on at once, so this may be rare in practice today. Recorded
 regardless, because the mechanism is the same one §40 already paid to discover once.
