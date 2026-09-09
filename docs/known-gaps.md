@@ -34,6 +34,7 @@ entry names what is missing, what it would cost, and what would tell you it is f
 - [§44](#44-the-title-three-criteria-compare-is-the-last-thing-nvda-said-which-on-a-live-region-page-is-not-the-title) THE "TITLE" THREE CRITERIA COMPARE IS THE LAST THING NVDA SAID, WHICH ON a LIVE-REGION PAGE IS NOT THE TITLE
 - [§45](#45-focusevents-is-not-deterministic-and-nothing-compared-it-until-the-day-before-this-was-found) focusEvents IS NOT DETERMINISTIC, and nothing compared it until the day before this was found
 - [§46](#46-a-document-identity-drops-the-query-string-so-a-site-whose-documents-differ-only-by-query-reads-as-one-document) A DOCUMENT IDENTITY DROPS THE QUERY STRING, so a site whose documents differ only by query reads as ONE document
+- [§47](#47-the-walk-alone-is-177-seconds-on-a-926-trip-page-so-no-probe-budget-can-rescue-it-and-the-report-has-to-say-what-it-did-not-walk) THE WALK ALONE IS 177 SECONDS ON A 926-TRIP PAGE, so no probe budget can rescue it and the report has to say what it did not walk
 <!-- known-gaps-index:end -->
 
 ## The order these should be done in
