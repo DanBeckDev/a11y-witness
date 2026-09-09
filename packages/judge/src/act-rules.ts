@@ -140,6 +140,36 @@ export const ACT_RULES: ActRuleDescription[] = [
     accessibilitySupport: NVDA_EDGE,
   },
   {
+    id: "a11ign:unidentified-input-purpose",
+    version: "2026-09-09",
+    name: "A form field's autocomplete value is not a real Autofill field name token",
+    description: "F107 — `autocomplete=\"fname\"` and similar typos of the HTML spec's own token table, "
+      + "which stop a user agent identifying the field's purpose and filling it from stored data.",
+    ruleType: "atomic",
+    accessibilityRequirements: [{ criterion: "1.3.5", mapping: "secondary" }],
+    inputAspects: ["DOM"],
+    applicability: "Every form field the DOM census carries a non-empty `autocomplete` value for.",
+    expectation: "The value, once the `webauthn` suffix and any `section-`/shipping/contact prefixes are "
+      + "stripped, is a single token from the spec's own Autofill field name table.",
+    assumptions: [
+      "SECONDARY, not conformance — read F107 itself (w3.org/WAI/WCAG22/Techniques/failures/F107) before "
+        + "mapping this, the discipline that caught 3.3.3 and 3.2.1/3.2.2 asserting where their criteria "
+        + "permit. F107 fails a field when its value \"doesn't match the input's purpose\" AND \"the "
+        + "purpose isn't communicated through alternative methods\" — its own worked example is "
+        + "`autocomplete=\"email\"` on a NAME field, a real token used for the WRONG field. This rule "
+        + "checks only whether the value is a real token AT ALL, never whether a real token matches this "
+        + "field's actual purpose, and never checks the alternative-methods clause. Narrower than the "
+        + "failure technique it is named for, which is exactly why it cannot assert the criterion.",
+      "ONLY THE SYNTACTIC HALF: a field with no `autocomplete` attribute at all is not this rule's claim "
+        + "either — see `addUnidentifiedInputPurpose`'s own comment (rules.ts) for why that needs a "
+        + "word-sense judgement over the field's label instead.",
+      "#869: no worker-side census populates a real capture's `formInputs` yet (issue #170), so this rule "
+        + "has never fired on a real page — see `criterion-coverage.ts`'s 1.3.5 entry.",
+    ],
+    accessibilitySupport: "Chromium's own Autofill implementation reads this identical token table; no "
+      + "screen reader involvement at all, since `autocomplete` has no accessibility-tree equivalent.",
+  },
+  {
     id: "a11ign:unnamed-graphic-count",
     version: "2026-08-08",
     name: "The page exposes images with no accessible name",
