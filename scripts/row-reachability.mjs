@@ -258,35 +258,62 @@ const onMain = (path) => {
 };
 
 /**
- * Which refs carry this symbol in this file? Read from the BLOB, never from a branch name.
- * @param {string} path
+ * IS THIS SYMBOL ON `main`, ANYWHERE — never bounded to the row's own Region (#719).
+ *
+ * The row's named files are the right scope for the REGION question and the wrong one for this: #687's
+ * body named five files, `regionPathsFromBody` recovered three (a bare filename after a full path and a
+ * glob both dropped a real symbol's home), and `environmentKey` lived in one of the two it missed. It had
+ * been on `main` the whole time; searching only the Region's own files reported it absent. `git grep`
+ * across the whole tree at `origin/main` is the actual question — "has this landed" — asked of the place
+ * it would have landed, not of the row's own guess at where to look.
+ *
+ * `-F` for a literal substring (matching the old `mainText.includes(name)`, never a regex); `-e` so a
+ * symbol cannot be misread as an option. Exit 1 is git grep's own "no match", a real no; anything else
+ * (128 for an unreadable revision, say) is a genuine failure and must reach `main()`'s CANNOT_ASK path
+ * rather than being read as "not on main".
+ * @param {string} name
+ */
+export function symbolOnMain(name) {
+  try {
+    git(["grep", "-q", "-F", "-e", name, "origin/main"]);
+    return true;
+  } catch (error) {
+    if (/** @type {{ status?: number }} */ (error).status === 1) return false;
+    throw error;
+  }
+}
+
+/**
+ * Which refs carry this symbol ANYWHERE in their tree — never bounded to the row's Region paths (#719).
+ *
+ * The old check asked `refsCarrying(path, symbol, refs)` for each of the Region's own files: a branch
+ * "carried" a symbol only because it touched a Region file whose TEXT happened to contain the string,
+ * which is a red herring the row's own issue names outright — nothing about that branch is where the
+ * symbol lives, and a worker sent to "take the row with its branch" would take the wrong one. Searching
+ * the ref's whole tree is the same fix as `symbolOnMain`, aimed at "wait for it" instead of "is it here".
  * @param {string} symbol
  * @param {string[]} refs
  */
-function refsCarrying(path, symbol, refs) {
+export function refsCarryingSymbol(symbol, refs) {
   /** @type {string[]} */
   const carrying = [];
   for (const ref of refs) {
     try {
-      if (git(["show", `${ref}:${path}`]).includes(symbol)) carrying.push(ref);
-    } catch { /* the file does not exist on that ref */ }
+      git(["grep", "-q", "-F", "-e", symbol, ref]);
+      carrying.push(ref);
+    } catch { /* no match on this ref, or the ref itself is unreadable -- either way, it does not carry it */ }
   }
   return carrying;
 }
 
-/** @param {number} row */
-function facts(row) {
-  const issue = JSON.parse(gh(["issue", "view", String(row), "--repo", REPO,
-    "--json", "body,labels,state,closedAt"]));
-  const body = issue.body ?? "";
-  // THE BOARD'S OWN RECORD, not prose. A row can be blocked by another ROW -- #77 is "blocked behind
-  // #35's schema migration" and carries the `blocked` label -- and neither its region nor its symbols say
-  // so. Reading the LABEL is not the prose-parsing this tool refuses elsewhere: it is the same
-  // authoritative record `row-claim` already trusts for `in-progress`.
-  const blockedLabel = (issue.labels ?? []).some((/** @type {any} */ l) => l?.name === "blocked");
-  // THE ROW'S OWN STATE, and it was in this query's reach the whole time. See `startability`.
-  const state = typeof issue.state === "string" ? issue.state : null;
-  const closedAt = typeof issue.closedAt === "string" ? issue.closedAt : null;
+/**
+ * THE GIT-SIDE HALF, decoupled from the `gh issue view` fetch (#719) -- so a row's real body can be
+ * handed in directly as a regression fixture (`#687`'s own text, verbatim) without a live network call
+ * standing between a test and the git tree it actually needs to exercise. `facts(row)` below is now a
+ * thin wrapper: fetch the body and the board's own record (label, state), then hand off here.
+ * @param {string} body
+ */
+export function subjectAndRegionFacts(body) {
   // PROSE PATHS ARE COUNTED, NOT DISCARDED. The `.md` filter is correct -- there is no symbol to verify
   // in a README, and pretending to check one would be worse than saying nothing. But dropping them
   // SILENTLY made the verdict say a docs row "names no source path" when it named one, which sent the
@@ -297,15 +324,15 @@ function facts(row) {
   const symbols = unique([...body.matchAll(SYMBOL_IN_PROSE)].map((m) => m[1]));
   const refs = unmergedRefs();
 
-  // THE #186 CASE FIRST. A symbol the row is about, absent from every file the row names on `main` and
-  // present on some other ref, means the row's subject has not landed -- which no region check can see,
-  // because nobody is editing the file it is missing from.
+  // THE #186 CASE FIRST. A symbol the row is about, absent from `main`'s WHOLE TREE and present on some
+  // other ref, means the row's subject has not landed -- which no region check can see, because nobody is
+  // editing the file it is missing from. #719: this used to ask the question of the row's own named files
+  // rather than of `main` itself -- see `symbolOnMain`'s own header for why that is a different question.
   const present = paths.filter(onMain);
-  const mainText = present.map((p) => git(["show", `origin/main:${p}`])).join("\n");
   const subjectsMissing = [];
   for (const name of symbols) {
-    if (mainText.includes(name)) continue;
-    const carriers = unique(present.flatMap((p) => refsCarrying(p, name, refs)));
+    if (symbolOnMain(name)) continue;
+    const carriers = unique(refsCarryingSymbol(name, refs));
     if (carriers.length > 0) {
       subjectsMissing.push({ name, refs: carriers.map((ref) => `${ref} (${prState(ref)})`) });
     }
@@ -357,8 +384,24 @@ function facts(row) {
       heldRegions.push({ path, refs: live.map(({ ref, state }) => `${ref} (${state})`) });
     }
   }
-  return { row, subjectsMissing, heldRegions, blockedLabel, state, closedAt,
+  return { subjectsMissing, heldRegions,
     examined: { paths: paths.length, symbols: symbols.length, prose: prose.length } };
+}
+
+/** @param {number} row */
+function facts(row) {
+  const issue = JSON.parse(gh(["issue", "view", String(row), "--repo", REPO,
+    "--json", "body,labels,state,closedAt"]));
+  const body = issue.body ?? "";
+  // THE BOARD'S OWN RECORD, not prose. A row can be blocked by another ROW -- #77 is "blocked behind
+  // #35's schema migration" and carries the `blocked` label -- and neither its region nor its symbols say
+  // so. Reading the LABEL is not the prose-parsing this tool refuses elsewhere: it is the same
+  // authoritative record `row-claim` already trusts for `in-progress`.
+  const blockedLabel = (issue.labels ?? []).some((/** @type {any} */ l) => l?.name === "blocked");
+  // THE ROW'S OWN STATE, and it was in this query's reach the whole time. See `startability`.
+  const state = typeof issue.state === "string" ? issue.state : null;
+  const closedAt = typeof issue.closedAt === "string" ? issue.closedAt : null;
+  return { row, blockedLabel, state, closedAt, ...subjectAndRegionFacts(body) };
 }
 
 function main() {
