@@ -82,9 +82,13 @@ jobs:
   # baked in at generation time (see scripts/generate-consumer-gate.mjs's own header for why `${{ }}` does
   # not work in a `uses:` field) -- so unlike action-smoke/capture-regression, this job does NOT
   # automatically track "the exact sha this workflow was dispatched at" by virtue of being a local
-  # `workflow_call`. The "consumer-gate.yml is current" step in the `release` job below asserts the
-  # checked-in file's pin is not stale before publishing proceeds; regenerate (`node
-  # scripts/generate-consumer-gate.mjs`) and commit as the last step before releasing if it has drifted.
+  # `workflow_call`. #558 closes that gap FROM INSIDE consumer-gate.yml itself: it now carries its own
+  # `check-pin` job comparing the pin against `${{ github.sha }}`, which under `workflow_call` resolves to
+  # THIS release's own dispatched sha -- so a stale pin fails here, on ubuntu-latest, before the Windows
+  # job ever starts, with no separate step needed. The "consumer-gate.yml is current" step in the
+  # `release` job below still checks something DIFFERENT: real drift between README.md's documented
+  # workflow and the committed file (a reworded doc, a generator change) -- regenerate (`node
+  # scripts/generate-consumer-gate.mjs`) and commit if that one fires.
   consumer-gate:
     uses: ./.github/workflows/consumer-gate.yml
 
@@ -144,13 +148,22 @@ jobs:
       - name: The release gate — the part a runner can prove
         run: npm run release:gate:ci
 
-      # #494: `consumer-gate.yml`'s pin is a LITERAL sha, baked in at generation time -- unlike
-      # action-smoke/capture-regression it does not automatically track this workflow's own dispatched
-      # sha. A stale pin would mean guard 7 above just proved the DOCUMENTED WORKFLOW works against some
-      # earlier commit, not this one -- silently reintroducing the "checked something, not this" gap the
-      # whole release-gate chain exists to close. `--check` is the same drift assertion
-      # commands-documented.test.ts already established for docs/commands.md (A6b, #478).
-      - name: consumer-gate.yml is current -- pinned to this exact release sha, not a stale one
+      # #558: THIS STEP NO LONGER VERIFIES THE PIN'S FRESHNESS -- IT CANNOT, AND NEITHER CAN ANYTHING ELSE
+      # RUN AT THIS POINT. `generate-consumer-gate.mjs`'s own header explains why: a regenerated file pins
+      # HEAD, but COMMITTING that file makes HEAD become a new commit the pin cannot name, so "does the pin
+      # equal HEAD" has no reachable YES in any committed tree -- measured on a clean `main`, where this
+      # step failed unconditionally, including on a commit that had JUST regenerated correctly. What
+      # remains is real drift: does the committed file still match what README.md's documented workflow
+      # produces, sha aside (a reworded doc, a generator change) -- the same comparison
+      # commands-documented.test.ts already runs for docs/commands.md (A6b, #478), and the one this check
+      # CAN actually pass or fail on.
+      #
+      # The pin's FRESHNESS is guard 7's own concern now, not this step's: `consumer-gate.yml` carries a
+      # `check-pin` job (also #558) comparing the pin against `${{ github.sha }}`, which under this file's
+      # `workflow_call` resolves to THIS release's own dispatched sha -- so a stale pin fails guard 7
+      # itself, on ubuntu-latest, before that job's Windows step even starts. This step and guard 7 check
+      # two different things and neither one alone would close the "checked something, not this" gap.
+      - name: consumer-gate.yml matches README.md's documented workflow (sha aside -- guard 7 checks that)
         run: node scripts/generate-consumer-gate.mjs --check
 
       - name: Name what this runner did NOT check

@@ -264,6 +264,40 @@ because the only cost of an unused declaration is the time the extra fetch takes
 never become is a flag added to turn a red check green: it has no effect on which commands are refused
 or on their exit codes, only on how deep the checkout is before they run.
 
+### The declaration above is opt-in, and #621 stopped trusting it alone
+
+`board-style.test.ts` reached `gh` (through `collect()` in `scripts/board-data.mjs`) with **no
+`// requires:` header at all**, and #510's mechanism could not see it — an opt-in declaration cannot catch
+the file whose author did not know there was something to declare. Fourth instance of the shape in two
+days (#382, #619).
+
+**So the check now DERIVES a test's requirements from its import closure, checked before the header.**
+`acceptance-commands.mjs` walks the same local-import closure `gh-token-jobs.test.ts` already walks for
+its own question (shared via `scripts/local-import-closure.mjs`, never a second independently-drifting
+copy of the walk), and asks each file in it a factual question about what it DOES:
+
+| what a module in the closure does | implies |
+|---|---|
+| spawns `gh`, or reads `GH_TOKEN` | `token` |
+| reads `runs/` (via `runsRoot()` or its two override env vars) | `corpus` |
+| asks `git rev-parse --is-shallow-repository` | `history` |
+
+The refusal names the HOP, not just the capability — `board-style.test.ts requires token via collect →
+board-data.mjs:72` — because "this test needs a token" sends a reader to the test, and naming the module
+that actually spawns `gh` sends them to the cause. **Whatever the header says.** A file that declares
+`// requires: history` correctly is refused on the identical closure evidence a file with no header at all
+gets refused on; declaring honestly never changes which check catches you, only whether a second,
+independent signal happens to agree.
+
+**Keyed on the OPERATION, never the WORD — and this module is its own cautionary tale.** A pattern reading
+a bare identifier (`GH_TOKEN`, `RUNS_ROOT`) or a bare substring (`--is-shallow-repository`) will match a
+*comment describing* the operation as readily as the operation itself — and on its first real run, this
+mechanism derived requirements from `acceptance-commands.mjs`'s own prose describing the patterns, and
+separately from the patterns' own regex-literal SOURCE TEXT (comment-stripping fixes the first; it cannot
+fix the second, because that text is real code). Both are pinned regression tests now
+(`acceptance-commands.test.ts`'s `#621 SELF-REFERENCE REGRESSION` and its `local-import-closure.mjs`
+sibling) — the file that defines what counts as a real read must derive nothing from its own closure.
+
 ### Two traps inside the job itself
 
 **`PR_BODY` is the LIVE payload; the parser is the STALE checkout.** `ci.yml` passes
@@ -541,6 +575,66 @@ waiting for — one of them the author of the previous four fixes, through a mon
 checks`'s buckets. And the other had **noticed the gap earlier that morning and chosen not to close it**,
 which is the more useful half: a known defect left open cost a wrong verdict on the PR that mattered
 most. Knowing the rule is not the same as holding it at every door.
+
+## A record is not a delivery: the sender, the builder, and the queue
+
+The rule below — *a fix and its correction travel together* — was written on 2026-09-09 after two
+instances. It was broken twice more the same morning, and the second time the correction reached the
+record, then the person, and the merge queue took the pre-correction commit **in between**.
+
+A ruling changed a PR's required shape while that PR was open and armed. It was recorded on the row and
+not sent to the builder, who was already building against the superseded instruction — **from inside, a
+superseded instruction and a current one read identically**. It was then sent, and by then `auto-arm` had
+merged. Verified on `main` afterwards:
+
+```js
+const QUOTED_RECORDS = "docs/board/reported/";
+if (file.startsWith(QUOTED_RECORDS)) return [];        // the shape that had been overruled
+```
+
+**Nothing was wrong with that PR.** It was green, armed, mutation-checked, and correct against the
+instruction its author held. It merged with every check green and every rule followed.
+
+`worker-capture`, who wrote it and reported that it had merged in the wrong shape:
+
+> **Nothing would have caught the merge, because the queue reads a green PR and not a row's comments.**
+
+### Three actors, and until that morning exactly one was covered
+
+| actor | what closes the window | |
+|---|---|---|
+| **the sender** | a ruling that changes an assignment reaches the builder **in the same minute as the row**, and the row cites that it was sent | ceo's rule, 2026-09-09 |
+| **the builder** | before pushing, read the row's comments **since the timestamp the dispatch quoted** — one `gh issue view --json comments` call | #644 |
+| **the queue** | a ruling that changes an open PR's required shape **takes `pr:hold` in the same act** — `merge-guard` already refuses a held PR, so the record lands on the object | #645 |
+
+The citation is the half that makes the first checkable rather than remembered. The third exists because
+the queue **cannot read at all**: `auto-arm` arms a non-draft, green, unheld PR and `update-branch`
+carries it, and neither looks at the row the PR declares.
+
+**The queue has two members, and both write.** `auto-arm` merges and `update-branch` pushes to a PR's own
+branch, so "the queue reads a green PR and not a row's comments" is true of the arming and of the
+carrying. That second half has its own benign collision: a hand-carry and the sweep can act on one branch
+at once, with no shared view of who is mid-flight. Measured 2026-09-09, the push was refused —
+
+```
+cannot lock ref ... is at c9d164ba but expected d73d0baf
+```
+
+— and it resolved correctly **only because the ref-lock refused and the refusal was read rather than
+retried**. `--force-with-lease` there would have discarded the sweep's carry and landed a branch behind
+main while looking current: the same two-actors-one-object shape as the ruling above, with git's own lock
+standing in for the hold.
+
+### What each of these is deliberately NOT
+
+- **Not a gate on the row's text.** Deciding whether a comment is a ruling is a judgement, and a tool that
+  guessed would be wrong in the direction that matters — silent on the one comment that mattered.
+- **Not a timestamp comparison at merge time.** A row's comments move constantly for reasons that are not
+  rulings, so it would refuse routinely and be routed around: this repository's own history with
+  `A11Y_SKIP_VERIFY=1`, reached for six times in one evening.
+- **Not a substitute for each other.** The builder's check is the backstop for a sender who forgot; the
+  hold is the backstop for a builder who has already pushed. None of the three relieves the one above it,
+  and saying so is what stops the last one becoming the reason nobody does the first.
 
 ## A fix and its correction travel together, or the window between them is live
 
