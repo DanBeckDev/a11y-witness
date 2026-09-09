@@ -122,7 +122,12 @@ function writeRawLabel(number, label, how) {
  */
 function readAutoMerge(number) {
   try {
-    return JSON.parse(gh(["pr", "view", String(number), "--repo", REPO, "--json", "autoMergeRequest"]));
+    // `state` ALONGSIDE `autoMergeRequest`, because a null `autoMergeRequest` means "disarmed" or
+    // "merged" and the field cannot tell you which. `disarmVerdict` and `armVerdict` both need the
+    // second one -- see their headings and #845, where three reads said NOT-ARMED about a PR that had
+    // merged four seconds earlier.
+    return JSON.parse(gh(["pr", "view", String(number), "--repo", REPO,
+      "--json", "autoMergeRequest,state"]));
   } catch {
     return null;
   }
@@ -269,7 +274,7 @@ function takeHold(number, session, holders, steal) {
   // for a different reason: it decides nothing about whether to disarm, only what to put back.
   const wasArmed = readAutoMerge(number)?.autoMergeRequest != null;
   const disarm = disarmAutoMerge(number);
-  if (wasArmed) writeRawLabel(number, REARM_LABEL, "add");
+  if (wasArmed && disarm.disarmed) writeRawLabel(number, REARM_LABEL, "add");
   if (!disarm.disarmed) {
     process.stderr.write(`#${number}: ${disarm.reason}\n`);
     return EXIT.CANNOT_ASK;
