@@ -9,10 +9,35 @@
 // Deliberately separate from `run.ts`, mirroring that file's own split from `action.yml`: the POLICY (which
 // message, and whether the file genuinely exists) is testable here without a real `gh` call; the mechanics
 // of actually posting stay in `main()`, which nothing but `action.yml` invokes.
+//
+// #567: NO WORKSPACE IMPORT, DELIBERATELY -- this file used to import `flagValue` from
+// `@a11ign/worker-fleet/cli-flags`, which needs BOTH `node_modules` and a completed build
+// (`pre-install-import-graph.test.ts`'s own header). This step runs `if: always()` in `action.yml`,
+// specifically so it still reports when an EARLIER step failed -- and "Install a11ign" (the step that
+// creates `node_modules` in the action's own checkout) is itself one of the steps that can fail or never
+// run (measured live: the V1 rehearsal's #568, a `setup-node` cache step dying before "Install a11ign"
+// ever starts). So the one step whose entire job is to report honestly on failure was, itself, silently
+// unable to run under exactly the failure shape it exists to handle -- the identical class #535 fixed in
+// `scripts/piped-exit-status-guard.mjs` the same day, missed here because this file was only ever tested
+// inside this repo's own fully-installed checkout, never through the real composite-action path a
+// consumer's workflow actually uses. `flagValue`'s own body is four lines; reproduced inline below rather
+// than imported.
 import { existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
-import { flagValue } from "@a11ign/worker-fleet/cli-flags";
+
+/**
+ * `flagValue`'s own logic, reproduced rather than imported -- see this file's header for why. Pure and
+ * tiny enough that a second copy is cheaper than the workspace dependency it would otherwise require.
+ * @param {string[]} argv
+ * @param {string} name
+ * @returns {string | undefined}
+ */
+function flagValue(argv: string[], name: string): string | undefined {
+  const prefix = `--${name}=`;
+  const hit = argv.find((a) => a.startsWith(prefix));
+  return hit === undefined ? undefined : hit.slice(prefix.length);
+}
 
 /**
  * Does a real summary file exist at `path`? The ONE fact this module exists to check before choosing a
