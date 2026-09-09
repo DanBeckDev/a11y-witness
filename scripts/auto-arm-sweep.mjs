@@ -78,6 +78,7 @@ import { execFileSync } from "node:child_process";
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+import { armabilityOf } from "./pr-hold-state.mjs";
 
 export const EXIT = { DRAINED: 0, COULD_NOT_ARM: 1, CANNOT_ASK: 2 };
 
@@ -89,17 +90,18 @@ export const EXIT = { DRAINED: 0, COULD_NOT_ARM: 1, CANNOT_ASK: 2 };
  * repository's own recorded defect (`SIGNAL_TYPES`, the `sweepLog` regex) -- both passed having examined
  * nothing.
  *
- * @param {{ labels: string[], checkRunCount: number }} pr
+ * @param {{ labels: string[], checkRunCount: number, holdReason?: string | null }} pr
  * @returns {{ arm: boolean, reason: string }}
  */
-export function sweepDecision({ labels, checkRunCount }) {
+export function sweepDecision({ labels, checkRunCount, holdReason = null }) {
   if (labels.includes("blocked")) {
     return { arm: false, reason: "labelled `blocked` -- a person refused this one, and a green `gate` does not answer that" };
   }
-  const holders = labels.filter((l) => l.startsWith("session:"));
-  if (holders.length > 0) {
-    return { arm: false, reason: `held by ${holders.join(", ")} -- on a PR the \`session:\` label IS the hold (#266)` };
-  }
+  // ONE PLACE DECIDES WHETHER A PR IS HELD (#645). This was written here and NOT in `auto-arm.yml`'s
+  // per-PR `arm` job, so a held PR was refused by the sweep and re-armed by its own next event -- the
+  // fact-stated-twice shape, with only one copy correct. Both callers now read `pr-hold-state.mjs`.
+  const held = armabilityOf({ labels, holdReason });
+  if (!held.arm) return held;
   if (checkRunCount === 0) {
     return {
       arm: false,
