@@ -719,3 +719,19 @@ mechanism, and so the mechanism cannot quietly decide who owns what — the same
 `docs/owned-path-facts.json`, which answers the DIFFERENT question of what a change to a path must
 declare. A path can be lane-owned and fact-free, or fact-heavy and open to everyone; folding the two
 together would make one owner's edit silently move the other's rule.
+
+**Run `signoffVerdict` against your own body before pushing, not after CI reads it back to you.** The
+check (`scripts/owned-path-signoff.mjs`) is a pure function of `{changed, body, facts}`, so there is no
+reason the first time it examines your wording is in a run you cannot see failing until it already has:
+
+```js
+node -e '
+import("./scripts/owned-path-signoff.mjs").then(({ signoffVerdict, loadFacts }) => {
+  const body = require("fs").readFileSync("/dev/stdin", "utf8");
+  const changed = require("child_process").execSync("git diff --name-only origin/main...HEAD").toString().split("\n").filter(Boolean);
+  console.log(signoffVerdict({ changed, body, facts: loadFacts() }));
+});' < /tmp/your-pr-body.md
+```
+
+A refusal names exactly which fact your own wording does not state, or which two lines disagree about the
+same one — cheaper to fix before pushing than to re-derive from a CI log after the fact.
