@@ -357,7 +357,7 @@ const VERDICT_BUCKET = {
  * @param {{ run?: typeof defaultRun, remove?: (path: string, deps: { run: typeof defaultRun }) => void, now?: number }} [deps]
  * @returns {PruneReport}
  */
-export function pruneWorktrees(repoRoot, { run = defaultRun, remove, now = Date.now() } = {}) {
+export function pruneWorktrees(repoRoot, { run = defaultRun, remove, now = Date.now(), dryRun = false } = {}) {
   const porcelain = run("git", ["worktree", "list", "--porcelain"], { cwd: repoRoot });
   const entries = parseWorktreeList(porcelain);
   /** @type {PruneReport} */
@@ -381,7 +381,13 @@ export function pruneWorktrees(repoRoot, { run = defaultRun, remove, now = Date.
     const assessment = assessWorktree(repoRoot, entry, { run, now });
     const verdict = classify({ branch: entry.branch, ...assessment });
     if (verdict === "remove") {
-      doRemove(entry.path, { run });
+      // `dryRun` SKIPS THE REMOVAL AND NOTHING ELSE -- same walk, same predicate, same buckets. The
+      // listing has to come from the tool that owns the decision, because the alternative was measured:
+      // a hand-rolled re-implementation of this predicate reported 99 of 114 worktrees "unmerged" on a
+      // tree where a directly-tested branch was merged. A uniform answer across a varied set is a broken
+      // checker, and re-implementing a predicate beside the thing that owns it is this repository's
+      // fact-stated-twice shape, arriving through a listing.
+      if (!dryRun) doRemove(entry.path, { run });
       report.removed.push(reported);
     } else {
       report[VERDICT_BUCKET[verdict]].push(reported);
@@ -399,8 +405,13 @@ function pushSection(lines, entries, header) {
 }
 
 /** @param {PruneReport} report */
-function formatReport(report) {
-  const lines = [`removed ${report.removed.length} worktree(s):`];
+function formatReport(report, dryRun = false) {
+  // WOULD REMOVE versus REMOVED, never the same word. A listing that says "removed" is indistinguishable
+  // from a run that removed, and the whole purpose of the dry run is that a session can read the list one
+  // cycle before its directory disappears.
+  const lines = [dryRun
+    ? `WOULD REMOVE ${report.removed.length} worktree(s) -- nothing has been removed:`
+    : `removed ${report.removed.length} worktree(s):`];
   for (const r of report.removed) lines.push(`  ${r.path}  (${r.branch ?? "detached"})`);
   pushSection(lines, report.dirty,
     `refused ${report.dirty.length} DIRTY worktree(s) -- uncommitted or unmerged work, named, nothing removed:`);
@@ -421,10 +432,13 @@ function formatReport(report) {
 
 async function main() {
   // Guarded per #164: positional repo root; git flags go onward.
-  refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/prune-worktrees.mjs" });
-  const repoRoot = process.argv[2] ?? process.cwd();
-  const report = pruneWorktrees(statSync(repoRoot).isDirectory() ? repoRoot : process.cwd());
-  process.stdout.write(formatReport(report) + "\n");
+  refuseUnknownFlags(["--dry-run"],
+    { entry: import.meta.url, command: "node scripts/prune-worktrees.mjs" });
+  const dryRun = process.argv.includes("--dry-run");
+  const positional = process.argv.slice(2).find((a) => !a.startsWith("--"));
+  const repoRoot = positional ?? process.cwd();
+  const report = pruneWorktrees(statSync(repoRoot).isDirectory() ? repoRoot : process.cwd(), { dryRun });
+  process.stdout.write(formatReport(report, dryRun) + "\n");
 }
 
 import { pathToFileURL } from "node:url";
