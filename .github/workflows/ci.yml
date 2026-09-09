@@ -111,6 +111,21 @@ jobs:
   # -- so a skipped downstream job is a real decision rather than an artefact of this job itself having
   # been skipped.
   changed:
+    # A CLOSED PR IS NOT A PR TO TEST. `edited` (above) fires on a title or body edit, and a body can be
+    # edited after the merge -- #690 was, two minutes after landing, to record how a verification had been
+    # run. CI then ran against a merged PR whose branch had been deleted, and two guards refused correctly
+    # on a state they can never pass: `mergeSafety` could not read the branch tip (#294: INCONCLUSIVE, not
+    # clear) and `ci-changed` found `git diff origin/main...HEAD` empty, because after the merge HEAD IS an
+    # ancestor of main and the three-dot diff is diff(B,B) by construction.
+    #
+    # Neither guard is wrong. The run is. Permanent red on a merged head is noise in the section that
+    # reports non-success checks on merged PRs -- the view the chairman reads -- and noise there trains
+    # people to skip the section, which is how one real red sat unnoticed for ninety minutes.
+    #
+    # `edited` STAYS: the acceptance job reads `github.event.pull_request.body`, so a body edit must
+    # re-run it while the PR is open. The state check narrows exactly the case that has no PR left to
+    # gate. `merge_group` has no `pull_request` context at all, hence the event_name half.
+    if: github.event_name != 'pull_request' || github.event.pull_request.state == 'open'
     runs-on: ubuntu-latest
     outputs:
       ts: ${{ steps.classify.outputs.ts }}
@@ -349,7 +364,7 @@ jobs:
   # ordinary push, forever, and block every merge rather than only the unsafe ones. `gate` below already
   # answers "did CI pass" by construction; this answers the one question `strict` used to.
   mergeSafety:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && github.event.pull_request.state == 'open'
     runs-on: ubuntu-latest
     steps:
       # `fetch-depth: 0` because the lane step below diffs `origin/<base>...HEAD`, and a three-dot diff
@@ -442,7 +457,7 @@ jobs:
   # because after this split it is the ONLY place a reader would think to look for this job's blast
   # radius (no GH_TOKEN, contents:read only, pull_request never pull_request_target).
   acceptance:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && github.event.pull_request.state == 'open'
     uses: ./.github/workflows/reusable-acceptance.yml
     with:
       pr-body: ${{ github.event.pull_request.body }}
@@ -470,7 +485,7 @@ jobs:
   # facts are.
   ownedPaths:
     needs: changed
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && github.event.pull_request.state == 'open'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
