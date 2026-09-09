@@ -96,7 +96,7 @@ export const BRANCH_LABEL_PREFIX = "branch:";
 export const WORKTREE_LABEL_PREFIX = "worktree:";
 
 /**
- * @typedef {{ number: number, title: string, labels: string[] }} IssueClaim
+ * @typedef {{ number: number, title: string, labels: string[], state?: "OPEN" | "CLOSED" }} IssueClaim
  */
 
 /**
@@ -125,7 +125,8 @@ export function fetchLabels(issueNumber, { run = defaultRun } = {}) {
   /** @type {string} */
   let raw;
   try {
-    raw = run("gh", ["issue", "view", String(issueNumber), "--repo", REPO, "--json", "number,title,labels"]);
+    raw = run("gh", ["issue", "view", String(issueNumber), "--repo", REPO,
+      "--json", "number,title,labels,state"]);
   } catch (cause) {
     throw new Error(`row-claim: could not read issue #${issueNumber} from ${REPO} -- refusing to guess `
       + `whether it is claimed. ${/** @type {Error} */ (cause).message}`, { cause });
@@ -138,7 +139,7 @@ export function fetchLabels(issueNumber, { run = defaultRun } = {}) {
     throw new Error(`row-claim: gh's response for issue #${issueNumber} was not JSON -- refusing to `
       + `guess. First 200 chars: ${raw.slice(0, 200)}`, { cause });
   }
-  const obj = /** @type {{ number?: unknown, title?: unknown, labels?: unknown }} */ (parsed);
+  const obj = /** @type {{ number?: unknown, title?: unknown, labels?: unknown, state?: unknown }} */ (parsed);
   if (typeof obj?.number !== "number" || typeof obj?.title !== "string" || !Array.isArray(obj?.labels)) {
     throw new Error(`row-claim: gh's response for issue #${issueNumber} is missing number/title/labels -- `
       + `refusing to guess. Got: ${JSON.stringify(parsed).slice(0, 300)}`);
@@ -151,7 +152,12 @@ export function fetchLabels(issueNumber, { run = defaultRun } = {}) {
     }
     return name;
   });
-  return { number: obj.number, title: obj.title, labels: names };
+  // #752: OPTIONAL, DELIBERATELY -- every existing caller/test that mocks a `gh issue view` response
+  // without a `state` field must keep behaving exactly as it did (the open case), so an absent or
+  // unrecognised value is treated as "not verified closed" rather than refused outright. `declineRow`
+  // is the one place this actually changes behaviour, and only when `state` is the literal `"CLOSED"`.
+  const state = obj.state === "OPEN" || obj.state === "CLOSED" ? obj.state : undefined;
+  return { number: obj.number, title: obj.title, labels: names, state };
 }
 
 /**
@@ -640,6 +646,20 @@ function declineRemoveLabels(status, mySession, wasReady) {
 }
 
 /**
+ * Pure: what a decline's label EDIT should add, and whether that amounts to a `ready` restore -- pulled
+ * out of `declineRow` to keep its own complexity below the lint gate, same reason `declineRemoveLabels`
+ * was. `isClosed` wins over every other reason to add a label (#752): a closed row has no lane to go back
+ * to, so neither `wasReady` nor `blockedReason` may add anything once it is true.
+ * @param {{ isClosed: boolean, wasReady: boolean, blockedReason: string | undefined }} facts
+ * @returns {{ restoreReady: boolean, addLabels: string[] }}
+ */
+function declineAddLabels({ isClosed, wasReady, blockedReason }) {
+  if (isClosed) return { restoreReady: false, addLabels: [] };
+  const restoreReady = wasReady && !blockedReason;
+  return { restoreReady, addLabels: blockedReason ? [BLOCKED_LABEL] : restoreReady ? [READY_LABEL] : [] };
+}
+
+/**
  * Pure: may `mySession` decline this row at all, given its labels? Pulled out of `declineRow` to keep
  * that function's own complexity below the lint gate -- the three ownership checks it always ran, now
  * named as the single question they jointly answer.
@@ -690,12 +710,22 @@ function declineOwnershipReason(status, mySession) {
  * session it still needs attention. Safe specifically because DECLINING is releasing YOUR OWN claim: the
  * releasing session is, by construction, the one that owns the worktree being removed.
  *
+ * #752: A CLOSED ROW HAS NO LANE TO GO BACK TO. Measured live: `decline`d #721 restored `ready` because
+ * it carried `WAS_READY_LABEL`, and #721 was already closed -- the row that was "genuinely unclaimed,
+ * pickable" one edit ago is now "done", and a closed row cannot be both. `ready-label-audit.mjs`'s own
+ * `isClosedDebrisLabel` already names `ready`/`in-progress`/`session:*` as debris ON a closed row; this
+ * is that same fact enforced at the ONE place that was still writing `ready` onto one. `isClosed` wins
+ * over EVERY other reason to add a label -- `wasReady` and `blockedReason` both describe what the row
+ * needs going forward, and a closed row has no "forward". Labels only come OFF; nothing goes back on, and
+ * no Project Status move is attempted (there is no board lane for done work to return to).
+ *
  * @param {number} issueNumber
  * @param {string} mySession
  * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus, blockedReason?: string,
  *           removeWorktree?: typeof removeClaimedWorktree }} [deps]
- * @returns {{ declined: true, restoredReady: boolean, blocked: boolean, statusMoved: true }
- *   | { declined: true, restoredReady: true, blocked: false, statusMoved: false, notOnBoard: boolean, statusReason: string }
+ * @returns {{ declined: true, restoredReady: boolean, blocked: boolean, closed: boolean, statusMoved: true }
+ *   | { declined: true, restoredReady: true, blocked: false, closed: false, statusMoved: false,
+ *       notOnBoard: boolean, statusReason: string }
  *   | { declined: false, reason: string }}
  */
 export function declineRow(issueNumber, mySession,
@@ -712,15 +742,15 @@ export function declineRow(issueNumber, mySession,
     if (!removal.removed) return { declined: false, reason: removal.reason };
   }
 
+  const isClosed = before.state === "CLOSED";
   const wasReady = before.labels.includes(WAS_READY_LABEL);
-  const restoreReady = wasReady && !blockedReason;
+  const { restoreReady, addLabels } = declineAddLabels({ isClosed, wasReady, blockedReason });
   const removeLabels = declineRemoveLabels(status, mySession, wasReady);
-  const addLabels = blockedReason ? [BLOCKED_LABEL] : restoreReady ? [READY_LABEL] : [];
   run("gh", ["issue", "edit", String(issueNumber), "--repo", REPO,
     ...removeLabels.flatMap((l) => ["--remove-label", l]),
     ...addLabels.flatMap((l) => ["--add-label", l])]);
 
-  if (blockedReason) {
+  if (blockedReason && !isClosed) {
     // A LABEL CARRIES NO FREE TEXT -- the reason has to live somewhere a future reader can see it, and an
     // issue comment is where every other "record why" in this codebase already puts one
     // (board-report.mjs, npm-token-liveness.mjs).
@@ -728,11 +758,16 @@ export function declineRow(issueNumber, mySession,
       `Declined by \`${mySession}\` and marked \`blocked\`: ${blockedReason}`]);
   }
 
+  if (isClosed) {
+    // NO STATUS MOVE -- a closed row is off the board's lanes entirely, and `statusMoved: true` here
+    // means the identical "nothing needed moving" reading the other no-restore branch already uses.
+    return { declined: true, restoredReady: false, blocked: false, closed: true, statusMoved: true };
+  }
   if (!restoreReady) {
     // Neither a genuine restore (nothing to move to "Ready" for) nor a verified "Blocked" Status option
     // exists to move to instead -- labels only, per this row's own stated Region. `statusMoved: true` here
     // means "nothing needed moving", not "something moved"; it reads as a clean decline either way.
-    return { declined: true, restoredReady: false, blocked: Boolean(blockedReason), statusMoved: true };
+    return { declined: true, restoredReady: false, blocked: Boolean(blockedReason), closed: false, statusMoved: true };
   }
   // #400: THE MATCHING MOVE ON RELEASE. "Genuinely unclaimed" and "Ready" are the same state in this
   // tracker's own model (`ready-label-audit.mjs`'s definition: a row cannot be both "unclaimed, pickable"
@@ -740,8 +775,10 @@ export function declineRow(issueNumber, mySession,
   // see `moveProjectStatus`'s own comment for why an unexpected failure here is surfaced distinctly rather
   // than folded into a plain `declined: true`.
   const statusResult = moveStatus(issueNumber, "Ready", { run });
-  if (statusResult.moved) return { declined: true, restoredReady: true, blocked: false, statusMoved: true };
-  return { declined: true, restoredReady: true, blocked: false, statusMoved: false,
+  if (statusResult.moved) {
+    return { declined: true, restoredReady: true, blocked: false, closed: false, statusMoved: true };
+  }
+  return { declined: true, restoredReady: true, blocked: false, closed: false, statusMoved: false,
     notOnBoard: statusResult.notOnBoard, statusReason: statusResult.reason };
 }
 
@@ -978,10 +1015,12 @@ function runDecline(issueNumber, rest) {
   try {
     const result = declineRow(issueNumber, mySession, { blockedReason });
     if (result.declined) {
-      // #449: WHAT CAME BACK, NOT JUST THAT SOMETHING DID -- the three shapes read differently to a human
-      // deciding whether to re-pick the row: restored (pickable again), blocked (a finding, do not repick
-      // yet), or neither (was never `ready`, unclaimed and no more startable than that already implies).
-      const outcome = result.blocked ? "and marked `blocked`"
+      // #449/#752: WHAT CAME BACK, NOT JUST THAT SOMETHING DID -- the four shapes read differently to a
+      // human deciding what happens next: restored (pickable again), blocked (a finding, do not repick
+      // yet), closed (done -- "restored to ready" would be false on its face), or neither (was never
+      // `ready`, unclaimed and no more startable than that already implies).
+      const outcome = result.closed ? "; the row is CLOSED, so it is NOT returned to `ready`"
+        : result.blocked ? "and marked `blocked`"
         : result.restoredReady ? "and restored to `ready`"
         : "(was not `ready` before the claim -- not restored)";
       if (result.statusMoved) {
