@@ -593,3 +593,32 @@ test("the census read moment is not reported as an element count", () => {
     ["formControl", "heading", "landmark", "readAtMs", "readTookMs"],
     "this is what a flat field does here — two invented element types, silently");
 });
+
+/**
+ * AND THE TRAP IS ALREADY SPRUNG — recorded here rather than fixed here, because fixing it is a
+ * different change with a different blast radius (its own row).
+ *
+ * The exclusion is `event` and `atMs`, so every OTHER numeric field on a real `structureCensus` mark is
+ * already reported as an element type. Read off the marks of 8 real captures, the census carries
+ * `candidates` (how many CDP page targets matched — a diagnostic about the READ, not the page) and the
+ * two graphic sub-counts. No consumer is harmed today because every one of them looks a key up by name —
+ * `sweepCoverage` iterates `CENSUS_KEY`, not the census — but the function's contract says "element
+ * counts" and three of the things it returns are not that.
+ *
+ * This test asserts the CURRENT behaviour, so the day someone narrows it the change is visible rather
+ * than silent, and so the next person adding a census field finds the trap named instead of stepping in
+ * it. It is not an endorsement.
+ */
+test("KNOWN: the element counts already include non-element numeric fields", () => {
+  const realShape = [{
+    event: "structureCensus", atMs: 452791,
+    heading: 69, landmark: 12, link: 340, graphic: 165, formControl: 125,
+    graphicUnnamed: 9, graphicExempted: 3,
+    // Not the page. How many CDP targets the census could have read, and which one it took.
+    candidates: 1, targetMatch: "matched", targetUrl: "https://www.ikea.com/de/de/",
+  }];
+  assert.deepEqual(Object.keys(censusElementCounts(realShape) ?? {}).sort(),
+    ["candidates", "formControl", "graphic", "graphicExempted", "graphicUnnamed", "heading", "landmark",
+      "link"],
+    "`candidates` is a fact about the READ and it is in here; narrowing this is a separate change");
+});
