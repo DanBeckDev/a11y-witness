@@ -452,6 +452,145 @@ INSTRUCTION to another. It is the same defect as text that reads as documentatio
 (#549), and as a scanner matching prose about the scanner — eight instances of that on 2026-09-08 alone.
 Ask what will EXECUTE what you are writing, not only what will read it.
 
+### The parser is the authority on the body, and it is one command
+
+Every one of those failures was found by CI and could have been found in ten seconds. A PR body is read
+by three separate parsers before anything else looks at it — the acceptance runner, the `Closes:`
+resolver, and `owned-path-signoff` — and each is importable and drivable against a file.
+
+Run them against your own body before pushing. Measured on 2026-09-09: three PRs failed
+`CLOSES: MISSING` in one morning, and one failed `ownedPaths` on a body that stated the fact perfectly
+well thirty lines below a sentence that merely mentioned it. All four were bodies, none were code, and
+each cost a full CI cycle to discover.
+
+```
+node -e "import('./scripts/acceptance-commands.mjs').then(...)"   # what the runner will execute
+node scripts/owned-path-signoff.mjs --diff=<file> --body=<file>   # exit 0, or what it wants stated
+```
+
+**A cheap pre-check is for deciding whether to bother running the real one, never for concluding the
+real one will pass** — CLAUDE.md's own rule. This is the inverse case and the rule still holds: here the
+cheap check IS the same code CI runs, so it is not a proxy at all.
+
+### Before naming a failing check, read what its JOB can do
+
+The `acceptance` job is **shallow, tokenless, and cannot build the board document**. It checks out at
+depth 1, carries `permissions: contents: read` and no `GH_TOKEN`, and runs whatever the PR body's
+Acceptance block says to run. So a body whose acceptance is `npx tsx --test .../*board*.test.ts` produces
+a list of failing board-style assertions **in that job and nowhere else** — the tests are fine, the job
+cannot assemble the document they read.
+
+Measured 2026-09-09 on #564: six assertions reported failing there, while `board-style` passed in the
+`docs` job and locally at 923 words of 925. The real reds were four different guards in the `docs` job —
+a LAN address, guest and control-plane paths, and rename literals in the record. **The same artefact has
+now misled three sessions in two days**, each of whom read the failure list and reported it as the PR's
+own.
+
+This is the diagnostics table's shape one layer out: not a wrong value, but a correct value read without
+asking what produced it. Before quoting a failing check, ask what that JOB is able to do — its checkout
+depth, its token, its permissions — the same way you would ask what window a journal was bounded to.
+
+### Reading a dependency's source answers the question you asked, not the one next to it
+
+`worker-judge`, 2026-09-09, on their own fix and unprompted:
+
+> Reading a dependency's source correctly answers *"does this pattern get REJECTED"*. It does not
+> separately answer *"does this pattern MATCH ANYTHING"*.
+
+#568's first fix passed the rejection question and failed the matching one: `github.action_path` on
+`windows-2022` is a **backslash** path, and `@actions/glob`'s `Path` splits on the OS's own `path.sep`,
+so a concatenated `/package-lock.json` was swallowed into the final segment's literal filename and
+matched nothing on disk. The error read `Some specified paths were not resolved`, which sounds like a
+missing file rather than a malformed pattern.
+
+This is the same shape as three of the most expensive defects in this repository — `evidence:check`
+comparing objects through `String(entry)` so every entry was identical; `refreshBrowseBuffer` guarded on
+a flag nothing ever set; the signal-type scrape that matched nothing and asserted over an empty set.
+Every one was verified in the direction where it could not fail. **Ask which half of your question the
+check you just ran actually answered.**
+
+### For a verdict, read the RUN — the rollup unions superseded check-runs
+
+`gh pr checks <n>` and `statusCheckRollup` both return **every** check-run of a name, including ones a
+re-run superseded. So the first entry for a name is the OLDEST, and a PR can read red on a check that has
+not been asked about its current head at all.
+
+Measured 2026-09-09 on #619, at the moment it was the one PR unblocking the whole queue:
+
+```
+gate              fail     run 34328823204     <- the OLD run
+acceptance / run  pass     run 34329060025     <- the current one
+ts / run          pending  run 34329060025     <- gate has not run yet on this one
+```
+
+Reading `gate: fail` there would have said the fix had failed. Reading the RUN said it was still going,
+and it passed.
+
+**AND THE RUN-LEVEL READ HAS ITS OWN FAILURE MODE, so neither source is safe alone.** Measured on the
+same PR, thirty seconds before it merged, by a different session's waiter:
+
+```
+ci settled NOT-GREEN:
+  run 34329060025 success
+  run 34328823204 failure        <- both at the SAME head sha
+```
+
+A body edit re-triggers CI **without moving the commit**, so a superseded FAILED run sits beside the live
+successful one at one sha. A predicate of "drop cancelled, then require every remaining run at this sha to
+have succeeded" counts a corpse as a verdict. Dropping `cancelled` is not enough — a re-run at an
+unchanged head leaves a failed older run too.
+
+So the two sources fail in opposite directions and at different moments:
+
+| source | its failure |
+|---|---|
+| `gh pr checks` / the rollup | shows a superseded check-run for a name the CURRENT run has not reached yet — reads as `fail` when the honest answer is `pending` |
+| every-run-at-this-sha | counts a superseded failed run as a live verdict — reads as `fail` when the honest answer is `pass` |
+
+**THE SHA IS NOT A RUN IDENTIFIER, and both of us treated it as one.** That is why a body edit is
+dangerous here: `pull_request: edited` re-runs CI **without moving the commit**. Every predicate keyed on
+"the sha" quietly assumes one run per sha, and that assumption is false for `edited`, for a
+`synchronize` after a no-op, and for any manual re-run. A sha identifies a tree; it does not identify an
+attempt to test one.
+
+**The predicate that survives both: newest check-run PER NAME, and a name with no run on the current run
+is PENDING, never failed.** It survives because it asks about a NAME's current answer rather than about a
+run's existence. That is what `queue-table.mjs` does and it is why the table said `pass` on
+that PR while two hand-rolled waiters said otherwise, in opposite directions, within the same minute.
+
+**Fifth and sixth sites of this shape, and the first two that are reading tools rather than decisions.**
+`update-branch-sweep.mjs` (twice — #498/#500, then #517 for the in-flight case), `trunk-revert.mjs`
+(#582) and `queue-table.mjs` all take the newest per name now. `gh pr checks` cannot be fixed, so the
+rule is about consumption:
+
+- For a **verdict** — did this land, may it merge, is it safe to act — resolve the newest check-run per
+  NAME, and read a name with no run on the current run as PENDING. `gh run view <id>` scoped to one run
+  id is safe; "every run at this sha" is not.
+- The rollup is safe only where something takes the **newest per name**, comparing `completedAt` as a
+  string (ISO-8601 sorts lexically) and treating the zero date `0001-01-01T00:00:00Z` as no answer.
+- `conclusion` on an unfinished run is `""`, not null, so `|| null` and never `??`.
+
+It caught two sessions in the same minute, in opposite directions, on the one PR the whole repository was
+waiting for — one of them the author of the previous four fixes, through a monitor keyed on `gh pr
+checks`'s buckets. And the other had **noticed the gap earlier that morning and chosen not to close it**,
+which is the more useful half: a known defect left open cost a wrong verdict on the PR that mattered
+most. Knowing the rule is not the same as holding it at every door.
+
+## A fix and its correction travel together, or the window between them is live
+
+Twice on 2026-09-09 a change reached `main` without the correction that makes it correct.
+
+- #575 gave `decideRevert` a working credential; #582 fixed it reading only `trunkGate` while its trigger
+  fires on `trunkBuildTest` too. In the wrong order, the credential arms a wrong verdict — the revert PR
+  opens against an innocent merge, auto-armed and gate-green, and it merges. Caught by ordering them.
+- #593 merged the lane check; the two commits adding its generated-file exception were pushed to the
+  branch *after* the merge was cut, so the guard went live **without** the exception and refused a PR it
+  was never meant to refuse. Caught by measuring it against that PR's real branch name and path.
+
+So: **when a fix has a correction, the correction merges first or in the same commit range, never
+after.** A derived artefact and its qualifier are false in the window between — this repository has paid
+for that four times in one release — and here the window had a live guard in it.
+
 ## A lane is who may CHANGE a path
 
 `scripts/workflow-lane-check.mjs`, a step in `mergeSafety`, refuses a PR that changes a lane-owned path
