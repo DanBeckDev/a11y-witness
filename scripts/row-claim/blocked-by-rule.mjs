@@ -92,7 +92,7 @@ export function lookupIssueOpenState(issueNumber, { run }) {
  * THE VERDICT: given the claimant's own (unhealthy, per `ownPrHealthReason`) open PR and the raw
  * `--blocked-by=` flag value, may B2 be released for this claim? Every refusal names exactly what is
  * missing, per #741's own acceptance ("refuses ... naming what the comment must contain").
- * @param {{ number: number, state: "OPEN" | "MERGED" | "CLOSED", red: boolean } | null} ownPr
+ * @param {{ number: number, state: "OPEN" | "MERGED" | "CLOSED", reasons: string[] } | null} ownPr
  * @param {string} blockedByFlagValue
  * @param {{ run: (args: string[]) => string }} deps
  * @returns {{ ok: true, blockedByIssueNumber: number, ownPrNumber: number, measurementComment: string }
