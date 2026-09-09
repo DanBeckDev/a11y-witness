@@ -7,7 +7,9 @@
   "license": "AGPL-3.0-or-later",
   "scripts": {
     "mutate": "node scripts/mutation-check.mjs",
+    "guards:sweep": "node scripts/tree-wide-guards.mjs | xargs npx tsx --test",
     "row-claim": "node scripts/row-claim.mjs",
+    "row-file": "node scripts/row-file.mjs",
     "board:summary-check": "node scripts/board-summary-check.mjs",
     "board:liveness": "node scripts/board-schedule-liveness.mjs",
     "npm-token:check": "node scripts/npm-token-liveness.mjs",
