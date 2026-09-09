@@ -109,7 +109,12 @@ function closeOnePr(number, repo) {
     console.log(`SWEEP: #${number} declared NO closing references.`);
     return [];
   }
-  for (const n of already) console.log(`SWEEP: #${n} ALREADY CLOSED -- left alone.`);
+  // #776/#791: the identical fix as close-rows-for-merged-pr.mjs's own already loop -- GitHub can close a
+  // row NATIVELY, before either path runs, and its claim is exactly as stale as one this script closes.
+  for (const { number: n, labels } of already) {
+    console.log(`SWEEP: #${n} ALREADY CLOSED -- left alone.`);
+    stripClaimLabels(n, labels, repo, "SWEEP");
+  }
 
   const failed = [];
   for (const { number: n, labels } of close) {
