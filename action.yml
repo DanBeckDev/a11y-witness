@@ -186,11 +186,34 @@ runs:
     - uses: actions/setup-node@v4
       with:
         node-version: ${{ inputs.node-version }}
-        # `cache: npm` WITHOUT cache-dependency-path. The path variant needs ${{ github.action_path }},
-        # which is "." for a local action and makes actions/cache reject ".//package-lock.json". Bare
-        # `cache: npm` caches ~/.npm only — never node_modules — so a key derived from a consumer's
-        # lockfile can at worst be a cache miss, never the wrong dependencies.
+        # #568: BARE `cache: npm` (no cache-dependency-path) is a HARD FAILURE on a consumer with no
+        # lockfile, not "at worst a cache miss" -- this comment used to claim the opposite, unverified
+        # against setup-node's own source. Its `restoreCache` calls `findLockFile()` when
+        # `cache-dependency-path` is unset, which does `fs.readdirSync(GITHUB_WORKSPACE)` -- the
+        # CONSUMER's own checkout -- and THROWS if none of package-lock.json/npm-shrinkwrap.json/yarn.lock
+        # is present there (github.com/actions/setup-node, src/cache-restore.ts). A consumer with no
+        # lockfile at all -- exactly what the V1 rehearsal's throwaway repo is, correctly, since it is not
+        # an npm project -- died at this step in 42 s, before NVDA, Edge, the page or the judge were ever
+        # reached.
+        #
+        # `cache-dependency-path` names the ACTION's OWN lockfile instead, so this never depends on
+        # anything in the consumer's repo. This is NOT the same fix the "no encoder cache" comment two
+        # cache steps down describes and abandoned -- that failure is `actions/cache@v4`'s `path:` input
+        # (what gets ARCHIVED) going through `@actions/glob`'s `Pattern.fixupPattern`, which rejects a `.`
+        # segment anywhere but FIRST. `cache-dependency-path` here goes through the identical validator
+        # (`glob.hashFiles` -> `Globber.create` -> the same `Pattern` class -- confirmed by reading the
+        # `internal-pattern.ts` source inside the upstream `actions/toolkit` monorepo's glob package,
+        # never assumed), but a LEADING `.` segment is explicitly handled, not rejected: `fixupPattern`
+        # rewrites a pattern starting with `.` + path.sep by substituting `process.cwd()` for the `.`
+        # before ever reaching the "must not contain `.` unless first" assertion. So this differs from
+        # the encoder-cache case in exactly the way that matters:
+        # `github.action_path` is a LOCAL action's `.` (uses: ./, this repo's own action-smoke.yml) or a
+        # REAL absolute checkout path (uses: DanBeckDev/a11y-witness@<ref>, every real consumer) -- in
+        # neither case does a `.` segment land anywhere but first, so the "must not contain `.` unless
+        # first" rejection this action.yml already hit once for a DIFFERENT cache step does not apply here.
+        # Proved live via the composite action itself, never by reasoning alone -- see the PR body.
         cache: npm
+        cache-dependency-path: ${{ github.action_path }}/package-lock.json
 
     # Installed into the ACTION's own checkout, not the caller's workspace: `github.action_path` is where
     # this action's package.json lives, and the caller's repository has nothing to do with it.
