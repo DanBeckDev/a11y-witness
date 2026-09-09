@@ -131,8 +131,36 @@ skipped=()
 # A stale LOCAL `origin/main` (this hook does not fetch) makes the ancestry check pass on a branch that
 # is genuinely behind -- the guard reassuring you for the reason it exists. Fetch before trusting a green
 # result here, the same caveat every other `origin/main`-relative check in this hook already carries.
+#
 # BEGIN #348 STALE-BASE CHECK -- extraction markers for pre-push-stale-base.test.ts; keep both if edited.
-if git rev-parse --verify -q origin/main >/dev/null; then
+#
+# #583: A DELETION HAS NO BASE TO BE STALE AGAINST. `git push origin --delete <branch>` sends this hook
+# no commits at all -- there is nothing being pushed for "does HEAD contain origin/main's tip" to be a
+# question ABOUT. The refusal, and its own advice ("merge origin/main in before pushing"), name an action
+# that does not exist for a deletion. git's own pre-push protocol (githooks(5)) reports exactly this on
+# STDIN, one line per ref update, as `<local ref> SP <local sha1> SP <remote ref> SP <remote sha1>` -- a
+# deleted ref's LOCAL sha1 is the all-zeros object name. Read here, once, rather than inferred from HEAD,
+# which names the CURRENT checkout's branch and has nothing to do with which ref is actually being
+# pushed. A push mixing a deletion with a real update still has a real update line present, so this only
+# ever skips when EVERY line read is a deletion -- and an empty read (no lines at all) must NOT count as
+# "all deletions", since that is indistinguishable from a caller that supplied no stdin and existed before
+# this check did; both keep this check fully active.
+push_ref_lines=0
+push_deletion_lines=0
+while IFS=' ' read -r push_local_ref push_local_sha push_remote_ref push_remote_sha; do
+  push_ref_lines=$((push_ref_lines + 1))
+  if [ "$push_local_sha" = "0000000000000000000000000000000000000000" ]; then
+    push_deletion_lines=$((push_deletion_lines + 1))
+  fi
+done
+push_is_all_deletions=0
+if [ "$push_ref_lines" -gt 0 ] && [ "$push_ref_lines" -eq "$push_deletion_lines" ]; then
+  push_is_all_deletions=1
+fi
+
+if [ "$push_is_all_deletions" = "1" ]; then
+  skipped+=("stale-base-check (this push only deletes remote ref(s), which have no base to be stale against)")
+elif git rev-parse --verify -q origin/main >/dev/null; then
   if ! git merge-base --is-ancestor origin/main HEAD; then
     if [ -n "${A11Y_STALE_BASE_REASON:-}" ]; then
       echo "pre-push: HEAD does not contain origin/main's tip, overridden: $A11Y_STALE_BASE_REASON" >&2
@@ -211,12 +239,31 @@ if git rev-parse --verify -q origin/main >/dev/null && git merge-base --is-ances
     # whole push died silently, mid-loop, with no message. A guard that aborts the hook is worse than no
     # guard: it fails every push for a reason that looks like nothing at all.
     if [ -z "$exported" ]; then continue; fi
-    after="$(git show "HEAD:$changed_file" 2>/dev/null || true)"
+    # A FILE, NEVER A PIPE -- `printf '%s' "$after" | grep -q` REFUSED A PUSH OVER SYMBOLS THAT WERE THERE.
+    # `grep -q` exits at its FIRST match, so `printf` is killed by SIGPIPE (141) whenever the file is
+    # larger than the pipe buffer and the match lands early -- and `set -o pipefail` above makes 141 the
+    # PIPELINE's status, which is indistinguishable here from "not found". Measured 2026-09-09 on
+    # `real-page-corpus.mjs` (73 KB, `assertDisjoint` first at byte 1878): a REFUSAL naming two symbols
+    # sitting in plain sight, and a NONDETERMINISTIC one -- three consecutive runs of the same loop over
+    # the same file flagged three different sets, because whether `printf` finishes writing before `grep`
+    # exits is a race against a 64 KB kernel buffer.
+    #
+    # It can only ever refuse WRONGLY, never pass wrongly: a genuinely absent symbol makes grep read to
+    # EOF, so printf always completes and the status is grep's own 1. That asymmetry is the worse of the
+    # two -- a guard that refuses correct pushes is one people learn to override, which is how
+    # `A11Y_SKIP_VERIFY=1` came to be used six times in one evening.
+    #
+    # The general form is this file's own `| tail` lesson pointed at the WRITER rather than the reader:
+    # under `pipefail`, never put a large writer upstream of a reader that exits early. Third instance of
+    # a status-that-is-not-the-command's in this block alone, after the two `set -e` notes above.
+    after_file="$(mktemp)"
+    git show "HEAD:$changed_file" > "$after_file" 2>/dev/null || true
     while IFS= read -r symbol; do
       if [ -z "$symbol" ]; then continue; fi
       resolve_checked=$((resolve_checked + 1))
-      printf '%s' "$after" | grep -q "\b${symbol}\b" || resolve_lost+=("$changed_file :: $symbol")
+      grep -q "\b${symbol}\b" "$after_file" || resolve_lost+=("$changed_file :: $symbol")
     done <<< "$exported"
+    rm -f "$after_file"
   done < <(git diff --name-only origin/main..HEAD)
 
   echo "pre-push: resolve-toward-main — $resolve_checked exported symbol(s) checked across the files this" >&2
@@ -285,7 +332,10 @@ note_if_untouched() {
   [ -n "$mentioned" ] || return 0
   local p
   for p in $mentioned; do
-    printf '%s\n' "$PUSHED_FILES" | grep -qxF "$p" && return 0
+    # A here-string, not `printf | grep -q`: the same SIGPIPE-under-`pipefail` fault the B5 block above
+    # records in full. It needs a >64 KB path list to bite here rather than a 73 KB source file, so it has
+    # never been seen -- and "not yet reached" is not a different defect from "reached".
+    grep -qxF "$p" <<< "$PUSHED_FILES" && return 0
   done
   echo "            NOTE: this failure is in file(s) this push does not touch — probably not your change:"
   echo "$mentioned" | sed 's/^/              /'

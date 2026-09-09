@@ -9,7 +9,7 @@
 // ## The gap this closes, and why the previous shape could not
 //
 // Every refusal in this pipeline is reported BY THE JOB ITSELF. `board-report.mjs` refuses without a
-// summary and says so; `board-summary-check.mjs` warns eleven hours ahead; both comment on the report
+// summary and says so; `board-summary-check.mjs` warns on the morning of the edition; both comment on the report
 // issue. All of that is correct and none of it can fire when the job does not run at all — a job that does
 // not exist reports nothing, which is this repository's oldest defect (*"a check that reports success
 // having examined nothing"*) with the check removed rather than weakened.
@@ -55,6 +55,73 @@ import { REPO, ROOT, gh } from "./board-data.mjs";
 
 const ISSUE = "20";
 const REPORT_WORKFLOW = "board-report.yml";
+
+/**
+ * THE WORKFLOWS THIS WATCHDOG GUARDS -- both of them, and this list exists because there was one.
+ *
+ * #590: `board-liveness.yml`'s own header has always said it watches BOTH -- *"`board-report.yml` and
+ * `board-summary-check.yml` report their own refusals... Neither can report not running"* -- and this
+ * file guarded only the first, through a single constant. **The header claimed two and the code guarded
+ * one, in the one place whose entire job is noticing silence.** So on 2026-09-08 `board-summary-check.yml`
+ * stopped running for nineteen hours, nothing said so, and the first anyone knew was the following
+ * morning when a missing summary turned main's own tip red and blocked every PR in the repository.
+ *
+ * A LIST rather than a second constant, because a second constant is what the first one became.
+ * `board-liveness.test.ts` derives the expected set from the workflow's own header prose and fails if the
+ * two diverge again -- the fact-stated-twice remedy this repository prefers over remembering.
+ */
+export const GUARDED_WORKFLOWS = ["board-report.yml", "board-summary-check.yml"];
+
+/**
+ * Did this workflow's schedule run at all on a given London day, asked AFTER its last daily window?
+ *
+ * NOT A STALENESS THRESHOLD, and that distinction is the whole of #590. The obvious check -- "the newest
+ * scheduled run is more than N hours old" -- would NOT have caught this: `board-summary-check.yml` fires
+ * four daily crons whose largest legitimate gap is about 22 hours, so the nineteen-hour silence that cost
+ * the repository a morning sits comfortably inside any honest threshold. A check calibrated to a cadence
+ * cannot see a gap shorter than that cadence's own worst case.
+ *
+ * The answerable question is narrower and exact: the workflow is *supposed* to have run today, and it is
+ * now past the hour by which it should have. `null` when the day is not yet over for that workflow, or
+ * the lookup failed -- never `false`, because "not yet" and "did not" are the two answers this whole file
+ * exists to keep apart.
+ *
+ * @param {{ runDays: string[] | null, today: string, londonHour: number, afterHour: number }} input
+ *   `runDays`: the London dates of this workflow's scheduled runs. `afterHour`: the London hour by which
+ *   a run must have happened.
+ * @returns {boolean | null} true = it should have run today and did not
+ */
+export function missedTodaysWindow({ runDays, today, londonHour, afterHour }) {
+  if (runDays === null) return null;
+  if (londonHour < afterHour) return null;
+  return !runDays.includes(today);
+}
+
+/**
+ * A Date as its London calendar day. The board's day is London's, not UTC's.
+ * @param {Date} now @returns {string}
+ */
+export function londonDayOf(now) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London", year: "numeric", month: "2-digit",
+    day: "2-digit" }).format(now);
+}
+
+/**
+ * The London dates of a workflow's SCHEDULED runs -- `null` if the lookup failed.
+ * @param {string} workflowFile @returns {string[] | null}
+ */
+export function scheduledRunDays(workflowFile) {
+  try {
+    return JSON.parse(gh(["run", "list", "--repo", REPO, "--workflow", workflowFile,
+      "--json", "event,createdAt", "--limit", "100"]))
+      .filter((/** @type {{event: string}} */ r) => r.event === "schedule")
+      .map((/** @type {{createdAt: string}} */ r) => new Intl.DateTimeFormat("en-CA",
+        { timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit" })
+        .format(new Date(r.createdAt)));
+  } catch {
+    return null;
+  }
+}
 
 /**
  * HAS THE SCHEDULE EVER FIRED, EVEN ONCE? — a SEPARATE, narrower question from everything above (#272).
@@ -200,7 +267,7 @@ export function livenessVerdict({ lastDay, now, hasSummary }) {
     return { code: EXIT.ALIVE, headline: since,
       detail: "and no summary was written for any of those days, so the 08:00 gate refused exactly as it "
         + "is designed to. This is the pipeline working, not the schedule dying -- the missing thing is "
-        + "the summary, which `board-summary-check.mjs` already warns about at 21:00 the evening before." };
+        + "the summary, which `board-summary-check.mjs` already warns about at 07:15 on the morning of the edition (the board moved it off 21:00 on 2026-09-08, `2a1bdd92`: a summary written the evening before is a forecast about a night that has not happened)." };
   }
   return { code: EXIT.STOPPED, headline: since,
     detail: `and a summary WAS written for ${withSummary.length} of those days `
@@ -273,6 +340,35 @@ function main() {
     console.error(`${verdict.headline}\n  ${verdict.detail}`);
     if (argv.includes("--post")) postOnce(issue, verdict);
     process.exit(EXIT.STOPPED);
+  }
+
+  // #590: THE SECOND GUARDED WORKFLOW. `board-summary-check.yml` has no edition trail to infer from -- it
+  // publishes nothing, it only warns -- so the comment/summary inference below cannot see it at all. It is
+  // asked the one question that IS answerable about it: it should have run this morning, and it is now
+  // past the hour by which it should have.
+  const SUMMARY_WORKFLOW = "board-summary-check.yml";
+  const SUMMARY_DEADLINE_HOUR = 8;   // 07:45 London is its last window; by 08:00 a run must exist
+  const londonNow = new Date();
+  const missed = missedTodaysWindow({
+    runDays: scheduledRunDays(SUMMARY_WORKFLOW),
+    today: londonDayOf(londonNow),
+    londonHour: Number(new Intl.DateTimeFormat("en-GB",
+      { timeZone: "Europe/London", hour: "2-digit", hour12: false }).format(londonNow)),
+    afterHour: SUMMARY_DEADLINE_HOUR,
+  });
+  if (missed === true) {
+    const verdict = { code: EXIT.STOPPED,
+      headline: `${SUMMARY_WORKFLOW} did not run this morning`,
+      detail: `Its four daily crons should have produced a scheduled run before ${SUMMARY_DEADLINE_HOUR}:00 `
+        + "London and none exists for today. That check is the only thing that warns a summary is missing "
+        + "BEFORE the edition refuses -- and on 2026-09-08 it went quiet for nineteen hours, which no "
+        + "staleness threshold could have caught: its own largest legitimate gap is about 22 hours. The "
+        + `missing summary then turned main's tip red and blocked every PR in the repository. `
+        + `https://github.com/${REPO}/issues/590 has the measurement.` };
+    console.error(`${verdict.headline}\n  ${verdict.detail}`);
+    if (argv.includes("--post")) postOnce(issue, verdict);
+    // NOT an early exit: `board-report.yml`'s own question is still unasked at this point, and one dead
+    // workflow must not hide the other. Reported, then the file carries on.
   }
 
   const bodies = commentBodies(issue);
