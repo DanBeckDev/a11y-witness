@@ -27,7 +27,7 @@
 # deleted within a day, which is worse than not having it.
 #
 # Override, for a work-in-progress branch or when something below is broken for unrelated reasons:
-#   A11Y_SKIP_VERIFY=1 git push ...
+#   A11Y_SKIP_VERIFY_REASON="<why>" A11Y_SKIP_VERIFY=1 git push ...   # the reason is required
 #
 # ## The FAST/FULL split, added 2026-09-06
 #
@@ -77,7 +77,10 @@
 # `npm test` here duplicated a check the pipeline already makes, on every push, before this hook could
 # even finish. Measured on this checkout, warm, FAST-gate branch touching one package: BEFORE (lint,
 # typecheck, one package's `npx tsx --test`) 3m 27.85s wall (207.85s); AFTER (lint, typecheck, the mjs
-# parse check below) 13.94s wall -- a ~14.9x reduction. The unit tests were the overwhelming majority of
+# parse check below) 13.94s wall -- a ~14.9x reduction. RE-MEASURED 2026-09-09 on this host at load 6.56:
+# lint 3s, typecheck 5s, mjs parse 2s, TOTAL 10s -- the AFTER figure holds two days on, and both numbers
+# are kept because a reader who takes the BEFORE one for the current cost concludes this hook is worth
+# skipping. One did, nine times, the same day. The unit tests were the overwhelming majority of
 # that time; lint and typecheck alone are `npm run --silent lint`/`typecheck`'s own per-package
 # `tsc --build`, which this hook was never trying to avoid.
 #
@@ -95,10 +98,50 @@
 # check to CI, it would delete it.
 set -euo pipefail
 
+# A BYPASS NEEDS A REASON, AND THE REASON IS PRINTED -- the same shape as A11Y_STALE_BASE_REASON,
+# A11Y_RESOLVE_REASON and A11Y_PRIMARY_CHECKOUT_REASON below and in `post-checkout`. This block used to
+# accept a bare `A11Y_SKIP_VERIFY=1` and print one general sentence.
+#
+# MEASURED 2026-09-09, and by the session that maintains this hook. Nine pushes went out with
+# `A11Y_SKIP_VERIFY=1`, on the belief that this hook costs three and a half minutes and the host was at
+# load 15-35.
+#
+# THAT BELIEF WAS WRONG, AND THE HEADER ABOVE ALREADY SAID SO. The 2026-09-07 note records "BEFORE
+# (lint, typecheck, one package's tsx --test) 3m 27.85s; AFTER (lint, typecheck, the mjs parse check)
+# 13.94s" -- one sentence carrying both, and the BEFORE half was read as the current cost. Re-measured
+# 2026-09-09 at load 6.56 on this host: lint 3s, typecheck 5s, mjs parse 2s, TOTAL 10s. So the thing
+# being skipped to save time cost ten seconds, and the substitutes cost four CI rounds.
+#
+# It printed "nothing was verified" every time and was scrolled past every time, and three of those pushes carried
+# `tsc` errors this hook's own `npm run typecheck` reports -- verified by restoring one defect from a
+# copy and running the hook's exact command, which exits 2 and names the file. Two PRs sat BEHIND AND RED
+# on the queue table as a result. **Four CI rounds and three red PRs, for the minutes saved.**
+#
+# So the general disclaimer is replaced by two things a reader cannot scroll past:
+#
+#   - THE LIST of what is being skipped, by name. "nothing was verified" is true and abstract; "lint,
+#     typecheck, mjs parse check" is three specific things you are choosing not to do.
+#   - A REASON, required. A bare `=1` can be inherited from an exported variable, a wrapper script, or a
+#     habit from an hour ago; a sentence has to be written by whoever is pushing, now, and it lands in
+#     the log rather than in somebody's memory.
+# BEGIN SKIP-VERIFY NEEDS A REASON
 if [ "${A11Y_SKIP_VERIFY:-0}" = "1" ]; then
-  echo "pre-push: SKIPPED by A11Y_SKIP_VERIFY=1 — nothing was verified." >&2
+  if [ -z "${A11Y_SKIP_VERIFY_REASON:-}" ]; then
+    echo "pre-push: REFUSING to skip -- A11Y_SKIP_VERIFY=1 no longer skips on its own." >&2
+    echo "" >&2
+    echo "It would skip: lint, typecheck, mjs parse check, and the corpus-gated checks." >&2
+    echo "" >&2
+    echo "If that is deliberate: A11Y_SKIP_VERIFY_REASON=\"<why>\" A11Y_SKIP_VERIFY=1 git push ..." >&2
+    echo "The reason is printed, not just the override, so a deliberate exception is in the log rather" >&2
+    echo "than in somebody's memory -- and a bypass cannot be inherited silently from an exported" >&2
+    echo "variable. #702: three pushes carried tsc errors this hook reports, past a bare =1." >&2
+    exit 1
+  fi
+  echo "pre-push: SKIPPED -- lint, typecheck, mjs parse check and the corpus-gated checks did NOT run." >&2
+  echo "pre-push: overridden: $A11Y_SKIP_VERIFY_REASON" >&2
   exit 0
 fi
+# END SKIP-VERIFY NEEDS A REASON
 
 cd "$(git rev-parse --show-toplevel)"
 
@@ -593,7 +636,7 @@ for s in ${skipped+"${skipped[@]}"}; do echo "  SKIPPED $s"; done
 if [ ${#failed[@]} -gt 0 ]; then
   echo "" >&2
   echo "pre-push: ${#failed[@]} check(s) failed: ${failed[*]}" >&2
-  echo "Fix them, or push anyway with:  A11Y_SKIP_VERIFY=1 git push ..." >&2
+  echo "Fix them, or push anyway with:  A11Y_SKIP_VERIFY_REASON=\"<why>\" A11Y_SKIP_VERIFY=1 git push ..." >&2
   exit 1
 fi
 
