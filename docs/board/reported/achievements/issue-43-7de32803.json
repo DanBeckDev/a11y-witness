@@ -6,5 +6,7 @@
   "at": "2026-09-06T20:45:00Z",
   "boardClaim": "The recordings this product rests on now exist in more than one place.",
   "affirmed": "Re-verified 2026-09-07 21:2xZ by orchestrator, who ran the backup, by downloading the asset back and counting inside it: `corpus:release --verify=corpus-2026-09-06_19-31-35` reports 7,694 JSON files, exit 0, from an 8,960,587-byte asset in `a11ign/corpus-backups`. The claim is that the corpus survives losing its machine, and it still does. It is NOT a claim that the copy is current: the corpus on the lab now holds 7,941 capture files, so the backup is 247 captures behind and a new snapshot is due after the next corpus run.",
-  "order": 20
+  "order": 20,
+  "inBody": false,
+  "retiredFromBody": "Retired from the body 2026-09-09 by product-manager on ceo's three-editions rule. Carried in the 7, 8 and 9 September editions. The claim is not withdrawn and the evidence is unchanged: it stays in the appendix, because a retired achievement is still a thing the product can do."
 }
