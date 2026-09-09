@@ -17,12 +17,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
-import { sandboxGitEnv } from "../../../scripts/git-env.mjs";
 
 import { assessedCriteria, SCORED_CRITERIA } from "./coverage.js";
-import { declareTreeWideGuard } from "../../../scripts/tree-wide-guard.mjs";
+import { declareTreeWideGuard, walkTree } from "../../../scripts/tree-wide-guard.mjs";
 
 // #716/#704: this file's own population is the whole tracked tree, not one file -- declared here
 // rather than inferred from its source, per ceo's ruling (2026-09-09) that the tree-wide-guard
@@ -44,8 +42,8 @@ test("NO COMMENT spells out how many criteria are assessed", () => {
   // Comments only, and that distinction is the whole rule. `conformance.test.ts` asserts
   // `/Assessed 8 of 55/` against an explicit 8-criterion FIXTURE — correct, self-evident, and checked
   // every time the suite runs. The same numeral in a comment is a claim nothing verifies.
-  const files = execFileSync("git", ["ls-files", "packages/judge/src", "packages/evidence/src"],
-    { cwd: ROOT, env: sandboxGitEnv(), encoding: "utf8" }).split("\n").filter((f) => /\.ts$/.test(f));
+  const files = walkTree({ kind: "ts", roots: ["packages/judge/src", "packages/evidence/src"] })
+    .map((f) => f.path);
   // A wrong ROOT or a renamed package makes `git ls-files` return nothing, and an empty `files` reports
   // zero offenders having examined nothing -- the exact "check answers correctly about the wrong
   // population" shape (docs/backlog.md). ~62 at the time this guard was added; a floor, not a pin.
