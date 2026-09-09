@@ -33,6 +33,7 @@ entry names what is missing, what it would cost, and what would tell you it is f
 - [§43](#43-1413s-probe-finds-the-panel-only-from-one-starting-position-and-the-corpus-path-happens-to-start-there) 1.4.13's PROBE FINDS THE PANEL ONLY FROM ONE STARTING POSITION, and the corpus path happens to start there
 - [§44](#44-the-title-three-criteria-compare-is-the-last-thing-nvda-said-which-on-a-live-region-page-is-not-the-title) THE "TITLE" THREE CRITERIA COMPARE IS THE LAST THING NVDA SAID, WHICH ON a LIVE-REGION PAGE IS NOT THE TITLE
 - [§45](#45-focusevents-is-not-deterministic-and-nothing-compared-it-until-the-day-before-this-was-found) focusEvents IS NOT DETERMINISTIC, and nothing compared it until the day before this was found
+- [§46](#46-a-document-identity-drops-the-query-string-so-a-site-whose-documents-differ-only-by-query-reads-as-one-document) A DOCUMENT IDENTITY DROPS THE QUERY STRING, so a site whose documents differ only by query reads as ONE document
 <!-- known-gaps-index:end -->
 
 ## The order these should be done in
@@ -2943,3 +2944,48 @@ and this failure is what that test is worth.
 as a canary the same day, the only one whose post-submit read produces the long announcements that had
 appeared fragmenting — came back **STABLE, 5 usable, all fields identical**. The fragmentation question is
 answered on that page and the answer is no.
+
+## 46. A DOCUMENT IDENTITY DROPS THE QUERY STRING, so a site whose documents differ only by query reads as ONE document
+
+**#687, ruled by `ceo` 2026-09-09 as a condition on accepting the reduction.** `documentIdentity()` reduces
+the URL a capture was actually served to **origin + path**, and the query is set aside.
+
+### Why it drops the query
+
+Not tidiness. The Google sign-in URL in the calendly capture carries `dsh=`, `state=` and `rart=` —
+per-request nonces — so two captures of the *same* sign-in wall would differ in the query every time and
+read as different documents. Origin and path are what survive a nonce and still separate
+`calendly.com/` from `calendly.com/scheduling` from `accounts.google.com/v3/signin/identifier`, which are
+the distinctions this exists to make.
+
+### The gap, in the words from the code
+
+> The cost is real and worth stating: a site whose documents are distinguished ONLY by query string
+> (`?page=2`, an SPA on `?view=`) reads as one document here. That is a known blind spot, not an
+> oversight; it is the safe direction, since this check may only ever add a refusal.
+
+So on such a site, two captures of genuinely different documents compare `SAME_DOCUMENT` on `servedPath`,
+and `evidence:check` proceeds to the field-level comparison it would have done anyway. **Nothing is
+wrongly refused; a refusal that should have happened does not.**
+
+### What is recorded so the caveat is visible where it applies
+
+`DocumentIdentity.droppedQueryParams` — **the COUNT of query parameters set aside, never their values**,
+which are the nonces. `null` when no served path was read at all, which is different from `0`: `0` says a
+URL was read and carried no query, so a match on it rests on the whole URL.
+
+`compareIdentity` carries `queryDropped: true` when either side dropped one, and `identitySentence` says
+so on the capture itself:
+
+```
+Its served URL carried 3 query parameter(s), which the served path DROPS (they carry per-request
+nonces), so an identity match here is a match on origin and path only.
+```
+
+### What would settle it
+
+A capture pair from a site whose documents differ only by query — an SPA on `?view=`, or a paginated
+listing. If such a pair ever needs to be told apart, the remedy is a *second*, narrower component (the
+query's parameter NAMES, still never their values, since a nonce is a value and `?dsh=` is a name), added
+beside `servedPath` rather than replacing it. Nobody has yet produced a case that needs it, which is why
+it is a recorded gap and not a feature.
