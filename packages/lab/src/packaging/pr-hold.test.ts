@@ -6,10 +6,21 @@
  * success says nothing about what it did — so the decision is a pure function with three distinct
  * outcomes, and the two that matter cannot be produced on demand against a live API.
  */
+// no-token: gh
+//
+// #827. Every function this file exercises is PURE -- `holdDecision`, `armVerdict`,
+// `disarmVerdict` and the `REARM_LABEL` constant all take fixtures and return verdicts. `pr-hold.mjs`'s
+// `gh` helper is reached by the closure walk because it lives in the same module, never because these
+// tests call it: `takeHold` and `releaseHold`, the two functions that do, appear in this file only
+// inside an assertion message. The declaration is verified against the entry's own code, so a wrong one
+// is refused as its own state rather than trusted.
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 import { holdDecision } from "../../../../scripts/pr-hold.mjs";
+import { armVerdict, disarmVerdict, REARM_LABEL } from "../../../../scripts/pr-hold-state.mjs";
 
 test("an unheld PR is taken, and says it was unheld", () => {
   const d = holdDecision({ holders: [], session: "worker-capture", steal: false });
@@ -96,4 +107,118 @@ test("your own label is never in `displaces` — re-stealing must not remove you
   const d = holdDecision({ holders: ["worker-capture", "dispatcher"], session: "worker-capture", steal: true });
   assert.deepEqual(d.displaces, ["dispatcher"],
     "removing your own label as part of taking the hold would end with the PR unheld");
+});
+
+// --- A RELEASE THAT LEAVES A PR UNARMED IS A HOLD THAT OUTLIVES ITS REASON ---
+//
+// Measured on #816 at 15:45Z 2026-09-09: `pr:hold` took the hold and disarmed correctly, read back null;
+// `--release` removed the label and left `auto_merge` null. The PR was then free, green and unarmed,
+// with nothing on it saying it was waiting — the state the README calls the most dangerous, because
+// there is no longer anything to notice.
+
+test("armVerdict reads the STATE, not the exit code — non-null autoMergeRequest is the only proof", () => {
+  assert.equal(armVerdict({ autoMergeRequest: { mergeMethod: "MERGE" } }).armed, true);
+});
+
+test("MUTATION: a null autoMergeRequest after arming is NOT armed, however `gh pr merge` exited", () => {
+  const v = armVerdict({ autoMergeRequest: null });
+  assert.equal(v.armed, false);
+  assert.match(v.reason, /STILL UNARMED/);
+  assert.match(v.reason, /gh pr merge --auto --merge/, "the message must be followable");
+});
+
+test("MUTATION: an UNREADABLE PR is not armed either — unverified is not armed, the mirror of the disarm rule", () => {
+  assert.equal(armVerdict(null).armed, false);
+});
+
+/**
+ * The take disarms unconditionally, so by release time "was armed and I turned it off" and "was never
+ * armed" have the same end state. Re-arming on the strength of the wrong one arms a PR nobody armed,
+ * which is the failure pointed in the dangerous direction — so the take RECORDS what it found.
+ */
+test("the re-arm label is a real, distinct label — the take records what the release cannot recover", () => {
+  assert.equal(REARM_LABEL, "rearm-on-release");
+  assert.ok(!REARM_LABEL.startsWith("session:"),
+    "it must not collide with the hold vocabulary `claimStatus` parses, or a hold marker becomes a holder");
+});
+
+test("armVerdict and disarmVerdict are OPPOSITE readings of the same field, not two spellings of one", () => {
+  const armed = { autoMergeRequest: { mergeMethod: "MERGE" } };
+  assert.equal(armVerdict(armed).armed, true);
+  assert.equal(disarmVerdict(armed).disarmed, false);
+  assert.equal(armVerdict({ autoMergeRequest: null }).armed, false);
+  assert.equal(disarmVerdict({ autoMergeRequest: null }).disarmed, true);
+});
+
+// --- MERGED IS NOT DISARMED, AND MERGED IS NOT UNARMED ---
+//
+// `autoMergeRequest` reads null on a MERGED PR exactly as it does on a disarmed one, and the field
+// cannot tell you which. Measured live on #845, 2026-09-09 17:25:53Z: `arm-pr` reported "armed #845",
+// the PR merged four seconds later, and three separate reads across two APIs then reported NOT-ARMED.
+// I spent several minutes treating a successful arm as a broken tool.
+
+test("MUTATION: a MERGED PR is not `disarmed` -- reporting it so makes takeHold announce a hold over a "
+  + "PR that has already landed", () => {
+  const v = disarmVerdict({ autoMergeRequest: null, state: "MERGED" });
+  assert.equal(v.disarmed, false, "this is the reassuring direction, which is the one that matters");
+  assert.match(v.reason, /ALREADY MERGED/);
+});
+
+test("REST's spelling too -- `merged: true` with state `closed`, since `closed` alone does not "
+  + "distinguish a merged PR from one somebody shut", () => {
+  assert.equal(disarmVerdict({ autoMergeRequest: null, state: "closed", merged: true }).disarmed, false);
+  assert.equal(disarmVerdict({ autoMergeRequest: null, state: "closed", merged: false }).disarmed, true,
+    "a PR somebody CLOSED really is disarmed -- only a merge is the special case");
+});
+
+test("MUTATION: a MERGED PR is not `unarmed` either -- the mirror, and it would send an operator to "
+  + "re-arm something that has already landed", () => {
+  const v = armVerdict({ autoMergeRequest: null, state: "MERGED" });
+  assert.equal(v.armed, true);
+  assert.match(v.reason, /MERGED/);
+});
+
+test("CONTROL: the ordinary readings are untouched -- null is disarmed, non-null is armed", () => {
+  assert.equal(disarmVerdict({ autoMergeRequest: null, state: "OPEN" }).disarmed, true);
+  assert.equal(armVerdict({ autoMergeRequest: { mergeMethod: "MERGE" }, state: "OPEN" }).armed, true);
+  assert.equal(armVerdict({ autoMergeRequest: null, state: "OPEN" }).armed, false);
+  assert.equal(disarmVerdict(null).disarmed, true,
+    "and an unreadable PR keeps whatever it meant before -- this row does not change that question");
+});
+
+/**
+ * THE MARKER IS THE ONLY THING THAT SURVIVES FROM THE HOLD TO THE RELEASE, and on 2026-09-09 it did not
+ * land at all.
+ *
+ * `gh pr edit --add-label` REFUSES a label the repository does not have — `'rearm-on-release' not found`
+ * — and #822 shipped the label's name without creating it. The write threw, its result was never
+ * inspected, and `pr:release` then printed *"it carried no `rearm-on-release`, so it was already unarmed
+ * when the hold was taken"*: a true sentence about a label that was never written, and a PR left unarmed
+ * with nothing on it saying why.
+ *
+ * Measured on #862, live: held, disarmed, released, not re-armed — the exact failure #822 was written to
+ * prevent, reintroduced by a missing label.
+ *
+ * The hold label three lines above it was read back deliberately in that same change. The second write
+ * in the same function was not: a fix at one of two call sites, inside the change that was about reading
+ * writes back.
+ */
+test("#822's two writes are verified the SAME WAY -- the source proves the marker is read back, not "
+  + "trusted to `gh pr edit`'s exit code", () => {
+  const src = readFileSync(
+    fileURLToPath(new URL("../../../../scripts/pr-hold.mjs", import.meta.url)), "utf8");
+  const marker = src.slice(src.indexOf("function markForRearm"));
+  const body = marker.slice(0, marker.indexOf("\n}"));
+  assert.match(body, /prLabels\(number\)/,
+    "it must ASK the PR what it now carries -- an exit code says the request was accepted");
+  assert.match(body, /includes\(REARM_LABEL\)/);
+  assert.doesNotMatch(body, /return true;\s*$/,
+    "no path may report success without the read");
+
+  assert.match(src, /!markForRearm\(number\)/,
+    "and takeHold must ACT on the answer: an unverified marker is a re-arm that silently will not happen");
+  const takeHold = src.slice(src.indexOf("function takeHold"));
+  assert.match(takeHold.slice(0, takeHold.indexOf("\n}")), /could not mark it/,
+    "the refusal must say what will happen next -- `pr:release` leaving the PR unarmed is the "
+    + "consequence, and a message naming only the failed write does not tell the operator that");
 });
