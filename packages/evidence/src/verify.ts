@@ -1381,12 +1381,48 @@ export type EarlyContainmentVerdict =
   | { decided: true; contained: false }
   | { decided: true; contained: true; observedAtMs: number };
 
-/** `sweepEveryStructuralType`'s own mark (`capture-probes.mjs`) — the REACHED side. */
+/** `sweepEveryStructuralType`'s own mark (`capture-probes.mjs`) — the REACHED side, LATE. */
 function structuralMark(phases: readonly unknown[]): { headings?: unknown; atMs?: unknown } | undefined {
   return phases.find(
     (m): m is Record<string, unknown> =>
       typeof m === "object" && m !== null && (m as { event?: unknown }).event === "structural",
   );
+}
+
+/**
+ * The heading sweep's OWN mark — the same reached count, minutes earlier.
+ *
+ * `structural` is written after the heading, landmark AND formField sweeps have all finished, and
+ * `formField` is the expensive one: measured across the 14 most recent real captures it lands at 23.1s
+ * (theregister) to 402.5s (ikea, of a 453-second capture). The heading sweep's own `found` is
+ * BYTE-IDENTICAL to `structural.headings` on all 14 — `structural.headings` IS `structure.headings.length`,
+ * which the heading sweep alone populates — so reading this mark moves the verdict's arrival from 402.5s
+ * to 99.0s on that capture and changes the verdict itself on none of them.
+ *
+ * #426's measurement, and the reason its bar moved from "inside the first minute" to "as soon as the first
+ * sweep has a result": the minute is unreachable at ANY gate, because `pageState` itself does not land
+ * until 61-68s on 10 of the 14 — the read-through ahead of it is 81-86% of that window. See the row.
+ */
+function headingSweepMark(phases: readonly unknown[]): { headings?: unknown; atMs?: unknown } | undefined {
+  const mark = phases.find(
+    (m): m is Record<string, unknown> =>
+      typeof m === "object" && m !== null
+      && (m as { event?: unknown }).event === "sweep" && (m as { type?: unknown }).type === "heading",
+  );
+  // Renamed onto `headings` so both readers answer the same shape and the caller needs no branch.
+  return mark ? { headings: mark.found, atMs: mark.atMs } : undefined;
+}
+
+/**
+ * The reached count, from the earliest mark that carries it.
+ *
+ * FALLBACK, never replacement: a capture taken before the sweep mark carried `found`, or a `probeOrder`
+ * with no heading sweep, still decides off `structural` exactly as it did. Additive, so no cached capture
+ * is invalidated and no protocol bump is needed — and on a LIVE `/progress` stream the fallback can never
+ * cost time, since `structural` cannot arrive before the sweep whose result it summarises.
+ */
+function reachedHeadings(phases: readonly unknown[]): { headings?: unknown; atMs?: unknown } | undefined {
+  return headingSweepMark(phases) ?? structuralMark(phases);
 }
 
 /**
@@ -1427,7 +1463,7 @@ function domReachedEnoughHeadings(exposed: number | undefined, reached: number):
 }
 
 export function earlyContainmentVerdict(phases: readonly unknown[]): EarlyContainmentVerdict {
-  const structural = structuralMark(phases);
+  const structural = reachedHeadings(phases);
   const pageState = pageStateBeforeSweep(phases);
   if (!structural || !pageState) return { decided: false };
   // #685's own lesson, applied here defensively rather than because it has been observed on this mark:
