@@ -52,6 +52,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/reconstitution-drill.mjs` — run the contingency drill: clone, compose each agent's first message, from nothing but a checkout
 - `node scripts/rescue-hunk.mjs` — rescue one file's change off a stranded branch WITHOUT reverting what main gained since
 - `node scripts/row-claim.mjs` — check, claim, or decline a tracker row by reading its labels, the record, never git history
+- `node scripts/row-file.mjs` — refuse to file a backlog row via `gh issue create` when its body is missing a required section
 - `node scripts/row-reachability.mjs` — compute whether a row is actually startable from the tree, never from a label alone
 - `node scripts/run.mjs` — the one-line dispatcher: run a named command from commands.mjs, or --list every command declared
 - `node scripts/select-changed-tests.mjs` — pick only the test files that reference a changed file, narrower than package scoping
