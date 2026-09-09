@@ -18,6 +18,7 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
+import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 
 const require = createRequire(import.meta.url);
 
@@ -110,6 +111,11 @@ function usage() {
 }
 
 function main() {
+  // Takes no flags at all -- one positional argument, the file to read. Refusing an unrecognised `--flag`
+  // rather than silently ignoring it matters more here than almost anywhere else in this repo: a
+  // diagnosis tool that ignores `--verbose` and answers anyway is exactly the "ignored input, plausible
+  // wrong answer" shape #789 itself exists to fix, one layer over.
+  refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/stale-dist-diagnosis.mjs" });
   const [file] = process.argv.slice(2);
   if (!file) {
     process.stderr.write(usage());
