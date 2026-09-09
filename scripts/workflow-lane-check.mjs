@@ -58,7 +58,8 @@ const EXIT = { CLEAR: 0, REFUSED: 1, CANNOT_ASK: 2 };
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 /**
- * @typedef {{lane: string, owner: string, branchPrefixes: string[], paths: string[], why: string}} Lane
+ * @typedef {{lane: string, owner: string, branchPrefixes: string[], paths: string[], why: string,
+ *   except?: string[], exceptWhy?: string}} Lane
  */
 
 /**
@@ -148,7 +149,12 @@ export function laneVerdict({ changed, branch, body, lanes }) {
   const text = /** @type {string} */ (body);
   const reasons = [];
   for (const lane of known.lanes) {
-    const touched = /** @type {string[]} */ (changed).filter((p) => inLane(p, lane.paths));
+    // `except` first: a GENERATED file whose source lives outside the lane is not the lane's to own, so
+    // it is subtracted before anything else is asked. Filtered rather than special-cased in the branch
+    // check, because the question "is this path in the lane at all" must have one answer -- a path that
+    // is excepted must not appear in the refusal's own list of touched paths either.
+    const touched = /** @type {string[]} */ (changed)
+      .filter((p) => inLane(p, lane.paths) && !inLane(p, lane.except ?? []));
     if (touched.length === 0) continue;
     if (lane.branchPrefixes.some((prefix) => head.startsWith(prefix))) continue;
     const exception = exceptionFor(text, lane.lane);
