@@ -18,12 +18,16 @@ import { pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
 import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { armabilityOf } from "./pr-hold-state.mjs";
+import { extractClosesDeclaration } from "./acceptance-commands.mjs";
 
 /** Exit codes are the contract: 0 armed or deliberately not, 2 could not ask. */
 export const EXIT = { DONE: 0, CANNOT_ASK: 2 };
 
-/** @param {string[]} args */
-const gh = (args) => execFileSync("gh", args, { encoding: "utf8" }).trim();
+/** @param {string} cmd @param {string[]} args */
+const defaultRun = (cmd, args) => execFileSync(cmd, args, { encoding: "utf8" });
+
+/** @param {string[]} args @param {typeof defaultRun} [run] */
+const gh = (args, run = defaultRun) => run("gh", args).trim();
 
 /**
  * MAY THIS PR BE ARMED? -- pure, so it can be driven with real shapes rather than asserted against the
@@ -46,6 +50,72 @@ export function armDecision(labels) {
   return armabilityOf({ labels });
 }
 
+/**
+ * #725: WHICH ROW(S) DOES THIS PR CLOSE -- pure, and read from the PR body's own `Closes #N`
+ * declaration via `extractClosesDeclaration` (NO SECOND PARSER), never from the branch name. Every
+ * worker's branch shares the `agent/` prefix, so a branch-derived guess is the same three-hop
+ * attribution #725 measured, with fewer steps visible and no correctness for a branch that doesn't
+ * happen to end in its row number.
+ * @param {string | null | undefined} prBody
+ * @returns {number[]}
+ */
+export function closedRowNumbers(prBody) {
+  const declaration = extractClosesDeclaration(prBody);
+  return declaration.kind === "closes" ? declaration.numbers : [];
+}
+
+/**
+ * Pure: the `session:*` labels ONE row carries -- zero, one, or (rare, two rows in one PR) more.
+ * @param {string[]} rowLabels
+ * @returns {string[]}
+ */
+export function sessionLabelsOf(rowLabels) {
+  return rowLabels.filter((l) => l.startsWith("session:"));
+}
+
+/**
+ * Pure: given the `session:*` labels of every row this PR closes (one label-array per row, in
+ * `closedRowNumbers` order), which labels should the PR carry? A row that carries none contributes
+ * nothing -- an absent claim on the row must not become an invented one on the PR (#725's own ruling:
+ * a row with no session label is unclaimed whoever filed it).
+ * @param {string[][]} rowLabelLists
+ * @returns {string[]}
+ */
+export function sessionLabelsForArm(rowLabelLists) {
+  return [...new Set(rowLabelLists.flatMap(sessionLabelsOf))];
+}
+
+/**
+ * IMPURE: reads the label set of every row this PR closes and, in the SAME act as arming, puts each
+ * row's `session:*` label(s) on the PR. `--add-label` is idempotent (`row-claim.mjs`'s own convention:
+ * this needs no special case for a label already present), so re-arming an already-labelled PR calls
+ * this again harmlessly rather than churning anything.
+ *
+ * A row this can't read, or that carries no session label, leaves the PR unlabelled for that row --
+ * #725's stated gap, not a bug here: a PR opened without arming, or a row claimed after the PR opens,
+ * still carries nothing, because the arm path is the only place the information and the action
+ * coincide.
+ * @param {{ number: string, repo: string, prBody: string | null | undefined, run?: typeof defaultRun }} args
+ */
+export function labelArmedPr({ number, repo, prBody, run = defaultRun }) {
+  const rows = closedRowNumbers(prBody);
+  if (rows.length === 0) return;
+  const rowLabelLists = rows.map((rowNumber) => {
+    try {
+      return JSON.parse(gh(["issue", "view", String(rowNumber), "--repo", repo, "--json", "labels"], run))
+        .labels.map((/** @type {{name: string}} */ l) => l.name);
+    } catch (cause) {
+      console.error(`arm-pr: could not read row #${rowNumber}'s labels -- leaving the PR unlabelled `
+        + `for it: ${/** @type {Error} */ (cause).message}`);
+      return [];
+    }
+  });
+  const sessionLabels = sessionLabelsForArm(rowLabelLists);
+  if (sessionLabels.length === 0) return;
+  gh(["pr", "edit", number, "--repo", repo, ...sessionLabels.flatMap((l) => ["--add-label", l])], run);
+  console.log(`arm-pr: labelled #${number} with ${sessionLabels.join(", ")} from row #${rows.join(", #")}`);
+}
+
 function main() {
   refuseUnknownFlags(["--pr=", "--repo="], { entry: import.meta.url, command: "node scripts/arm-pr.mjs" });
   const number = flagValue(process.argv, "pr");
@@ -58,9 +128,12 @@ function main() {
 
   /** @type {string[] | null} */
   let labels = null;
+  /** @type {string | null} */
+  let prBody = null;
   try {
-    labels = JSON.parse(gh(["pr", "view", number, "--repo", repo, "--json", "labels"]))
-      .labels.map((/** @type {{name: string}} */ l) => l.name);
+    const view = JSON.parse(gh(["pr", "view", number, "--repo", repo, "--json", "labels,body"]));
+    labels = view.labels.map((/** @type {{name: string}} */ l) => l.name);
+    prBody = view.body;
   } catch (cause) {
     console.error(`arm-pr: could not read #${number}'s labels: ${/** @type {Error} */ (cause).message}`);
   }
@@ -75,6 +148,7 @@ function main() {
     return;
   }
   gh(["pr", "merge", "--auto", "--merge", number, "--repo", repo]);
+  labelArmedPr({ number, repo, prBody });
   console.log(`arm-pr: armed #${number} -- ${verdict.reason}`);
 }
 
