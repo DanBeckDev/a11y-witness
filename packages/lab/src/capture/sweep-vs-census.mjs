@@ -59,11 +59,20 @@ export const CENSUS_KEY_FOR_SWEEP = Object.freeze({
  *
  * @param {{ diagnostics?: unknown[] }} capture
  * @returns {{ type: string, found: number, present: number | null, basis: "raw" | "none",
- *             completeness: "complete" | "truncated" | "never-ran", ratio: number | null }[]}
+ *             completeness: "complete" | "truncated" | "never-ran", ratio: number | null,
+ *             censusReadAt: number | null }[]}
  */
 export function sweepAgainstCensus(capture) {
   const diagnostics = Array.isArray(capture?.diagnostics) ? capture.diagnostics : [];
   const raw = censusElementCounts(diagnostics);
+  // WHEN THE CENSUS WAS READ, or `null` because the record does not say. `structureCensus.atMs` is stamped
+  // at MARK time (`capture-core.mjs`'s `mark` does `Date.now() - startedAt` inside `entries.push`), and the
+  // census is READ at the top of `navigateByStructure` and MARKED after it returns -- so that field is off
+  // by the whole capture. `readAtMs` is the field that would say, and no capture carries it yet.
+  const censusMark = diagnostics.find((/** @type {any} */ m) =>
+    m && typeof m === "object" && m.event === "structureCensus");
+  const censusReadAt = typeof (/** @type {any} */ (censusMark)?.readAtMs) === "number"
+    ? /** @type {any} */ (censusMark).readAtMs : null;
   return diagnostics
     .filter((/** @type {any} */ m) => m && typeof m === "object" && m.event === "sweep"
       && typeof m.type === "string" && typeof m.error !== "string")
@@ -83,6 +92,7 @@ export function sweepAgainstCensus(capture) {
       return {
         type: mark.type, found, present, completeness,
         basis: /** @type {"raw" | "none"} */ (present === null ? "none" : "raw"),
+        censusReadAt,
         // `null` when there is no denominator, NEVER 0 and never Infinity: a ratio against nothing is not
         // a small ratio, and rendering one would put a number where a question mark belongs.
         ratio: present && completeness === "complete" ? found / present : null,
@@ -114,9 +124,26 @@ export const RATIO_IS_AGREEMENT_WITHIN = 1.25;
  * `"cannot say"` — fewer than two captures carry a ratio, or the ratios are mixed between the band and
  * one side of it, which is neither agreement nor a consistent disagreement.
  *
+ * `"not-simultaneous"` — **the ratios exist and no verdict may be read from them**, because the numerator
+ * and the denominator describe different moments and one of the instruments moves the page it measures.
+ * The census is read at t≈0; `formField` walks at t≈300-400 s and ACTIVATES 64 controls while it walks.
+ * On a lazy-loading page every ratio above 1 is then the page growing between two reads, and this cannot
+ * tell that from a sweep over-walking.
+ *
+ * **This is the default today and it is not a placeholder.** No capture records when its census was read
+ * — `structureCensus.atMs` is the MARK time and is off by the whole capture — so simultaneity cannot be
+ * established from any record on disk. When `readAtMs` ships, captures carrying it get a real verdict and
+ * older ones keep this one. `heading` is the nearest thing to a control and shows why it matters: no
+ * `onItem`, walks at ~100 s, `found` **80 on all five captures** while the census moved 83 → 69.
+ *
  * @param {readonly (number | null)[]} ratios one per capture, `null` where there was no denominator
+ * @param {{ censusReadAt?: readonly (number | null)[] }} [moments] when each capture's census was READ
  */
-export function populationVerdict(ratios) {
+export function populationVerdict(ratios, moments = {}) {
+  // THE MOMENT GATE COMES FIRST, before any arithmetic on the ratios. Checking the numbers and then
+  // qualifying them would put a verdict in front of a reader who stops at the first line.
+  const readAt = moments.censusReadAt;
+  if (!readAt || readAt.some((t) => typeof t !== "number")) return "not-simultaneous";
   const usable = /** @type {number[]} */ (ratios.filter((r) => typeof r === "number" && Number.isFinite(r)));
   if (usable.length < 2) return "cannot say";
   const above = usable.filter((r) => r > RATIO_IS_AGREEMENT_WITHIN).length;

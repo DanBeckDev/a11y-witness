@@ -27,11 +27,38 @@ const ratiosFor = (type: string) => fixture.captures
  *
  * Excluding them, every sweep that actually ended says the same thing.
  */
-test("formField: every COMPLETE sweep found more than the census counts", () => {
+test("formField: NO verdict, because the two numbers describe different moments", () => {
   const ratios = ratiosFor("formField");
   assert.deepEqual(ratios.map((r) => r === null ? null : +r.toFixed(2)), [null, null, null, 2.17, 2.12]);
-  assert.equal(populationVerdict(ratios), "sweep-exceeds",
-    "the sweep walks more than the census counts — #800's second branch");
+  assert.equal(populationVerdict(ratios), "not-simultaneous",
+    "2.17 and 2.12 are real, and a verdict from them would compare a census at t=0 with a sweep at "
+    + "t=300s that activated 64 controls while it walked");
+});
+
+/**
+ * WHY THE MOMENT GATE IS NOT PEDANTRY — the nearest thing to a control in the set.
+ *
+ * `heading` carries no `onItem`, so nothing the tool does can change what it finds. It announces **80 on
+ * every one of the five captures** while the census reports 83 in the morning and 69 in the afternoon.
+ * A numerator that holds still under a denominator moving 17% is not that numerator's control, and on the
+ * afternoon three the page gained at least eleven headings within the first hundred seconds.
+ */
+test("heading: found holds at 80 across a census that moves 83 -> 69", () => {
+  const found = fixture.captures.map((c) =>
+    sweepAgainstCensus(c.capture as never).find((r) => r.type === "heading")!.found);
+  const present = fixture.captures.map((c) =>
+    sweepAgainstCensus(c.capture as never).find((r) => r.type === "heading")!.present);
+  assert.deepEqual(found, [80, 80, 80, 80, 80]);
+  assert.deepEqual(present, [83, 83, 69, 69, 69]);
+});
+
+test("a verdict IS available once each capture says when its census was read", () => {
+  // Not a placeholder: the gate opens on `readAtMs`, which no capture carries yet. This is the behaviour
+  // the fix to `structureCensus.atMs` unlocks, pinned now so the gate cannot quietly become permanent.
+  assert.equal(populationVerdict([2.17, 2.12], { censusReadAt: [400_000, 402_000] }), "sweep-exceeds");
+  assert.equal(populationVerdict([0.96, 1.16], { censusReadAt: [100, 100] }), "agrees");
+  assert.equal(populationVerdict([2.17, 2.12], { censusReadAt: [400_000, null] }), "not-simultaneous",
+    "one capture without a read time is enough to disqualify the comparison");
 });
 
 test("the ratios excluded were sweeps that never ENDED, not sweeps that found little", () => {
@@ -49,9 +76,12 @@ test("the ratios excluded were sweeps that never ENDED, not sweeps that found li
  * AND THIS IS WHAT MAKES THAT MEAN ANYTHING. If every type disagreed, the census would simply be useless
  * and there would be no finding. `heading` and `landmark` agree on the SAME five captures.
  */
-test("heading and landmark agree on the same captures, so the census is not useless in general", () => {
-  assert.equal(populationVerdict(ratiosFor("heading")), "agrees");
-  assert.equal(populationVerdict(ratiosFor("landmark")), "agrees");
+test("no type gets a verdict from the captures on disk, however clean its ratios look", () => {
+  // `landmark` reads 0.86 on all five — the tightest agreement in the table — and still gets no verdict.
+  // A gate that made an exception for the convincing-looking case would be no gate.
+  for (const type of ["heading", "landmark", "formField", "graphic", "link"]) {
+    assert.equal(populationVerdict(ratiosFor(type)), "not-simultaneous", `${type} was given a verdict`);
+  }
 });
 
 test("the basis is stated as RAW, never left for the reader to assume", () => {
@@ -74,7 +104,7 @@ test("link has NO usable observation: three never ran and two were cut off", () 
   assert.deepEqual(perCapture.map((r) => r.completeness),
     ["never-ran", "never-ran", "truncated", "truncated", "never-ran"]);
   assert.deepEqual(perCapture.map((r) => r.ratio), [null, null, null, null, null]);
-  assert.equal(populationVerdict(ratiosFor("link")), "cannot say");
+  assert.equal(populationVerdict(ratiosFor("link")), "not-simultaneous");
 });
 
 test("a type with no census entry gets no invented denominator", () => {
@@ -86,16 +116,18 @@ test("a type with no census entry gets no invented denominator", () => {
 });
 
 test("fewer than two usable ratios is CANNOT SAY, never a verdict from one capture", () => {
-  assert.equal(populationVerdict([1.9]), "cannot say");
-  assert.equal(populationVerdict([null, null]), "cannot say");
-  assert.equal(populationVerdict([]), "cannot say");
+  const moment = { censusReadAt: [1, 2, 3] };
+  assert.equal(populationVerdict([1.9], moment), "cannot say");
+  assert.equal(populationVerdict([null, null], moment), "cannot say");
+  assert.equal(populationVerdict([], { censusReadAt: [] }), "cannot say");
 });
 
 test("consistent disagreement in one direction is reported as such", () => {
   // The two branches the row expected. They remain expressible — this is not a guard that answers
   // "unstable" to everything.
-  assert.equal(populationVerdict([2.1, 2.3, 1.9]), "sweep-exceeds");
-  assert.equal(populationVerdict([0.2, 0.4, 0.3]), "census-exceeds");
+  const moment = { censusReadAt: [1, 2, 3] };
+  assert.equal(populationVerdict([2.1, 2.3, 1.9], moment), "sweep-exceeds");
+  assert.equal(populationVerdict([0.2, 0.4, 0.3], moment), "census-exceeds");
 });
 
 /** THE SAME ASSERTION AGAINST THE FILES — skips honestly when `runs/` is absent, as CI's is. */
