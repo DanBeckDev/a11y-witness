@@ -1094,10 +1094,22 @@ CLAUDE.md to survive somewhere under `docs/`:
 
 > [`-10` status →](docs/operational-lessons.md#a11y-worker-10-withdrawn-2026-09-07)) serve
 
+### The address is deliberately not in this file
+
+This section names the box by its **inventory name** and never by its address, and the quoted error above
+is redacted to `<a11y-worker-10>` for that reason. **The address lives in `/etc/a11ign/inventory.yml` and
+nowhere else** — the rule #83 set and that `docs/board/reported/` already follows: hosts by inventory
+name, paths by fact name.
+
+It is worth saying because the temptation here is FIDELITY rather than carelessness: the sentence is a
+quotation of a real refusal, and quoting it exactly is what a record is for. `tracked-source-leak-guard`
+refused this file for it, correctly, and the same instinct put the real address into `rescue-hunk`'s own
+test earlier the same day — in the tool written to stop un-redactions.
+
 ### Why it was commented out rather than left to fail
 
 Kept, because the reasoning holds for the next genuinely dead box. `lab_fleet_workers` is every host in
 the group, unconditionally, with no health filter -- so a dead box there is dispatched work by every
 pooling job and takes the run down with it. Measured 2026-09-07: `capture-only` died on *"The worker at
-http://192.168.1.80:8765 did not answer /health"* after the job had already started.
+http://<a11y-worker-10>:8765 did not answer /health"* after the job had already started.
 
