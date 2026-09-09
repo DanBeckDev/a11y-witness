@@ -10,6 +10,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/auto-arm-sweep.mjs` — arm auto-merge on open PRs that predate auto-arm.yml and were never armed
 - `node scripts/board-document.mjs` — render the board's PDF from the same data the daily GitHub report reads
 - `node scripts/board-only-check.mjs` — print true/false: is this branch's diff against origin/main board-only
+- `node scripts/board-record.mjs` — write an achievement record, refusing when it would displace one — #577
 - `node scripts/board-report.mjs` — generate the daily board report from GitHub and git, never from what an agent said
 - `node scripts/board-schedule-liveness.mjs` — say whether the board report's cron is still arriving, and comment once if not
 - `node scripts/board-snapshot.mjs` — snapshot every Project item before any board-mutating call, so a bad mutation is recoverable
