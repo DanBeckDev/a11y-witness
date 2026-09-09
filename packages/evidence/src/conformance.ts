@@ -83,6 +83,24 @@ export interface ConformanceScopeInput {
   /** How many DISTINCT items each sweep actually reached, from the capture's structure fields. */
   swept?: Readonly<Record<string, number>>;
   /**
+   * The census's RAW element counts, before `distinct` is laid over them — and the per-type unnamed
+   * counts that come with them (`graphicUnnamed`). See `censusElementCounts`.
+   *
+   * `census` above is the distinct-overlaid map and stays the basis for REACH. This is the basis for
+   * NOT EXAMINED, and they are different questions: absent, both fall back to `census` exactly as before.
+   */
+  censusElements?: Readonly<Record<string, number>> | null;
+  /**
+   * THE PER-FIELD ACTIVATION'S OWN BUDGET, from the capture's `activationBudget` mark — #677 part 2.
+   *
+   * The activation is the only `onItem` any sweep carries and it costs 86-88% of the `formField` sweep,
+   * so it gets a bounded share of the capture. When that share runs out the remaining controls are NOT
+   * ACTIVATED, and the evidence they would have produced (`formChanges`, `stateChanges`) is absent for a
+   * reason that has nothing to do with the page. `null`/absent means no budget was consulted — a page
+   * with no form controls, or a configured form, which activates exactly what the author named.
+   */
+  activationBudget?: { fields: number, allowed: number, skipped: number, exhausted: boolean } | null;
+  /**
    * WHICH DOCUMENT THIS RUN WAS SERVED — #687.
    *
    * Requirement 2's limitation has always said "one viewport, one state, one document" without ever
@@ -110,6 +128,13 @@ export interface TypeCoverage {
   type: string;
   reached: number;
   present: number;
+  /**
+   * The denominator REACH is measured against: distinct names the sweep could ever have announced.
+   *
+   * Differs from `present` on any type with unnamed members — see `sweepCoverage` for the derivation and
+   * why the two questions must not share a number. Equal to `present` when nothing says otherwise.
+   */
+  reachable: number;
   /** Did the sweep reach as many as the census counted? A COVERAGE question. */
   complete: boolean;
   /**
@@ -129,6 +154,54 @@ const CENSUS_KEY: Readonly<Record<string, string>> = {
 };
 
 /**
+ * The RAW element count for a type, or `null` when the raw census was not supplied.
+ *
+ * `null` rather than a fallback, because the caller's fallback is a DIFFERENT number and saying so at the
+ * call site is what stops the two being confused a year from now.
+ */
+function elementCountOf(
+  elements: Readonly<Record<string, number>> | null, key: string,
+): number | null {
+  return typeof elements?.[key] === "number" ? elements[key] : null;
+}
+
+/**
+ * WHAT THE SWEEP COULD EVER HAVE ANNOUNCED — the denominator for REACH, and not the same number as
+ * `present`.
+ *
+ * `coverageSentence` promises "distinct announcements the screen reader produced against DISTINCT NAMES
+ * the browser reports — like compared with like". On a page with unnamed elements it was not keeping that
+ * promise, and the direction of the error invents a coverage shortfall in our own report.
+ *
+ * **`distinct` collapses by NAME, and an element with no name counts as its own.** Measured 2026-09-09:
+ *
+ *     calendly   graphic=63  graphicUnnamed=38  distinct.graphic=61   <- only two collapsed
+ *     ikea       graphic=205 graphicUnnamed=0   distinct.graphic=165  <- forty collapsed, correctly
+ *
+ * So `distinct` is not wrong in general — it is exact where every element has a name, and inflated in
+ * proportion to how many do not. Subtracting the unnamed count removes exactly that inflation and leaves
+ * distinct names among NAMED elements: calendly's graphics become `61 - 38 = 23`, IKEA's stay at 165.
+ *
+ * **A NAMELESS ELEMENT IS EXCLUDED FROM REACH AND NEVER FROM ASSESSMENT, and the two live one line
+ * apart.** 1.1.1 is one of the four subtypes this project may ASSERT, and its evidence is
+ * `census.graphicUnnamed` — reached without the sweep at all. Dropping unnamed graphics from a coverage
+ * denominator is honest, because a sweep structurally cannot announce them; dropping them from the
+ * finding would delete the finding.
+ *
+ * Falls back to `distinct` when the raw census is absent, so a capture predating it reports exactly what
+ * it always did, and `coverageSentence` says which basis it used.
+ */
+function reachableCountOf(
+  distinctCount: number, elements: Readonly<Record<string, number>> | null, key: string,
+): number {
+  const unnamed = elementCountOf(elements, `${key}Unnamed`);
+  // NEVER BELOW ZERO. The two numbers come from one mark and cannot disagree today, but a denominator of
+  // -3 would render as a reach of "10/-3" rather than failing, and a nonsense number in a report is worse
+  // than a conservative one.
+  return unnamed === null ? distinctCount : Math.max(0, distinctCount - unnamed);
+}
+
+/**
  * What fraction of the page each sweep reached, for the types where ground truth exists.
  *
  * Only types present in BOTH vocabularies are reported. `formField`, `list` and `tableCell` have no census
@@ -143,13 +216,18 @@ export function sweepCoverage(input: ConformanceScopeInput): TypeCoverage[] {
   const census = input.census;
   if (!census) return [];
   const swept = input.swept ?? {};
+  const elements = input.censusElements ?? null;
   return Object.entries(CENSUS_KEY)
     .filter(([type, key]) => typeof census[key] === "number" && typeof swept[type] === "number")
     .map(([type, key]) => ({
       type,
       reached: swept[type] as number,
-      present: census[key] as number,
-      complete: (swept[type] as number) >= (census[key] as number),
+      // THE RAW ELEMENT COUNT when it is available. "NOT EXAMINED (of N)" answers *how much of the page
+      // went unlooked-at*, and an unnamed graphic that was never examined is unexamined — so every
+      // element counts, whether or not a sweep could have announced it.
+      present: elementCountOf(elements, key) ?? (census[key] as number),
+      reachable: reachableCountOf(census[key] as number, elements, key),
+      complete: (swept[type] as number) >= reachableCountOf(census[key] as number, elements, key),
       // BOTH DIRECTIONS of this type's sweep. A sweep walks backwards and forwards and either can
       // truncate independently, so a type is only fully examined when neither direction stopped first.
       examined: examinationState(
@@ -248,6 +326,51 @@ export function censusTargetMismatchReason(
     + `page that was never examined.${titleNote}`;
 }
 
+/**
+ * The capture's `activationBudget` mark, or `null`. Same contract as the census readers.
+ *
+ * The worker RECORDS the counts and this decides what they mean — ADR 0021's "captures record, rules
+ * decide". The `examined | partial | not-examined` vocabulary lives here and must not be spelled a second
+ * time in `.mjs` the worker ships without a build step.
+ */
+export function activationBudgetFromDiagnostics(
+  diagnostics: readonly unknown[],
+): ConformanceScopeInput["activationBudget"] {
+  const mark = (diagnostics ?? []).find(
+    (d): d is Record<string, unknown> =>
+      typeof d === "object" && d !== null && (d as { event?: unknown }).event === "activationBudget");
+  if (!mark || typeof mark.fields !== "number") return null;
+  return {
+    fields: mark.fields as number,
+    allowed: typeof mark.allowed === "number" ? mark.allowed : 0,
+    skipped: typeof mark.skipped === "number" ? mark.skipped : 0,
+    exhausted: mark.exhausted === true,
+  };
+}
+
+/**
+ * WHICH CONTROLS WERE NEVER ACTIVATED, AND WHY — #677 part 2, the same rule as part 1 one level in.
+ *
+ * A control the budget refused produces no `formChanges` entry and no `stateChanges` entry, which is
+ * byte-for-byte what a control that announces nothing produces. Those need opposite responses: the first
+ * is a truncated capture, the second is a finding about the page. Silent about the first is exactly the
+ * conflation this row exists to end.
+ *
+ * Says NOTHING when nothing was skipped — including when no budget was consulted at all. A sentence
+ * appearing only when something happened cannot tell "nothing happened" from "nobody looked", so the
+ * counts are stated whenever a budget ran, and only the refusal is conditional.
+ */
+function activationSentence(input: ConformanceScopeInput): string {
+  const budget = input.activationBudget;
+  if (!budget || budget.fields === 0) return "";
+  if (!budget.exhausted) {
+    return ` Every one of the ${budget.fields} form control(s) found was offered to the activation probe.`;
+  }
+  return ` ${budget.skipped} of ${budget.fields} form control(s) were NOT ACTIVATED — the per-field`
+    + " activation probe's budget ran out, so any absence of interaction evidence among them is a"
+    + " statement about this capture and not about the page.";
+}
+
 /** The coverage sentence, or "" when there is no ground truth to state it against. */
 function coverageSentence(input: ConformanceScopeInput): string {
   if (input.censusMismatchReason) return input.censusMismatchReason;
@@ -261,9 +384,14 @@ function coverageSentence(input: ConformanceScopeInput): string {
   // NOT EXAMINED IS NOT ZERO (#677). `link 0/340` on a page whose link sweep never ran is a true number
   // answering a question nobody asked -- it reads as a coverage shortfall and means the capture is
   // truncated. The three states are rendered differently because they need different responses.
+  // TWO DENOMINATORS, TWO QUESTIONS. NOT EXAMINED counts every element on the page, because "we did not
+  // look" is answered by how much there was to look at. Reach counts only what a sweep could ever have
+  // announced. On a page with unnamed graphics they differ, and they SHOULD -- see `reachableCountOf`.
   const parts = coverage.map((c) => c.examined === "not-examined"
     ? `${c.type} NOT EXAMINED (of ${c.present})`
-    : `${c.type} ${c.reached}/${c.present}${c.examined === "partial" ? " (partial)" : ""}`);
+    : `${c.type} ${c.reached}/${c.reachable}`
+      + (c.reachable === c.present ? "" : ` of ${c.present} on the page`)
+      + (c.examined === "partial" ? " (partial)" : ""));
   const unexamined = coverage.filter((c) => c.examined === "not-examined");
   const gaps = coverage.filter((c) => !c.complete && c.examined !== "not-examined");
   // Say WHAT the numerator is. The sweep de-duplicates by announcement (`seenKeys`), so two images with the
@@ -296,6 +424,29 @@ function coverageSentence(input: ConformanceScopeInput): string {
  * @param diagnostics a capture's diagnostic marks
  * @returns true when the census carries `distinct`
  */
+/**
+ * The census's RAW element counts — every numeric key on the mark, with NO `distinct` laid over them.
+ *
+ * `censusFromDiagnostics` deliberately overwrites the raw counts from `distinct`, because the sweep it is
+ * compared against deduplicates by announcement. That is right for REACH and wrong for "how much of the
+ * page went unlooked-at", which is why both readers now exist. Includes `graphicUnnamed` and any other
+ * numeric key the mark carries, since those are what `reachableCountOf` subtracts.
+ *
+ * Same `null` contract as `censusFromDiagnostics`: a failed census and an absent one both mean "coverage
+ * unknown", never full coverage.
+ */
+export function censusElementCounts(diagnostics: readonly unknown[]): Record<string, number> | null {
+  const mark = (diagnostics ?? []).find(
+    (d): d is Record<string, unknown> =>
+      typeof d === "object" && d !== null && (d as { event?: unknown }).event === "structureCensus");
+  if (!mark || typeof mark.error === "string") return null;
+  const counts: Record<string, number> = {};
+  for (const [key, value] of Object.entries(mark)) {
+    if (key !== "event" && key !== "atMs" && typeof value === "number") counts[key] = value;
+  }
+  return Object.keys(counts).length > 0 ? counts : null;
+}
+
 export function censusCountsDistinctNames(diagnostics: readonly unknown[]): boolean {
   const mark = (diagnostics ?? []).find(
     (d): d is Record<string, unknown> =>
@@ -422,7 +573,7 @@ function fullPages(input: ConformanceScopeInput): ConformanceRequirement {
         + "separately and only one was rendered; content inside iframes is not entered; and WCAG counts "
         + "an application at a single URI as ONE page, so every state reachable without a URL change — "
         + "menus, dialogs, steps of a wizard — is part of this page and was not examined."
-        + renderSentence(input),
+        + renderSentence(input) + activationSentence(input),
     };
   }
   const detail = truncated.map((s) => `${s.type} (${s.stop})`).join(", ");
@@ -437,7 +588,7 @@ function fullPages(input: ConformanceScopeInput): ConformanceRequirement {
       + "evidence they are correct." + coverageSentence(input)
       + " Separately: one viewport only, iframes not entered, and any state "
       + "reachable without a URL change is part of this same page and was not examined."
-      + renderSentence(input),
+      + renderSentence(input) + activationSentence(input),
   };
 }
 
