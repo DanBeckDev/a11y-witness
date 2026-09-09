@@ -34,9 +34,37 @@
 // `uses: ./.github/workflows/action-smoke.yml` calls another workflow in this SAME repo, which GitHub
 // always resolves at the calling workflow's own ref; that mechanism does not extend to an ACTION
 // reference inside a step. So the sha is resolved HERE, at generation time (`git rev-parse HEAD`), and
-// baked in as a literal string -- the same discipline `docs/commands.md` (A6b, #478) already established
-// for a generated-and-tracked file: `--check` fails if the committed file does not match what generating
-// from the CURRENT HEAD would produce, so a stale pin cannot silently ship as part of a release.
+// baked in as a literal string -- the same MECHANISM `docs/commands.md` (A6b, #478) established for a
+// generated-and-tracked file, but see #558 immediately below for where the analogy stops: unlike a plain
+// markdown doc, this file EMBEDS a reference to its own future commit, which changes what `--check` can
+// actually prove.
+//
+// #558, PART 1: `--check` USED TO ALSO REQUIRE THE PIN TO EQUAL HEAD, AND THAT IS UNSATISFIABLE IN ANY
+// COMMITTED TREE. Regenerate at HEAD `X` and the file pins `X`; commit that file and HEAD becomes the NEW
+// commit `Y` (the one containing the change) -- the committed pin can never equal HEAD by the time
+// anything reads it back. Measured directly: `release.yml`'s own `--check` gate step failed on a freshly
+// cloned `main`, on a commit that had JUST regenerated correctly. `main()`'s `--check` mode now compares
+// everything BUT the sha (see its own comment); asserting pin-equals-HEAD is not this script's job any
+// more, because nothing could ever have satisfied it.
+//
+// #558, PART 2: `--check` RUNS AT RELEASE TIME, AND NOTHING EQUIVALENT RAN AT DISPATCH TIME -- which is
+// the gap that actually needed a fix, not the unsatisfiable comparison above. Three of five live
+// dispatches on 2026-09-08 were RED purely because the pin was stale -- one against `main` before #492
+// merged, and (the clearest case) one against a branch that had forked before its OWN fix was regenerated
+// in, producing the IDENTICAL sha and the IDENTICAL error as the run before it. A stale pin makes a
+// dispatch fail on whatever defect the OLD sha happened to carry, which reads exactly like a new bug and
+// cost a round trip each time.
+//
+// So the generated workflow now carries its own `check-pin` job, gating `a11y` via `needs:`, that
+// compares the pinned sha against `${{ github.sha }}` -- THE COMMIT THIS RUN IS ACTUALLY EXECUTING AT,
+// not a query against `main` specifically. That is deliberate: `github.sha` for a `workflow_dispatch`
+// resolves to the tip of whatever ref was dispatched, so the same check is correct whether the dispatch
+// is against `main` (the release path) or a feature branch whose pin was just regenerated to its own HEAD
+// (the corroboration path used to prove a fix before it merges) -- a literal "must equal main" check would
+// refuse the second, legitimate case. `check-pin` runs on `ubuntu-latest`, before `a11y`'s `windows-2022`
+// spin-up, so a stale pin now fails in seconds rather than burning a real capture run to say so. This is
+// the question `--check`'s removed comparison was reaching for and could never answer at rest: whether
+// the pin was regenerated for the commit actually running is only answerable AT dispatch, not in storage.
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
@@ -123,6 +151,21 @@ export function extractJobName(jobsYaml) {
 }
 
 /**
+ * The sha `pinActionRef` already baked into `jobsYaml`'s own `uses:` line -- READ back rather than
+ * threaded through as a second parameter, so `check-pin`'s comparison and the `a11y` job's own `uses:`
+ * step can never independently drift (#558's "derive one from the other", the same reason `extractJobName`
+ * reads the job key instead of assuming `a11y`).
+ *
+ * @param {string} jobsYaml
+ * @returns {string}
+ */
+export function extractPinnedSha(jobsYaml) {
+  const m = new RegExp(`uses: ${ACTION_REF}@(\\S+)`).exec(jobsYaml);
+  if (!m) throw new Error(`no "uses: ${ACTION_REF}@<sha>" line found -- pinActionRef may not have run yet`);
+  return m[1];
+}
+
+/**
  * Re-indents a `jobs:`-rooted snippet under a two-space workflow envelope and wraps it with the minimal
  * top-level keys a standalone workflow needs (`name`, `on`) that README's own snippet deliberately omits
  * (it assumes a reader is adding a job to a workflow they already have).
@@ -132,12 +175,34 @@ export function extractJobName(jobsYaml) {
  * #494's acceptance is "produces a report", not "posts a comment" -- adding a permission the README
  * never mentions would be exactly the kind of help this gate exists to refuse.
  *
+ * #558: `needs: [check-pin]` IS INSERTED INTO THE EXTRACTED JOB, deliberately, and this is not the same
+ * kind of addition rule #1 (above) forbids. That rule is about the job's own STEPS -- what a reader would
+ * actually copy -- and neither `check-pin` nor this `needs:` line touches them; it is job-level
+ * orchestration the generator already adds for `verify-report` below. A reader copying just the steps
+ * from README still gets exactly what README shows.
+ *
  * @param {string} jobsYaml
  * @returns {string}
  */
 export function buildConsumerGateWorkflow(jobsYaml) {
   const jobName = extractJobName(jobsYaml);
-  const header = [
+  const pinnedSha = extractPinnedSha(jobsYaml);
+  const header = buildWorkflowHeader();
+  const checkPin = buildCheckPinJob(pinnedSha);
+
+  // `jobsYaml` already starts with its own "jobs:" line (README's fence is rooted there). The check-pin
+  // job is spliced in right after it, and `needs: [check-pin]` right after the extracted job's own name
+  // line -- both string operations, never a re-wrap of the whole block, which is the double-key bug this
+  // comment exists to stop being reintroduced.
+  const withCheckPin = jobsYaml.replace(/^jobs:\n/, `jobs:\n${checkPin}`)
+    .replace(new RegExp(`^(  ${jobName}:\\n)`, "m"), `$1    needs: [check-pin]\n`);
+
+  return `${header}\n${withCheckPin}\n${buildVerifyReportJob(jobName)}\n`;
+}
+
+/** The `name:`/`on:` envelope every generated workflow needs, that README's own snippet omits. */
+function buildWorkflowHeader() {
+  return [
     "# GENERATED by `node scripts/run.mjs consumer-gate` from README.md's own Quickstart fence.",
     "# Do not edit by hand -- packages/lab/src/packaging/consumer-gate.test.ts checks this file against",
     "# the document it was generated from. See scripts/generate-consumer-gate.mjs's own header for why.",
@@ -154,11 +219,85 @@ export function buildConsumerGateWorkflow(jobsYaml) {
     "  workflow_dispatch:",
     "",
   ].join("\n");
+}
 
-  // `jobsYaml` already starts with its own "jobs:" line (README's fence is rooted there), so it is
-  // pasted as-is rather than re-wrapped in a second "jobs:" -- the double-key bug this comment exists to
-  // stop being reintroduced.
-  const verify = [
+/**
+ * #558: a stale pin is diagnosed HERE, on ubuntu-latest, before the windows-2022 job it gates ever
+ * starts -- three of five real dispatches on 2026-09-08 were red purely because the pin had not been
+ * regenerated for the commit actually running, and each cost a full Windows spin-up to say so.
+ *
+ * NOT EXACT EQUALITY AGAINST `github.sha` -- THAT HAS THE IDENTICAL UNSATISFIABLE SHAPE `--check`'s OLD
+ * sha comparison did (see this file's own top-of-file comment), just moved from commit time to dispatch
+ * time. Regenerating at commit `A` bakes a pin of `A`; COMMITTING that regeneration creates commit `B`
+ * (parent `A`) that CONTAINS the pin of `A` -- so the commit a dispatch actually runs at (`github.sha`)
+ * is `B`, never `A`, for the identical structural reason a committed file can never equal its own HEAD.
+ * Exact equality here would refuse every dispatch, forever, which is worse than the gap it replaces.
+ *
+ * SO: is the pin an ANCESTOR of `github.sha`, AND has nothing that would CHANGE the generated content
+ * (README.md, this generator) landed since the pin -- rather than "is it identical". That is
+ * satisfiable by the normal regenerate-then-commit-then-dispatch sequence (the pin is the immediate
+ * parent, an ancestor by definition, and nothing else has landed yet), tolerates ordinary commits
+ * landing on OTHER files between regeneration and dispatch, and still refuses the real defect class:
+ * a pin left behind while README.md or the generator itself moved on. Two separate refusals, because
+ * "not in this history at all" and "in this history but stale relative to a real change" need opposite
+ * fixes and must not print the same word.
+ *
+ * `github.sha`, NOT A QUERY AGAINST `main`. `github.sha` for `workflow_dispatch` is the tip of whatever
+ * ref was dispatched; under `workflow_call` (release.yml) it is the caller's own sha. Both are exactly
+ * "the commit this pin should have been regenerated against" -- comparing against `main` specifically
+ * would refuse a legitimate pre-merge dispatch against a feature branch whose pin was freshly
+ * regenerated to ITS OWN head (used to corroborate a fix before it merges), since that commit is real
+ * and correct but is not, and should not need to be, on `main`.
+ *
+ * THIS JOB CHECKS OUT a11y-witness ITSELF -- unlike the extracted `a11y` job below, which deliberately
+ * does not (the whole point of a consumer-shaped gate). `check-pin` is generator-added infrastructure,
+ * never something a reader copies from README.md, so rule #1 (nothing added the document doesn't give)
+ * does not apply to it -- the same reasoning that already justifies `needs: [check-pin]` on the
+ * extracted job and `verify-report` existing at all. `fetch-depth: 0` because the ancestor/diff checks
+ * below need real history, not the single-commit shallow clone `actions/checkout` defaults to.
+ *
+ * @param {string} pinnedSha
+ * @returns {string}
+ */
+function buildCheckPinJob(pinnedSha) {
+  return [
+    "  check-pin:",
+    "    runs-on: ubuntu-latest",
+    "    steps:",
+    "      - uses: actions/checkout@v4",
+    "        with:",
+    "          fetch-depth: 0",
+    "      - name: Refuse a pin that is not an ancestor of the commit this run is executing at",
+    "        run: |",
+    `          if ! git merge-base --is-ancestor ${pinnedSha} "\${{ github.sha }}"; then`,
+    `            echo "::error::consumer-gate.yml's uses: step is pinned to ${pinnedSha}, which is not an"`,
+    `            echo "::error::ancestor of the commit this run is executing at, \${{ github.sha }} (ref"`,
+    `            echo "::error::\${{ github.ref_name }}, \${{ github.event_name }}) -- regenerate (node"`,
+    `            echo "::error::scripts/generate-consumer-gate.mjs) against a commit in this history"`,
+    "            exit 1",
+    "          fi",
+    "      - name: Refuse a pin that predates a change to what it pins",
+    "        run: |",
+    `          changed=$(git diff --name-only ${pinnedSha} "\${{ github.sha }}" -- README.md scripts/generate-consumer-gate.mjs)`,
+    '          if [ -n "$changed" ]; then',
+    `            echo "::error::consumer-gate.yml is pinned to ${pinnedSha}, but this changed since:"`,
+    '            echo "::error::$changed"',
+    '            echo "::error::regenerate (node scripts/generate-consumer-gate.mjs) and dispatch again"',
+    "            exit 1",
+    "          fi",
+    "",
+    "",
+  ].join("\n");
+}
+
+/**
+ * The job the generated workflow adds beyond what README shows -- refuses rather than passing on
+ * absence when the documented workflow's own job did not succeed.
+ * @param {string} jobName
+ * @returns {string}
+ */
+function buildVerifyReportJob(jobName) {
+  return [
     "",
     "  verify-report:",
     `    needs: [${jobName}]`,
@@ -172,8 +311,6 @@ export function buildConsumerGateWorkflow(jobsYaml) {
     "            exit 1",
     "          fi",
   ].join("\n");
-
-  return `${header}\n${jobsYaml}\n${verify}\n`;
 }
 
 /** The real, current commit HEAD is on -- what the generated file's `uses:` step gets pinned to. */
@@ -203,24 +340,30 @@ function main() {
   const workflow = generate(readme, currentHeadSha());
   if (process.argv.includes("--check")) {
     const current = existsSync(OUT) ? readFileSync(OUT, "utf8") : "";
-    // The sha is the ONE line expected to differ between two otherwise-identical generations taken a
-    // commit apart -- comparing everything else lets a real drift (README changed, generator changed)
-    // fail while a routine "HEAD moved since this was last generated" reads as what it is: expected,
-    // fixed by regenerating as the last step before a release, never a surprise mid-review.
+    // #558: THIS USED TO ALSO REQUIRE `current === workflow` -- AN EXACT MATCH INCLUDING THE PIN -- AND
+    // THAT IS STRUCTURALLY UNSATISFIABLE IN ANY COMMITTED TREE, not merely a routine staleness. Regenerate
+    // at HEAD `X` and the file pins `X`; COMMIT that file and HEAD becomes the new commit `Y` (the one
+    // containing the change), so the committed pin can never equal HEAD by the time anything reads it
+    // back -- there is no reachable YES. Measured directly: `--check` failed on a freshly cloned `main`,
+    // at `release.yml`'s own gate step, on a commit that had JUST regenerated correctly. A gate that
+    // cannot pass is one people stop dispatching, so the sha half of this comparison is gone.
+    //
+    // The question that actually matters -- "was this pin regenerated for the commit actually running" --
+    // is answered by `check-pin`, generated INTO the workflow itself (see `buildConsumerGateWorkflow`),
+    // at the one moment it is answerable: dispatch, against `${{ github.sha }}`. What remains here is the
+    // comparison that CAN be satisfied: does the committed file still match what README.md's documented
+    // workflow produces, sha aside -- real drift (README reworded, generator changed) versus the routine
+    // "HEAD moved since this was last generated" that regenerating-before-release already handles.
     /** @param {string} text */
-    const stripSha = (text) => text.replace(/uses: DanBeckDev\/a11y-witness@\S+/, "uses: DanBeckDev/a11y-witness@<sha>");
+    const stripSha = (text) => text.replaceAll(/\b[0-9a-f]{40}\b/g, "<sha>");
     if (stripSha(current) !== stripSha(workflow)) {
       console.error(`STALE  ${OUT} does not match README.md. Run: node scripts/run.mjs consumer-gate`);
       process.exitCode = 1;
       return;
     }
-    if (current !== workflow) {
-      console.error(`STALE-SHA  ${OUT} is pinned to an older commit than HEAD -- regenerate before releasing: `
-        + "node scripts/run.mjs consumer-gate");
-      process.exitCode = 1;
-      return;
-    }
-    console.log(`OK  ${OUT} matches README.md and is pinned to HEAD.`);
+    console.log(`OK  ${OUT} matches README.md's documented workflow. Its sha pin will differ from HEAD `
+      + "once this check itself is committed -- expected, not a drift; check-pin verifies the pin against "
+      + "the commit actually running, at dispatch time.");
     return;
   }
   writeFileSync(OUT, workflow);
