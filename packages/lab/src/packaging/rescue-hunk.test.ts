@@ -36,7 +36,13 @@ test("THE REAL PAIR: the un-redaction is NAMED before anything is applied", () =
   // Verbatim from the two blobs, not paraphrased: this is the line a wholesale take would have reverted.
   const base = "const a = 1;\n * uses `<the lab's address>:5050` to serve pages\nconst b = 2;\n";
   const main = "const a = 1;\n * uses `<the lab's address>:5050` to serve pages\nconst b = 2;\n";
-  const branchOld = "const a = 1;\n * uses `192.168.1.79:5050` to serve pages\nconst b = 2;\n";
+  const branch = "const a = 1;\n * uses `192.168.1.79:5050` to serve pages\nconst b = 2;\n";
+
+  // The direction the fixture rests on: the BRANCH is the one carrying the literal address, because it
+  // predates the redaction. Asserted rather than assumed — if this ever inverts, every claim below about
+  // which side must win inverts with it.
+  assert.ok(branch.includes("192.168.1.79"), "the branch is the side holding the un-redacted address");
+  assert.ok(!main.includes("192.168.1.79"), "and main is the side that replaced it");
 
   // What main gained since the base is what a rescue is about to overwrite. Here main and base agree on
   // the redacted form and the BRANCH carries the literal — so the gain is empty and the DANGER is the
