@@ -336,6 +336,68 @@ for two days with nothing behind it**, and the check that would notice is filed 
 **What the board should take from this is one sentence, not three:** the tracker's closed rows are
 evidence of work stopping, not of work landing, and the two are being told apart by hand until #870 lands.
 
+### Tonight's capture batch, and the one number that must NOT be written as a fact yet
+
+**The road milestone's floor could not be met by relabelling, so `ceo` put the capturable rows on the fleet
+tonight. Every figure below is read from the row it is recorded on, not relayed.**
+
+- **#143 closed on the authoritative `rules-real-pages` run** — 14 orphan captures, filed 2026-09-06. Three
+  of its four acceptance clauses had already shipped and nobody had closed the row.
+- **#881 was filed from that same run**, and it is the more interesting half: **ten synthetic dataset
+  captures are sitting in the real-page corpus** — five cases, `bad` and `good` each, recorded against the
+  lab's own page-server address (`http://192.168.1.79:5050/...`). Sixteen captures no declared page claims;
+  ten of them are not real pages at all.
+- **#311 is measured, and the promise made to an outside reader does not survive it.**
+
+**The #311 correction is a good example of a measurement being worth more than its number**, and the summary
+should use it that way rather than as a timing statistic. `docs/try-it.md` says **"Expect five to eight
+minutes for a real page."** Six measurements now exist:
+
+```
+3 m 45 s   4 m 38 s   4 m 50 s   5 m 48 s   7 m 52 s   7 m 54 s
+```
+
+**Three of the six are under the promised floor, including two the sentence itself cites.** And the reason
+matters more than the range: **the fastest capture is fast because it failed.** The 3 m 45 s run opened on a
+consent overlay Escape did not dismiss and read almost none of the page — the tool said so in its own
+report. **A run that finishes well under four minutes is evidence of the consent-banner failure**, which is
+the risk the next section of that document already warns about. A floor of five minutes hides that signal.
+
+`try-it.md` has deliberately **not** been edited yet: it is a promise to an outside reader and should change
+as a decision, not as a side effect of a measurement run.
+
+### `everything`'s ten conformant records — UNDER RE-MEASUREMENT, and the correction is NOT to be written yet
+
+**This one is written twice on purpose. `ceo`'s instruction, and it is the right one: do not write the
+correction as a fact before the run lands.**
+
+**What is on the record.** A lab `everything` run, last executed **2026-09-06 00:46**, stopped at `promote`
+with `RULES: FAIL — 10 conformant record(s) were failed by a deterministic rule` — `keyboard-trap-modal-cycle.good`,
+`keyboard-trap-modal-escape.good`, `image-missing-alt-behind-consent.good` and seven more, against 2,796
+records. **CLAUDE.md states the rules layer has "0 false positives across 1,183 conformant records", and
+that is the claim this project leads with.**
+
+**What is NOT known.** Whether it still happens. **The run predates several days of merges**, the two
+populations are different sizes (2,796 against 1,183), and nothing has ever compared them — which is this
+repository's most-recorded shape rather than a new discovery. It is being re-run tonight at current `main`.
+
+**So the sentence for the edition, if the result has not landed:**
+
+> The rules layer's published "0 false positives across 1,183 conformant records" is **under re-measurement**.
+> A lab run from 6 September reported ten conformant records failed by a deterministic rule over a larger
+> population; it predates several days of merges and is being re-run. **We are not yet saying the claim is
+> wrong — we are saying nothing has been comparing the two numbers.**
+
+**And the sentence to use ONLY if it reproduces at current `main`:**
+
+> The rules layer's published "0 false positives across 1,183 conformant records" **does not hold at current
+> `main`**: re-measured on 9 September, ten conformant records are failed by a deterministic rule. The
+> published figure is withdrawn pending the count being restated against the population it was measured on.
+
+**Neither sentence goes in until the run reports.** If the result has not landed by press time, the first one
+runs and the edition says so plainly — *"under re-measurement, result expected today"* is a legitimate thing
+for a board to be told, and far better than either a stale reassurance or a withdrawal we cannot support.
+
 ### What this section must NOT become
 
 **A list of incidents.** Two red windows on a day with 437 merges is a number the board can hold; a
