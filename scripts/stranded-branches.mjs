@@ -117,8 +117,16 @@ export const MAX_PR_PAGES = 100;
  * a stranded branch, and this file's stage-1 filter is "has this branch EVER had a PR" -- a PR dropped
  * off the end does not make the tool MISS a stranded branch, it makes the tool MANUFACTURE one.
  *
- * REST (`gh api`, core) rather than `gh pr list` (GraphQL): the 400-PR listing was the heaviest single
- * consumer in the auditor's pass -- 816 calls against a 300 budget -- and 402 PRs is five REST calls.
+ * REST (`gh api`, core) rather than `gh pr list` (GraphQL). MEASURED, 2026-09-09 16:3xZ, against the
+ * real repo: one `gh pr list --state all --limit 400 --json headRefName` cost **107 GraphQL points**.
+ * Attributed rather than inferred -- a trivial probe either side of it moved the counter by exactly 1,
+ * so the window was quiet and the 107 is this command's, not the account's. The same population over
+ * REST is 5 core calls.
+ *
+ * 107 IS NOT THE EXHAUSTION, AND SAYING SO WOULD BE THE COMFORTABLE ERROR. The GraphQL pool reached
+ * 5000/5000 account-wide at 14:41Z today, and 107 is 2% of it -- about 47 invocations. This was the
+ * heaviest SINGLE consumer in an audit pass that spent 816 calls against a 300 budget; what exhausted
+ * the pool across nine sessions is a separate question nobody has attributed.
  *
  * ASCENDING BY CREATION, which is not cosmetic. REST's default is newest-first, and a PR opened while the
  * walk is in flight shifts every later page down by one, so an entry is silently seen twice or not at
