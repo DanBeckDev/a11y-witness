@@ -86,11 +86,64 @@ export function isOwned(changed, owned) {
 }
 
 /**
+ * Does `line` say `state`, as a WHOLE WORD? `"unchanged".includes("changed")` is true -- a bare substring
+ * test reads one word as declaring two contradicting states of the same fact, purely because one state's
+ * spelling contains another's (`environmentKey`'s real states are exactly this pair). Word boundaries are
+ * what a reader uses to tell them apart, so the check must too.
+ *
+ * @param {string} line @param {string} state
+ */
+function mentionsState(line, state) {
+  return new RegExp(`\\b${state.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(line);
+}
+
+/**
+ * Which fact "owns" a line, when it names more than one -- the fact whose id occurs FIRST. A table row
+ * for `environmentKey` legitimately lists `provisionRevision` among the fields it hashes; a naive "any
+ * fact id on this line" reading would credit environmentKey's OWN state word to provisionRevision too,
+ * a false contradiction when provisionRevision's real declaration elsewhere disagrees with prose it never
+ * made. Only the first-named fact on a line may claim that line's state word.
+ *
+ * @param {string} line @param {{id: string, states: string[]}[]} allFacts
+ * @returns {{id: string, states: string[]} | null}
+ */
+function owningFact(line, allFacts) {
+  let owner = null;
+  let earliest = Infinity;
+  for (const fact of allFacts) {
+    const at = line.indexOf(fact.id);
+    if (at !== -1 && at < earliest) { earliest = at; owner = fact; }
+  }
+  return owner;
+}
+
+/**
+ * Every line THIS fact owns (see `owningFact`) that also says one of its states -- and the set of states
+ * they name. `find`-on-first-naming-line is wrong the moment prose explaining a fact precedes the line
+ * that actually declares it; this walks every owned line, so a declaration anywhere in the body satisfies
+ * the fact regardless of what comes before it.
+ *
+ * @param {string[]} lines @param {{id: string, states: string[]}} fact
+ * @param {{id: string, states: string[]}[]} allFacts
+ * @returns {{declaringLines: string[], statesNamed: Set<string>}}
+ */
+function factDeclarations(lines, fact, allFacts) {
+  const declaringLines = lines.filter((l) => owningFact(l, allFacts) === fact
+    && fact.states.some((state) => mentionsState(l, state)));
+  const statesNamed = new Set(
+    declaringLines.flatMap((l) => fact.states.filter((state) => mentionsState(l, state))),
+  );
+  return { declaringLines, statesNamed };
+}
+
+/**
  * THE PURE VERDICT, so every state is exercisable without a PR.
  *
- * A fact is SATISFIED when the body names it AND says something about its state. Naming alone is not
- * enough -- a block listing the fact ids and nothing else is "I checked" with extra steps, which the
- * ruling refuses by name.
+ * A fact is SATISFIED when SOME line names it AND says something about its state -- not just the first
+ * line naming it, which is wrong the moment prose explaining the fact precedes the line that states it.
+ *
+ * A fact whose naming lines disagree on which state holds is a REAL FINDING, never silently resolved by
+ * document order: refused with every disagreeing line quoted, distinct from a fact nobody stated at all.
  *
  * @param {{changed: string[] | null, body: string | null,
  *          facts: {owned: string[], facts: {id: string, states: string[]}[]} | null}} input
@@ -112,22 +165,36 @@ export function signoffVerdict({ changed, body, facts }) {
   const touched = /** @type {string[]} */ (changed).filter((p) => isOwned(p, known.owned));
   if (touched.length === 0) return { code: EXIT.SIGNED, reasons: [] };
 
-  const text = /** @type {string} */ (body);
-  const unstated = known.facts.filter((fact) => {
-    const line = text.split("\n").find((l) => l.includes(fact.id));
-    // NAMED AND STATED. A line mentioning the fact with no state is the "I checked" the ruling refuses.
-    return !line || !fact.states.some((state) => line.toLowerCase().includes(state.toLowerCase()));
-  });
-  if (unstated.length === 0) return { code: EXIT.SIGNED, reasons: [] };
+  const lines = /** @type {string} */ (body).split("\n");
+  const unstated = [];
+  const contradicted = [];
+  for (const fact of known.facts) {
+    const { declaringLines, statesNamed } = factDeclarations(lines, fact, known.facts);
+    if (declaringLines.length === 0) { unstated.push(fact); continue; }
+    if (statesNamed.size > 1) contradicted.push({ fact, lines: declaringLines });
+  }
+  if (unstated.length === 0 && contradicted.length === 0) return { code: EXIT.SIGNED, reasons: [] };
 
-  return { code: EXIT.REFUSED, reasons: [
-    `This PR changes ${touched.length} owned path(s) -- ${touched.slice(0, 4).join(", ")}`
-    + `${touched.length > 4 ? ", ..." : ""} -- and its body does not state:\n`
-    + unstated.map((f) => `    ${f.id}  (say one of: ${f.states.join(", ")})`).join("\n")
-    + "\n\n  These are the paths where a mistake costs a CORPUS rather than a revert, and every failure\n"
-    + "  they have had looked correct at the diff. Name each fact and its state; \"I checked\" is refused\n"
-    + "  by construction, because writing the state is what makes you look.",
-  ] };
+  const reasons = [];
+  if (unstated.length > 0) {
+    reasons.push(
+      `This PR changes ${touched.length} owned path(s) -- ${touched.slice(0, 4).join(", ")}`
+      + `${touched.length > 4 ? ", ..." : ""} -- and its body does not state:\n`
+      + unstated.map((f) => `    ${f.id}  (say one of: ${f.states.join(", ")})`).join("\n")
+      + "\n\n  These are the paths where a mistake costs a CORPUS rather than a revert, and every failure\n"
+      + "  they have had looked correct at the diff. Name each fact and its state; \"I checked\" is refused\n"
+      + "  by construction, because writing the state is what makes you look.",
+    );
+  }
+  if (contradicted.length > 0) {
+    reasons.push(
+      "This PR's body names CONTRADICTING states for the same fact -- document order must not silently\n"
+      + "  resolve which one is true:\n"
+      + contradicted.map(({ fact, lines: ls }) =>
+        `    ${fact.id}:\n${ls.map((l) => `      "${l.trim()}"`).join("\n")}`).join("\n"),
+    );
+  }
+  return { code: EXIT.REFUSED, reasons };
 }
 
 /** @param {string | undefined} path @returns {string | null} */
