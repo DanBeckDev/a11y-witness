@@ -81,19 +81,22 @@ import { pathToFileURL } from "node:url";
 // not exist there. #330 and #331 are what that circular bootstrap costs. `cli-flags.mjs` imports only
 // `node:path`, `node:fs` and `node:url`.
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
-// SAFE for the identical no-`npm ci` reason: `ready-label-audit.mjs`'s own import graph
-// (`board-snapshot.mjs`, `claim-provenance.mjs`, `git-env.mjs`, `repo-identity.mjs`) is relative-only,
-// same as `cli-flags.mjs` above -- verified before adding this, not assumed.
-import { READY_LABEL } from "./ready-label-audit.mjs";
 
 export const EXIT = { DONE: 0, COULD_NOT_CLOSE: 1, CANNOT_ASK: 2 };
 
-// #754: DUPLICATED FROM `row-claim.mjs`'s OWN CONSTANTS, deliberately, rather than imported. That file's
-// import graph pulls in `merge-guard.mjs`, `board-snapshot.mjs`'s write path and the whole `row-claim/`
-// rule set -- real risk in a script that runs with no `npm ci` and no build, the exact `ERR_MODULE_NOT_FOUND`
-// bootstrap trap #330/#331 already cost this file once. Two literal strings, pinned equal to
-// `row-claim.mjs`'s by `close-rows-on-merge.test.ts`, is the documented-duplicate exception CLAUDE.md
-// names for `git-safe-env.mjs` under an identical constraint, applied here.
+// #754/#782: DUPLICATED FROM `row-claim.mjs`'s/`ready-label-audit.mjs`'s OWN CONSTANTS, deliberately,
+// rather than imported. `row-claim.mjs`'s import graph pulls in `merge-guard.mjs`, `board-snapshot.mjs`'s
+// write path and the whole `row-claim/` rule set -- real risk in a script that runs with no `npm ci` and
+// no build, the exact `ERR_MODULE_NOT_FOUND` bootstrap trap #330/#331 already cost this file once. Three
+// literal strings, pinned equal to their real owners' by `close-rows-on-merge.test.ts`, is the
+// documented-duplicate exception CLAUDE.md names for `git-safe-env.mjs` under an identical constraint.
+//
+// `READY_LABEL` moved here from an IMPORT for #782: `ready-label-audit.mjs`'s `isClosedDebrisLabel` now
+// imports `labelsToStrip` FROM this file (so the two never drift again, see that function's own doc) --
+// and this file importing `READY_LABEL` back the other way would be a cycle. Breaking it here, on the
+// side that already accepts the constant-duplication tradeoff, keeps `ready-label-audit.mjs` the one
+// place `READY_LABEL`'s real definition lives.
+const READY_LABEL = "ready";
 const CLAIM_LABEL = "in-progress";
 const STARTED_LABEL = "started";
 
