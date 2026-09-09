@@ -510,6 +510,20 @@ depends on somebody remembering to record it does not get recorded.
 - **Ask for the disagreement explicitly.** Peers pushed back correctly on the majority of specs that were
   wrong, including refusing an abstraction the lead half-implied.
 - **A refutation is a good result.** Six units in one night ended as refutations and every one saved work.
+- **"The row moves to whoever is free" assumes a row is portable — a branch checked out in the owner's own
+  worktree is not, and there was no way to know that before trying.** The dispatcher went to carry #614
+  (97 behind, past its escalation window) and found `git worktree add` refuses: the `session:` label
+  records who holds a ROW, `git worktree list` records who holds a BRANCH, and neither knew about the
+  other. Two fixes, ceo-ruled (#656): a claim now records its branch (`row-claim.mjs claim --branch=<name>`,
+  read back via `claimStatus(...).branch` and printed by `check`), so an escalating session can tell a
+  portable row from a held one before offering to take it; and `node scripts/carry-branch.mjs <branch>
+  --carrier=<name> --reason=<text>` is the mechanism that makes the offer real once made — a DETACHED
+  worktree merges `origin/main` in and pushes straight to the branch ref, never checking the branch out by
+  name, so it cannot collide with wherever the owner already has it. It is not a licence to write into
+  somebody's branch generally: the escalation window authorises a carry, and an ordinary `git push` (never
+  `--force`/`--force-with-lease`) is what keeps it safe — a simultaneous push from the owner's own worktree
+  still wins the race, refused rather than overridden. The carry leaves a note on the PR naming who carried
+  it and why, so the owner's next fetch explains itself.
 
 ## The measurement that decides whether this split was right
 
