@@ -1,0 +1,216 @@
+{
+  "note": "Lifted verbatim from runs/781-r1-hubspot.json. The sweep marks and the census, nothing else.",
+  "captures": [
+    {
+      "source": "runs/781-r1-hubspot.json/capture-1.json",
+      "census": {
+        "heading": 28,
+        "landmark": 6,
+        "link": 79,
+        "graphic": 28,
+        "formControl": 14,
+        "targetMatch": "matched"
+      },
+      "sweeps": [
+        {
+          "type": "heading",
+          "found": 28,
+          "prevTrips": 3,
+          "nextTrips": 59,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "phrases": [
+            "299,000 plus customers in over 135 countries grow their businesses with Hub Spot., heading, level 2",
+            "Hub Spot's Agentic Customer Platform, heading, level 2",
+            "list, clickable, with 1 item, 1 of 3, slide, A CRM that’s really smart., heading, level 3",
+            "Growing a business is hard. Hub Spot makes it easier., heading, level 2"
+          ]
+        },
+        {
+          "type": "landmark",
+          "found": 6,
+          "prevTrips": 11,
+          "nextTrips": 15,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "phrases": [
+            "Popular Features, button, unavailable, expanded, heading, level 2",
+            "main landmark, HUBSPOT AGENTIC CUSTOMER PLATFORM",
+            "banner landmark, Primary Navigation, navigation landmark, Hub Spot, same page, link",
+            "Skip to content, visited, same page, link"
+          ]
+        },
+        {
+          "type": "formField",
+          "found": 12,
+          "prevTrips": 17,
+          "nextTrips": 23,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "phrases": [
+            "Dismiss, button",
+            "Message History, region, speech balloon Chat with sales, button",
+            "rocket Get started free, button",
+            "pencil ️ Get free training, button"
+          ]
+        },
+        {
+          "type": "graphic",
+          "found": 2,
+          "prevTrips": 7,
+          "nextTrips": 5,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "phrases": [
+            "Message History, region, clickable, Avatar of Hub Bot, graphic",
+            "Hub Bot, banner landmark, navigation landmark, Avatar of Hub Bot; agent is available for chat, graphic"
+          ]
+        },
+        {
+          "type": "link",
+          "found": 1,
+          "prevTrips": 3,
+          "nextTrips": 5,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "phrases": [
+            "privacy policy, link"
+          ]
+        },
+        {
+          "type": "list",
+          "found": 22,
+          "prevTrips": 3,
+          "nextTrips": 47,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "phrases": [
+            "main landmark, list, with 5 items, grow, heading, level 1",
+            "list, clickable, with 3 items, 1 of 5, slide, Ebay Logo, graphic",
+            "list, clickable, with 1 item, 1 of 3, slide, Shows the products that make up the Hub Spot customer platform, starting with Smart CRM (highlighted, graphic",
+            "list, with 2 items, Attract and convert the right leads."
+          ]
+        },
+        {
+          "type": "frame",
+          "found": 1,
+          "prevTrips": 3,
+          "nextTrips": 5,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "phrases": [
+            "Chat Widget, region, Chat Widget, frame, clickable, Open live chat, button, opens dialog"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "runs/781-r1-hubspot.json/capture-2.json",
+      "census": {
+        "heading": 28,
+        "landmark": 6,
+        "link": 79,
+        "graphic": 28,
+        "formControl": 14,
+        "targetMatch": "matched"
+      },
+      "sweeps": [
+        {
+          "type": "heading",
+          "found": 28,
+          "prevTrips": 3,
+          "nextTrips": 59,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "phrases": [
+            "299,000 plus customers in over 135 countries grow their businesses with Hub Spot., heading, level 2",
+            "Hub Spot's Agentic Customer Platform, heading, level 2",
+            "list, clickable, with 1 item, 1 of 3, slide, A CRM that’s really smart., heading, level 3",
+            "Growing a business is hard. Hub Spot makes it easier., heading, level 2"
+          ]
+        },
+        {
+          "type": "landmark",
+          "found": 5,
+          "prevTrips": 11,
+          "nextTrips": 11,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "phrases": [
+            "Popular Features, button, unavailable, expanded, heading, level 2",
+            "main landmark, HUBSPOT AGENTIC CUSTOMER PLATFORM",
+            "banner landmark, Primary Navigation, navigation landmark, Hub Spot, same page, link",
+            "Skip to content, visited, same page, link"
+          ]
+        },
+        {
+          "type": "formField",
+          "found": 19,
+          "prevTrips": 37,
+          "nextTrips": 41,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "phrases": [
+            "content info landmark, list, with 5 items, Manage Cookies, button",
+            "navigation landmark, Partners, button, unavailable, expanded, heading, level 2",
+            "Customers, button, unavailable, expanded, heading, level 2",
+            "Company, button, unavailable, expanded, heading, level 2"
+          ]
+        },
+        {
+          "type": "graphic",
+          "found": 23,
+          "prevTrips": 39,
+          "nextTrips": 39,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "phrases": [
+            "main landmark, G 2 Award Badge: Best Usability (Enterprise), graphic",
+            "G 2 Award Badge: Best Results (Mid-Market), graphic",
+            "G 2 Award Badge: Easiest Admin (Enterprise), graphic",
+            "G 2 Award Badge: Best Relationship (Small Business), graphic"
+          ]
+        },
+        {
+          "type": "link",
+          "found": 74,
+          "prevTrips": 49,
+          "nextTrips": 159,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "phrases": [
+            "Enterprise, property page, Read full case studyabout Unipart, link",
+            "See all case studiesa 11y text suffix, link",
+            "See all app integrations, link",
+            "list, clickable, with 3 items, 3 of 3, slide, Learn moreabout content agent, link"
+          ]
+        },
+        {
+          "type": "list",
+          "found": 22,
+          "prevTrips": 3,
+          "nextTrips": 47,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "phrases": [
+            "main landmark, list, with 5 items, grow, heading, level 1",
+            "list, clickable, with 3 items, 1 of 5, slide, Ebay Logo, graphic",
+            "list, clickable, with 1 item, 1 of 3, slide, Shows the products that make up the Hub Spot customer platform, starting with Smart CRM (highlighted, graphic",
+            "list, with 2 items, Attract and convert the right leads."
+          ]
+        },
+        {
+          "type": "frame",
+          "found": 1,
+          "prevTrips": 3,
+          "nextTrips": 5,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "phrases": [
+            "Chat Widget, region, Chat Widget, frame, clickable, Open live chat, button, opens dialog"
+          ]
+        }
+      ]
+    }
+  ]
+}

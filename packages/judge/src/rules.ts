@@ -223,6 +223,22 @@ export interface RuleInput {
    * of them into a silent pass for 1.4.2.
    */
   media?: { tag: string; autoplay: boolean; muted: boolean; controls: boolean; loop: boolean }[];
+  /**
+   * Form controls' `autocomplete` ATTRIBUTE, from the DOM — 1.3.5 Identify Input Purpose. Same reasoning
+   * as `media` just above: `autocomplete` has no accessibility-tree equivalent, so NVDA cannot report it
+   * and this is not screen-reader evidence.
+   *
+   * #869: `addUnidentifiedInputPurpose` below reads this field, but NO CAPTURE ON DISK POPULATES IT YET.
+   * Issue #79 declared this channel and #89 (closed, unmerged) held the rule out of that PR entirely —
+   * #869 writes the rule against the declared shape rather than repeating that deferral, because #89's
+   * own chosen shape (declare the field, hold the rule, land it "together with #170's worker-side
+   * census") is exactly what let 1.3.5 sit unreachable with #79 closed as though it were done. #170 (a
+   * worker-side census mirroring `mediaCensus`, `packages/nvda-worker/src/browser-session.mjs`) is what
+   * makes this field non-empty on a real capture — fleet-touching, and not this row's region. Absent
+   * means NOT CHECKED, exactly as `media`'s own comment states, and is true of every capture that exists
+   * today.
+   */
+  formInputs?: { tag: string; type: string | null; autocomplete: string | null }[];
 }
 
 const EMPTY_NAME = "￼"; // ￼ — screen reader announced an element with no text/name
@@ -1080,6 +1096,86 @@ function addAutoplayingAudio(input: RuleInput, add: AddFinding): void {
 }
 
 /**
+ * 1.3.5 Identify Input Purpose — a form field's `autocomplete` value is not a real Autofill field name
+ * token at all (F107's syntactic half, read against the criterion's own text before mapping this).
+ *
+ * #869: written against `RuleInput.formInputs` (declared just above) with no worker-side census yet on
+ * any capture -- see that field's own comment for why, and #170 for the census that will populate it.
+ *
+ * The HTML spec's own "Autofill field name" table
+ * (html.spec.whatwg.org/multipage/form-control-infrastructure.html#autofill-detail-tokens),
+ * DELIBERATELY DUPLICATED in `packages/lab/src/training/signal-predicates.mjs`'s `inputPurposeInvalid`
+ * rather than imported -- that package does not depend on `packages/judge`, and a fixed vocabulary from
+ * one external spec is cheaper to state twice than to cross that boundary for. Neither copy is guessing
+ * at what the other meant; both read the same table.
+ *
+ * NARROWER THAN F107 ITSELF, on purpose, and this is why the mapping below is `secondary` rather than
+ * `conformance`. F107 (w3.org/WAI/WCAG22/Techniques/failures/F107) fails a field when its `autocomplete`
+ * "doesn't match the input's purpose" AND "the purpose isn't communicated through alternative methods" --
+ * its own worked example is `autocomplete="email"` on a NAME field: a REAL, syntactically valid token used
+ * for the WRONG field. This rule catches only the narrower case where the value is not a real token AT
+ * ALL (a typo like `fname`), never the semantic mismatch, and never checks the "alternative methods"
+ * clause at all. A field with NO `autocomplete` attribute at all is likewise not this rule's claim: 1.3.5
+ * only applies to fields "collecting information about the user" against the criterion's own controlled
+ * vocabulary, and deciding that scope from a bare field needs a word-sense judgement over its label this
+ * project has already been burned by once (`vague_link_present`'s 22-of-44 false-positive rate, this
+ * file's own `VAGUE_LINK_NAMES` comment).
+ */
+const AUTOCOMPLETE_NORMAL_TOKENS: ReadonlySet<string> = new Set([
+  "name", "honorific-prefix", "given-name", "additional-name", "family-name", "honorific-suffix",
+  "nickname", "organization-title", "username", "new-password", "current-password", "one-time-code",
+  "organization", "street-address", "address-line1", "address-line2", "address-line3", "address-level4",
+  "address-level3", "address-level2", "address-level1", "country", "country-name", "postal-code",
+  "cc-name", "cc-given-name", "cc-additional-name", "cc-family-name", "cc-number", "cc-exp",
+  "cc-exp-month", "cc-exp-year", "cc-csc", "cc-type", "transaction-currency", "transaction-amount",
+  "language", "bday", "bday-day", "bday-month", "bday-year", "sex", "url", "photo",
+]);
+const AUTOCOMPLETE_CONTACT_TOKENS: ReadonlySet<string> = new Set([
+  "tel", "tel-country-code", "tel-national", "tel-area-code", "tel-local", "tel-local-prefix",
+  "tel-local-suffix", "tel-extension", "email", "impp",
+]);
+const AUTOCOMPLETE_CONTACT_PREFIXES: ReadonlySet<string> = new Set(["home", "work", "mobile", "fax", "pager"]);
+const AUTOCOMPLETE_SHIPPING_PREFIXES: ReadonlySet<string> = new Set(["shipping", "billing"]);
+
+/** Is `value` a well-formed `autocomplete` purpose per the spec's own token grammar? */
+function isValidAutocompletePurpose(value: string): boolean {
+  const tokens = value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return false;
+  if (tokens.at(-1) === "webauthn") tokens.pop();
+  if (tokens.length === 0) return false;
+  if (tokens[0]?.startsWith("section-")) tokens.shift();
+  if (tokens.length && AUTOCOMPLETE_SHIPPING_PREFIXES.has(tokens[0] ?? "")) tokens.shift();
+  if (tokens.length > 1 && AUTOCOMPLETE_CONTACT_PREFIXES.has(tokens[0] ?? "")) tokens.shift();
+  if (tokens.length !== 1) return false;
+  const token = tokens[0] ?? "";
+  return AUTOCOMPLETE_NORMAL_TOKENS.has(token) || AUTOCOMPLETE_CONTACT_TOKENS.has(token);
+}
+
+function addUnidentifiedInputPurpose(input: RuleInput, add: AddFinding): void {
+  if (!input.formInputs) return; // absent means not checked; only a probe's silence is a finding
+  for (const element of input.formInputs) {
+    const value = typeof element.autocomplete === "string" ? element.autocomplete.trim().toLowerCase() : "";
+    // Empty, "on" and "off" are not this rule's claim: they say nothing about the field's PURPOSE (or
+    // explicitly opt out), and asserting from either would accuse a page for using the attribute
+    // correctly -- the exact "NO accessible name is not the same as no NAME" mistake this file's own
+    // `addUnnamedControls` was corrected for once already.
+    if (!value || value === "on" || value === "off") continue;
+    if (isValidAutocompletePurpose(value)) continue;
+    // `secondary`, NOT `conformance` -- read F107 itself before mapping this, the same discipline that
+    // caught 3.3.3 and 3.2.1/3.2.2 asserting where their criteria permit. F107's own two tests are "the
+    // value doesn't match the input's purpose" AND "the purpose isn't communicated through alternative
+    // methods" -- this rule only ever checks the FIRST half of the first test (the value is not even a
+    // syntactically real token, never mind whether a real token would match this field's actual purpose),
+    // and never checks the second test at all. 1.4.2's own note is the exact precedent: a deterministic
+    // DOM read whose CRITERION still carries an exception the census cannot see stays `secondary`.
+    add("1.3.5 Identify Input Purpose",
+      "A form field's autocomplete value is not a real Autofill field name token, so a user agent cannot "
+        + "identify the field's purpose and fill it from the user's own stored data",
+      `<${element.tag}${element.type ? ` type="${element.type}"` : ""} autocomplete="${element.autocomplete}">`);
+  }
+}
+
+/**
  * 2.1.2 — Tab stopped moving, so focus is trapped.
  *
  * A non-interference criterion (WCAG §5.2.5): it applies to ALL content whether or not it is relied upon,
@@ -1597,13 +1693,15 @@ function addImageAlternatives(transcript: string[], add: AddFinding): void {
  *   truncate that line to 80 chars, which is a real but DIFFERENT defect — evidence LOSS by truncation,
  *   not an unfolded occurrence fact — and is out of this row's scope.)
  *
- *   NOT FIXED, no real fact to fold in — `addSilentStateChanges` (4.1.2 state-change-silent) and
- *   `addAutoplayingAudio` (1.4.2): both iterate a SET of distinct probed elements (one activation attempt
- *   per disclosure control; one entry per `<audio>`/`<video>` tag), and neither's underlying type carries
- *   any per-entry id, index or timestamp at all (`{control?, after?}[]`; `{tag, autoplay, muted, controls,
- *   loop}[]`). Inventing an index here would not fold in a real captured fact the way `atMs` does — it
- *   would manufacture distinctness the evidence cannot actually support, for a collision this repo has no
- *   real-page case of.
+ *   NOT FIXED, no real fact to fold in — `addSilentStateChanges` (4.1.2 state-change-silent),
+ *   `addAutoplayingAudio` (1.4.2), and `addUnidentifiedInputPurpose` (1.3.5, #869): all three iterate a SET
+ *   of distinct probed elements (one activation attempt per disclosure control; one entry per
+ *   `<audio>`/`<video>` tag; one entry per form control), and none of their underlying types carries any
+ *   per-entry id, index or timestamp at all (`{control?, after?}[]`; `{tag, autoplay, muted, controls,
+ *   loop}[]`; `{tag, type, autocomplete}[]`). Inventing an index here would not fold in a real captured
+ *   fact the way `atMs` does — it would manufacture distinctness the evidence cannot actually support, for
+ *   a collision this repo has no real-page case of (`addUnidentifiedInputPurpose` has no real-page case of
+ *   anything yet — see its own comment).
  *
  *   NOT REACHABLE — every other rule (`addErrorWithoutRemedy`, `addContextChanges` x2,
  *   `addFocusRevealFindings`, `addKeyboardTrap`, `addStaleRouteTitle`, `addKeyboardUnreachableControl`,
@@ -1658,6 +1756,7 @@ export function ruleFindings(input: RuleInput): Finding[] {
   addMissingHeadings(input, add);
   addUnnamedGraphics(input, add);
   addAutoplayingAudio(input, add);
+  addUnidentifiedInputPurpose(input, add);
   addKeyboardTrap(input, add);
   addStaleRouteTitle(input, add);
   addBrokenFocusOrder(input, add);
