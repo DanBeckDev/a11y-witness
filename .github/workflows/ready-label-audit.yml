@@ -74,19 +74,27 @@ concurrency:
   # nothing, so a cancelled run loses nothing a later one will not recompute -- same choice and same
   # reason as board-liveness.yml.
   #
-  # AND IT DID NOTHING, WHICH IS #851's FINDING RATHER THAN ITS FIX. `cancel-in-progress` cancels a run
-  # that is IN PROGRESS when a new one starts, and this job takes a minute or two -- checkout, `npm ci`,
-  # then the audit -- so it only ever collapses events arriving CLOSER together than that. Measured
-  # 2026-09-09: 80 runs in one hour, 79 on `issues` events, each running to completion because a
-  # session's label writes land seconds apart while the runs between them finish.
+  # AND IT FIRES CONSTANTLY, WHICH IS #851's FINDING. Grouped from one `gh run list` call, 2026-09-09:
   #
-  # The group was never what was missing. The DEBOUNCE below is: it parks an event-driven run long enough
-  # that the next event's run cancels it BEFORE it has checked anything out or made a single API call.
-  # Concurrency without a debounce is a cancel that arrives after the cost has been paid.
+  #     200 runs today   175 cancelled   24 failed   0 SUCCEEDED
+  #     199 on `issues` events, 1 scheduled
   #
-  # THE SCHEDULED RUN IS IN ITS OWN GROUP AND IS NEVER CANCELLED. It is the run that must happen -- the
-  # one a day with no label activity depends on -- and sharing a group with a burst of label events makes
-  # the hourly audit whatever survives the burst, which is nothing.
+  # ZERO SUCCEEDED IS THE NUMBER. Label events arrive faster than this job's 68-118 s, so each run is
+  # cancelled by the next before it finishes: the audit did not run slowly all day, it never completed
+  # once. `cancel-in-progress` is doing exactly what it says and the result is starvation -- the newest
+  # run is always the true one, and the newest run is always about to be replaced.
+  #
+  # A first draft of this file said the opposite -- that the runs were too far apart to overlap and none
+  # was ever cancelled. That was inferred from the job's duration rather than counted, and the count
+  # refuted it. The figure is here so the next reader has the measurement rather than the inference.
+  #
+  # The DEBOUNCE below is what breaks the starvation: a parked run is cancelled having spent nothing, and
+  # the last of a burst waits out its two minutes with nothing left to cancel it and RUNS TO COMPLETION.
+  # One finished audit per burst, where there were none.
+  #
+  # THE SCHEDULED RUN IS IN ITS OWN GROUP AND IS NEVER CANCELLED. One scheduled run in 200 says how badly
+  # it needed to be: it is the pass a day with no label activity depends on, and in a shared group it is
+  # simply the next thing a label event kills.
   group: ready-label-audit-${{ github.event_name == 'schedule' && 'schedule' || 'events' }}
   cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
@@ -115,9 +123,12 @@ jobs:
       # touches a label -- and `workflow_dispatch` is somebody waiting at a terminal.
       #
       # A `sleep` rather than a real debouncer because there is nothing to debounce WITH: Actions gives a
-      # workflow no queue to inspect, and the only mechanism that collapses runs is `cancel-in-progress`
-      # firing on an overlap. The sleep manufactures the overlap. Said plainly rather than dressed up,
-      # because a bare `sleep` in a workflow is exactly the shape somebody deletes as pointless.
+      # workflow no queue to inspect. The only mechanism that collapses runs is `cancel-in-progress`, and
+      # it was already firing on every one of them -- 175 of 200 cancelled, 0 succeeded. What the parking
+      # changes is WHICH run survives and what the others cost: cancelled here, a run has done nothing;
+      # and the LAST of a burst waits out its two minutes with nothing left to cancel it, so it finishes.
+      # Said plainly rather than dressed up, because a bare `sleep` in a workflow is exactly the shape
+      # somebody deletes as pointless.
       - name: Debounce a burst of label events (#851)
         if: github.event_name == 'issues'
         run: sleep 120
