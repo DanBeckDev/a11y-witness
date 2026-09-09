@@ -25,6 +25,9 @@
 import { WCAG_22_AA } from "./wcag.js";
 
 /** WCAG 2.x §5.2.5. These four apply to ALL content, whether or not it is relied upon. */
+import type { DocumentIdentity } from "./document-identity.js";
+import { identitySentence } from "./document-identity.js";
+
 export const NON_INTERFERENCE_CRITERIA = ["1.4.2", "2.1.2", "2.2.2", "2.3.1"] as const;
 
 /**
@@ -79,6 +82,20 @@ export interface ConformanceScopeInput {
   census?: Readonly<Record<string, number>> | null;
   /** How many DISTINCT items each sweep actually reached, from the capture's structure fields. */
   swept?: Readonly<Record<string, number>>;
+  /**
+   * WHICH DOCUMENT THIS RUN WAS SERVED — #687.
+   *
+   * Requirement 2's limitation has always said "one viewport, one state, one document" without ever
+   * saying WHICH document, and two captures of one URL can describe different ones: measured on
+   * `https://calendly.com/`, one capture was served Google's sign-in wall and the other
+   * `calendly.com/scheduling`, both recorded under the requested URL. A reader told how many criteria
+   * this run assessed deserves to know WHICH RENDER it assessed them against — a page with eleven
+   * tabbable elements is a different subject from the one with ninety-eight, and the criteria count says
+   * nothing about which was seen.
+   *
+   * Omitted (or `null`) leaves the sentence out entirely rather than asserting an identity nobody read.
+   */
+  documentIdentity?: DocumentIdentity | null;
   /**
    * `censusTargetMismatchReason`'s own sentence, when the census's CDP target could not be confirmed —
    * see that function's header. When set, the coverage sentence states this INSTEAD of computing
@@ -383,6 +400,16 @@ function conformanceLevel(input: ConformanceScopeInput): ConformanceRequirement 
   };
 }
 
+/**
+ * WHICH document, appended to Requirement 2's "one viewport, one state, one document".
+ *
+ * Empty when no identity was passed. A report that invented "the page you asked for" from an absent
+ * reading would be exactly the claim #687 exists to stop something making.
+ */
+function renderSentence(input: ConformanceScopeInput): string {
+  return input.documentIdentity ? ` ${identitySentence(input.documentIdentity)}` : "";
+}
+
 function fullPages(input: ConformanceScopeInput): ConformanceRequirement {
   const truncated = truncatedSweeps(input.sweeps);
   if (truncated.length === 0) {
@@ -394,7 +421,8 @@ function fullPages(input: ConformanceScopeInput): ConformanceRequirement {
       limitation: "One viewport, one state, one document. Responsive VARIATIONS each have to conform "
         + "separately and only one was rendered; content inside iframes is not entered; and WCAG counts "
         + "an application at a single URI as ONE page, so every state reachable without a URL change — "
-        + "menus, dialogs, steps of a wizard — is part of this page and was not examined.",
+        + "menus, dialogs, steps of a wizard — is part of this page and was not examined."
+        + renderSentence(input),
     };
   }
   const detail = truncated.map((s) => `${s.type} (${s.stop})`).join(", ");
@@ -408,7 +436,8 @@ function fullPages(input: ConformanceScopeInput): ConformanceRequirement {
       + "Elements beyond that point were never reached, so an absence of findings among them is not "
       + "evidence they are correct." + coverageSentence(input)
       + " Separately: one viewport only, iframes not entered, and any state "
-      + "reachable without a URL change is part of this same page and was not examined.",
+      + "reachable without a URL change is part of this same page and was not examined."
+      + renderSentence(input),
   };
 }
 
