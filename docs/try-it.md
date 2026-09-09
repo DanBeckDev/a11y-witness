@@ -38,7 +38,6 @@ the words NVDA spoke.
 If your app is on GitHub, this needs one workflow file and no machine of your own.
 
 ```yaml
-on: pull_request
 jobs:
   a11ign:
     runs-on: windows-2022        # NVDA is Windows-only; the action fails fast anywhere else
