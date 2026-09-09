@@ -576,6 +576,66 @@ checks`'s buckets. And the other had **noticed the gap earlier that morning and 
 which is the more useful half: a known defect left open cost a wrong verdict on the PR that mattered
 most. Knowing the rule is not the same as holding it at every door.
 
+## A record is not a delivery: the sender, the builder, and the queue
+
+The rule below — *a fix and its correction travel together* — was written on 2026-09-09 after two
+instances. It was broken twice more the same morning, and the second time the correction reached the
+record, then the person, and the merge queue took the pre-correction commit **in between**.
+
+A ruling changed a PR's required shape while that PR was open and armed. It was recorded on the row and
+not sent to the builder, who was already building against the superseded instruction — **from inside, a
+superseded instruction and a current one read identically**. It was then sent, and by then `auto-arm` had
+merged. Verified on `main` afterwards:
+
+```js
+const QUOTED_RECORDS = "docs/board/reported/";
+if (file.startsWith(QUOTED_RECORDS)) return [];        // the shape that had been overruled
+```
+
+**Nothing was wrong with that PR.** It was green, armed, mutation-checked, and correct against the
+instruction its author held. It merged with every check green and every rule followed.
+
+`worker-capture`, who wrote it and reported that it had merged in the wrong shape:
+
+> **Nothing would have caught the merge, because the queue reads a green PR and not a row's comments.**
+
+### Three actors, and until that morning exactly one was covered
+
+| actor | what closes the window | |
+|---|---|---|
+| **the sender** | a ruling that changes an assignment reaches the builder **in the same minute as the row**, and the row cites that it was sent | ceo's rule, 2026-09-09 |
+| **the builder** | before pushing, read the row's comments **since the timestamp the dispatch quoted** — one `gh issue view --json comments` call | #644 |
+| **the queue** | a ruling that changes an open PR's required shape **takes `pr:hold` in the same act** — `merge-guard` already refuses a held PR, so the record lands on the object | #645 |
+
+The citation is the half that makes the first checkable rather than remembered. The third exists because
+the queue **cannot read at all**: `auto-arm` arms a non-draft, green, unheld PR and `update-branch`
+carries it, and neither looks at the row the PR declares.
+
+**The queue has two members, and both write.** `auto-arm` merges and `update-branch` pushes to a PR's own
+branch, so "the queue reads a green PR and not a row's comments" is true of the arming and of the
+carrying. That second half has its own benign collision: a hand-carry and the sweep can act on one branch
+at once, with no shared view of who is mid-flight. Measured 2026-09-09, the push was refused —
+
+```
+cannot lock ref ... is at c9d164ba but expected d73d0baf
+```
+
+— and it resolved correctly **only because the ref-lock refused and the refusal was read rather than
+retried**. `--force-with-lease` there would have discarded the sweep's carry and landed a branch behind
+main while looking current: the same two-actors-one-object shape as the ruling above, with git's own lock
+standing in for the hold.
+
+### What each of these is deliberately NOT
+
+- **Not a gate on the row's text.** Deciding whether a comment is a ruling is a judgement, and a tool that
+  guessed would be wrong in the direction that matters — silent on the one comment that mattered.
+- **Not a timestamp comparison at merge time.** A row's comments move constantly for reasons that are not
+  rulings, so it would refuse routinely and be routed around: this repository's own history with
+  `A11Y_SKIP_VERIFY=1`, reached for six times in one evening.
+- **Not a substitute for each other.** The builder's check is the backstop for a sender who forgot; the
+  hold is the backstop for a builder who has already pushed. None of the three relieves the one above it,
+  and saying so is what stops the last one becoming the reason nobody does the first.
+
 ## A fix and its correction travel together, or the window between them is live
 
 Twice on 2026-09-09 a change reached `main` without the correction that makes it correct.
