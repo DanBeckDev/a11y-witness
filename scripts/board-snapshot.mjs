@@ -26,6 +26,7 @@ import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { REPO } from "./repo-identity.mjs";
+import { READY_LABEL } from "./claim-labels.mjs";
 
 export const PROJECT_OWNER = REPO.split("/")[0];
 export const PROJECT_NUMBER = 2;
@@ -180,15 +181,91 @@ function graphqlErrorFromFailedRun(failure) {
 }
 
 /**
+ * Every OPEN issue carrying `ready` -- the independent population #747's floor checks the snapshot
+ * against. Read with a PLAIN top-level `gh issue list`, deliberately never nested inside another
+ * connection: the narrowing measured on `fieldValues` (and on `claim-provenance.mjs`'s own #683
+ * measurement of a nested `timelineItems`) only happens to a connection sharing a budget with sibling
+ * rows in the SAME request, and a bare `issues(first: N)` at the top level is not that shape.
+ *
+ * Same truncation discipline as `ready-label-audit.mjs`'s `fetchIssues`: returning exactly `limit` rows
+ * is indistinguishable from a truncated result, so that is refused rather than reported as complete.
+ *
+ * @param {{ run?: typeof defaultRun, limit?: number }} [deps]
+ * @returns {number[]}
+ */
+export function fetchReadyIssueNumbers({ run = defaultRun, limit = 500 } = {}) {
+  /** @type {string} */
+  let raw;
+  try {
+    raw = run("gh", ["issue", "list", "--repo", REPO, "--state", "open", "--label", READY_LABEL,
+      "--limit", String(limit), "--json", "number"]);
+  } catch (cause) {
+    throw new Error(`board-snapshot: could not list open ${READY_LABEL} issues from ${REPO} -- refusing `
+      + `to guess whether the snapshot's Status coverage is complete. `
+      + `${/** @type {Error} */ (cause).message}`, { cause });
+  }
+  /** @type {unknown} */
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (cause) {
+    throw new Error(`board-snapshot: gh's ${READY_LABEL}-issue list was not JSON -- refusing to guess. `
+      + `First 200 chars: ${raw.slice(0, 200)}`, { cause });
+  }
+  if (!Array.isArray(parsed)) {
+    throw new Error(`board-snapshot: gh's ${READY_LABEL}-issue list was not a list -- refusing to guess. `
+      + `Got: ${JSON.stringify(parsed).slice(0, 300)}`);
+  }
+  if (parsed.length === limit) {
+    throw new Error(`board-snapshot: gh returned exactly the requested limit (${limit}) of open `
+      + `${READY_LABEL} issues -- indistinguishable from a truncated result, refusing to check the `
+      + `snapshot's Status coverage against a partial population. Raise the limit.`);
+  }
+  return parsed.map((/** @type {unknown} */ entry, /** @type {number} */ i) => {
+    const number = /** @type {{ number?: unknown }} */ (entry)?.number;
+    if (typeof number !== "number") {
+      throw new Error(`board-snapshot: ${READY_LABEL}-issue list entry ${i} has no number -- refusing `
+        + `to guess. Got: ${JSON.stringify(entry).slice(0, 300)}`);
+    }
+    return number;
+  });
+}
+
+/**
+ * THE FLOOR #747 ADDS. `fieldValues` carries no `totalCount` at all, so nothing inside a single
+ * response can ever prove GitHub did not narrow it to fit a budget shared with the OTHER items in the
+ * same page -- exactly the shape `claim-provenance.mjs` measured on #683's nested `timelineItems`
+ * (nodes agreeing with totalCount while both were narrowed together). An independently-derived
+ * population -- every open `ready` issue, read by a query that is not nested -- is the only thing that
+ * can catch it: pure, so it is driven with real shapes rather than asserted against this file's text.
+ *
+ * @param {BoardItem[]} items
+ * @param {number[]} readyIssueNumbers
+ * @returns {number[]} the ready issue numbers with no Status in `items` (including one missing entirely)
+ */
+export function readyRowsMissingStatus(items, readyIssueNumbers) {
+  const statusByNumber = new Map(
+    items.filter((i) => i.number !== null).map((i) => [i.number, i.status]));
+  return readyIssueNumbers.filter((n) => statusByNumber.get(n) == null);
+}
+
+/**
  * Every item currently on the board. Paginated -- #399 measured 117 items on Project 2, comfortably past
  * one page of 100. `gh` failing, or answering with a shape this function does not recognise, THROWS: it
  * never falls through to a partial or empty list, which would let a snapshot claim completeness having
  * examined only some of the board.
  *
- * @param {{ run?: typeof defaultRun }} [deps]
+ * #747: ALSO REFUSES if any open `ready` row comes back with no Status -- `fieldValues(first: 20)` is
+ * nested inside `items(first: 100)` above, the one shape GitHub narrows to a shared budget without ever
+ * reporting it (no `totalCount` on `fieldValues` to compare against `nodes.length`, unlike the items
+ * connection itself). This is the check that makes a truncated read refuse rather than look complete;
+ * every caller of this function -- `writeBoardSnapshot`, and `ready-label-audit.mjs`'s own
+ * board-membership check, which reads through this exact query -- inherits it for free.
+ *
+ * @param {{ run?: typeof defaultRun, fetchReady?: typeof fetchReadyIssueNumbers }} [deps]
  * @returns {BoardItem[]}
  */
-export function fetchBoardItems({ run = defaultRun } = {}) {
+export function fetchBoardItems({ run = defaultRun, fetchReady = fetchReadyIssueNumbers } = {}) {
   /** @type {BoardItem[]} */
   const items = [];
   /** @type {string | null} */
@@ -214,6 +291,14 @@ export function fetchBoardItems({ run = defaultRun } = {}) {
     if (!page.hasNextPage) break;
     cursor = page.endCursor;
   }
+  const readyNumbers = fetchReady({ run });
+  const missing = readyRowsMissingStatus(items, readyNumbers);
+  if (missing.length > 0) {
+    throw new Error(`board-snapshot: ${missing.length} open ${READY_LABEL} row(s) came back with no `
+      + `Status -- refusing to report this snapshot as complete. This is the snapshot reading short, `
+      + `not the board being wrong (#747: fieldValues has no totalCount to check itself, so this is `
+      + `read against an independent population instead): #${missing.join(", #")}`);
+  }
   return items;
 }
 
@@ -234,17 +319,19 @@ export function snapshotStamp(date) {
  * the whole point of this function is that a caller who cannot get a real snapshot must not proceed to the
  * mutation it was meant to protect.
  *
- * @param {{ run?: typeof defaultRun, writeFile?: (path: string, data: string) => void,
+ * @param {{ run?: typeof defaultRun, fetchReady?: typeof fetchReadyIssueNumbers,
+ *   writeFile?: (path: string, data: string) => void,
  *   mkdir?: (path: string) => void, now?: () => Date }} [deps]
  * @returns {string} the path written
  */
 export function writeBoardSnapshot({
   run = defaultRun,
+  fetchReady = fetchReadyIssueNumbers,
   writeFile = (path, data) => writeFileSync(path, data, "utf8"),
   mkdir = (path) => mkdirSync(path, { recursive: true }),
   now = () => new Date(),
 } = {}) {
-  const items = fetchBoardItems({ run });
+  const items = fetchBoardItems({ run, fetchReady });
   const takenAt = now();
   const path = `${SNAPSHOT_DIR}/${snapshotStamp(takenAt)}.json`;
   const snapshot = {
@@ -270,7 +357,8 @@ export function writeBoardSnapshot({
  *
  * @template T
  * @param {() => T} mutate the actual board-mutating call
- * @param {{ run?: typeof defaultRun, writeFile?: (path: string, data: string) => void,
+ * @param {{ run?: typeof defaultRun, fetchReady?: typeof fetchReadyIssueNumbers,
+ *   writeFile?: (path: string, data: string) => void,
  *   mkdir?: (path: string) => void, now?: () => Date, log?: (line: string) => void }} [deps]
  * @returns {T}
  */
