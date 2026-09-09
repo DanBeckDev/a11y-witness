@@ -475,6 +475,38 @@ a flag nothing ever set; the signal-type scrape that matched nothing and asserte
 Every one was verified in the direction where it could not fail. **Ask which half of your question the
 check you just ran actually answered.**
 
+### For a verdict, read the RUN — the rollup unions superseded check-runs
+
+`gh pr checks <n>` and `statusCheckRollup` both return **every** check-run of a name, including ones a
+re-run superseded. So the first entry for a name is the OLDEST, and a PR can read red on a check that has
+not been asked about its current head at all.
+
+Measured 2026-09-09 on #619, at the moment it was the one PR unblocking the whole queue:
+
+```
+gate              fail     run 34328823204     <- the OLD run
+acceptance / run  pass     run 34329060025     <- the current one
+ts / run          pending  run 34329060025     <- gate has not run yet on this one
+```
+
+Reading `gate: fail` there would have said the fix had failed. Reading the RUN said it was still going,
+and it passed.
+
+**Fifth site of this shape, and the first that is a reading tool rather than a decision.**
+`update-branch-sweep.mjs` (twice — #498/#500, then #517 for the in-flight case), `trunk-revert.mjs`
+(#582) and `queue-table.mjs` all take the newest per name now. `gh pr checks` cannot be fixed, so the
+rule is about consumption:
+
+- For a **verdict** — did this land, may it merge, is it safe to act — read `gh run view <id>`, scoped
+  to the run for the head you mean.
+- The rollup is safe only where something takes the **newest per name**, comparing `completedAt` as a
+  string (ISO-8601 sorts lexically) and treating the zero date `0001-01-01T00:00:00Z` as no answer.
+- `conclusion` on an unfinished run is `""`, not null, so `|| null` and never `??`.
+
+It caught the author of the previous four fixes the same morning, through a monitor keyed on
+`gh pr checks`'s buckets rather than on a run. Knowing the rule is not the same as holding it at every
+door.
+
 ## A fix and its correction travel together, or the window between them is live
 
 Twice on 2026-09-09 a change reached `main` without the correction that makes it correct.
