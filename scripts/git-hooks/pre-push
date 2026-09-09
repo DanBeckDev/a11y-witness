@@ -651,7 +651,13 @@ if [ ${#failed[@]} -gt 0 ]; then
   # the habit.
   #
   # BEGIN #721 DIRTY-TREE NOTE -- extraction markers for pre-push-dirty-tree-note.test.ts; keep both if edited.
-  dirty="$(git status --porcelain 2>/dev/null | head -20)"
+  # sed, not one of the three STATUS_TOOLS -- #375's piped-exit-status guard scopes its hazard check to
+  # top-level code as ONE bucket, and this file's top level legitimately reads $? elsewhere
+  # (changeset_precise_status, signals_status, rules_status) for genuinely piped commands. This line never
+  # reads $? at all -- the whole pipeline is captured into `dirty` -- but the guard cannot see that, so a
+  # truncation pipeline ending in one of its three flagged tools reads as the same hazard those other
+  # reads exist to avoid. Truncating with sed's own line-range form sidesteps the collision entirely.
+  dirty="$(git status --porcelain 2>/dev/null | sed -n '1,20p')"
   if [ -n "$dirty" ]; then
     echo "" >&2
     echo "NOTE: the working tree was NOT CLEAN when these checks ran, and the gate reads the TREE" >&2
