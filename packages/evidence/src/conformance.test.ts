@@ -16,7 +16,7 @@ import {
   NON_INTERFERENCE_CRITERIA,
   sweepOutcomes,
   truncatedSweeps, sweepCoverage, censusCountsDistinctNames, censusFromDiagnostics,
-  examinationState } from "./conformance.js";
+  censusTargetMismatchReason, examinationState } from "./conformance.js";
 
 const CLEAN = {
   assessedCriteria: ["1.1.1", "1.3.1", "2.4.4", "2.4.6", "3.3.1", "4.1.2", "4.1.3", "2.1.2"],
@@ -291,6 +291,97 @@ test("censusFromDiagnostics PREFERS the distinct-name count, which is what the s
   ]);
   assert.equal(census?.graphic, 47, "66 elements collapse to 47 distinct alt values; the sweep sees 47");
   assert.equal(census?.link, 51);
+});
+
+// --- #685/#691: calendly's OAuth-redirected census, "reach 44/1" printed and quoted as evidence ---
+
+/**
+ * `runs/witness/2026-09-09T08-12-27-003Z-calendly-com.json`, verbatim (`runs/` is gitignored and not
+ * available in CI — the same reason `verify.test.ts` pins the `w3.org` and `tfl.gov.uk` real-page shapes
+ * as literal fixtures rather than reading a file). The form probe activated calendly's own "Continue with
+ * Google" button (`interaction.formChanges`: `{control:"Continue with Google, button", kind:"submit",
+ * after:"unavailable, busy"}`), which navigated to `accounts.google.com`'s sign-in screen BEFORE the
+ * census ran — `structural` (the sweep) read 44 real calendly headings, `structureCensus` (taken later, at
+ * the time this fix closes) read Google's page: `heading:1, link:5, targetMatch:"fallback", candidates:1`.
+ * 10:42Z re-ran the identical script on a redeployed fleet and produced byte-identical numbers; 10:50Z
+ * with `probeForms` off navigated nowhere and its census (`targetMatch:"fallback", candidates:2` — the
+ * ambiguity is calendly's own CDP target resolution, not proof of navigation) agreed with its own 44/46
+ * sweep. Confirmed live by reading all three files before writing this fixture, not assumed from the
+ * incident report.
+ */
+const CALENDLY_08_12Z_CENSUS = [
+  { event: "structureCensus", atMs: 258312, landmark: 2, heading: 1, link: 5, graphic: 1, formControl: 6,
+    targetMatch: "fallback", candidates: 1,
+    targetUrl: "https://accounts.google.com/v3/signin/identifier?...",
+    expectedUrl: "https://calendly.com/" },
+];
+const CALENDLY_08_12Z_SWEPT = { heading: 44, landmark: 19, link: 0, graphic: 0 };
+const CALENDLY_08_12Z_ROUTE_CHANGE = {
+  control: "Privacy Policy, visited, link",
+  titleBefore: "Sign in - Google Accounts",
+  titleAfter: "Privacy Notice Calendly - Profile 1 - Microsoft​ Edge",
+};
+
+test("censusFromDiagnostics REFUSES a fallback-target census outright, not just a failed one", () => {
+  assert.equal(censusFromDiagnostics(CALENDLY_08_12Z_CENSUS), null,
+    "a census that could not confirm its own target must read as 'coverage unknown', the same as no "
+    + "census at all -- never as a real, small page");
+});
+
+test("MUTATION TARGET: censusTargetMismatchReason names the mismatch on the real 08:12Z capture, with "
+  + "both numbers", () => {
+  const reason = censusTargetMismatchReason(CALENDLY_08_12Z_CENSUS, CALENDLY_08_12Z_SWEPT);
+  assert.ok(reason, "a fallback-target census must produce a reason, not silently agree with the sweep");
+  assert.match(reason as string, /44 swept against 1 the census claims/,
+    "the exact numbers that were printed and quoted as evidence today must be traceable in the refusal");
+  assert.match(reason as string, /UNKNOWN/, "coverage must read as unknown, not as a small real page");
+  assert.doesNotMatch(reason as string, /form probe/i,
+    "the cause is named from THIS capture's own recorded evidence, never a hardcoded mechanism a report "
+    + "reader cannot actually see run");
+});
+
+test("the routeChange title transition is quoted verbatim when this capture recorded one", () => {
+  const reason = censusTargetMismatchReason(CALENDLY_08_12Z_CENSUS, CALENDLY_08_12Z_SWEPT,
+    CALENDLY_08_12Z_ROUTE_CHANGE);
+  assert.match(reason as string, /"Sign in - Google Accounts" to "Privacy Notice Calendly/,
+    "an observed fact this capture already recorded, not an inferred cause");
+});
+
+test("no routeChange evidence -- the reason still fires, just without the title note", () => {
+  const reason = censusTargetMismatchReason(CALENDLY_08_12Z_CENSUS, CALENDLY_08_12Z_SWEPT, null);
+  assert.ok(reason);
+  assert.doesNotMatch(reason as string, /titleBefore|undefined/i);
+});
+
+test("a MATCHED target (hubspot/ikea's own shape) is never refused, even with a real coverage gap", () => {
+  // hubspot's real capture the same session: sweep found 1 heading against the (TRUSTED, matched) census's
+  // 28 -- a genuine 'reached almost none of this page' finding, not a mismatched document. The refusal
+  // must not fire here, or a real, useful finding would be silently swallowed by this fix.
+  const matched = [{ event: "structureCensus", heading: 28, targetMatch: "matched", candidates: 1 }];
+  assert.equal(censusTargetMismatchReason(matched, { heading: 1 }), null);
+  assert.equal(censusFromDiagnostics(matched)?.heading, 28, "a matched census is trusted as before");
+});
+
+test("a census that predates `targetMatch` entirely is trusted as before -- this field cannot "
+  + "retroactively accuse a capture it was never computed for", () => {
+  const noTargetMatch = [{ event: "structureCensus", heading: 40 }];
+  assert.equal(censusTargetMismatchReason(noTargetMatch, { heading: 40 }), null);
+  assert.equal(censusFromDiagnostics(noTargetMatch)?.heading, 40);
+});
+
+test("the full report over the real 08:12Z capture states the refusal, never 'reached in full'", () => {
+  const scope = conformanceScope({
+    assessedCriteria: ["1.3.1"], screenReader: "NVDA 2026.1.1", ruleLayerRan: false,
+    census: censusFromDiagnostics(CALENDLY_08_12Z_CENSUS), swept: CALENDLY_08_12Z_SWEPT,
+    censusMismatchReason: censusTargetMismatchReason(CALENDLY_08_12Z_CENSUS, CALENDLY_08_12Z_SWEPT,
+      CALENDLY_08_12Z_ROUTE_CHANGE),
+  } as never);
+  const text = JSON.stringify(scope);
+  assert.match(text, /44 swept against 1 the census claims/);
+  // The exact OLD success-claim sentence `coverageSentence` prints when every type's `complete` reads
+  // true -- not the bare phrase, which this fix's own explanation legitimately quotes.
+  assert.doesNotMatch(text, /Every type with ground truth was reached in full/,
+    "the old, misleading claim this fix exists to stop printing over a page that was never examined");
 });
 
 test("and falls back to the element count when the capture predates `distinct`", () => {
