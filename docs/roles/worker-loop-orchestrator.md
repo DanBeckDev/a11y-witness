@@ -161,6 +161,25 @@ measured, and then bypassed again eight times without measuring. Two consequence
 header on every run, so the figure a reader sees is the one from the run they are looking at. A
 bypass with a reason that would not survive being read in the log is a fifth count.
 
+**A fifth count, recorded 2026-09-09 afternoon, in this role's own words.** Rows were dispatched all
+day with `gh issue edit --add-label in-progress --add-label session:<name>`, which leaves `ready` on,
+and `ready` beside `in-progress` is the audit's signal for a hand claim; so the `audit` check on main
+was red on eight of the last ten commits, on this role's method, while `row-claim dispatch` sat in the
+usage text the whole time. It was invisible until #740 fixed section 4's population that same hour,
+and it was found by this role reading the section it had just fixed. A tool existed and a weaker
+method was substituted. It does not move the role; the shape is not the lane unread, and the
+correction landed in the same table as the finding.
+
+Two rules from the same afternoon, kept here because the table is where they bite:
+
+- **A draft is never armed, and the table shows it as a draft.** A draft is the ordering tool: the PM's
+  next-day summary sits as a draft until 06:30 London so the 07:30 job reads it from main, and "UNARMED
+  against the arm-at-open rule" beside it is a misapplied rule, not a finding.
+- **`primary:update` builds after the fast-forward** (#751). Every worktree resolves the primary's
+  `dist`, so a merge that adds a module blocks the next unrelated push with an unreadable import error
+  until the primary is rebuilt; the table's host section reports the primary's build age beside its
+  git count.
+
 ## What this role must NEVER do
 
 The standing resource ban, verbatim, and it applies to this role exactly as to a worker:
