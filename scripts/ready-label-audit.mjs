@@ -109,36 +109,62 @@ export function fetchOpenIssues({ run = defaultRun } = {}) {
 }
 
 /**
- * #788: THE COUNT GITHUB ITSELF REPORTS OPEN, independent of `fetchIssues`'s own `gh issue list` call --
- * GitHub's search index, asked the identical question a second way, so the two can be compared rather
- * than one trusted alone. `type:issue`/`is:open` (via `is:issue is:open`) deliberately does NOT use the
- * repository API's own `open_issues_count`: that field is the well-documented quirk of counting open
- * issues AND open pull requests together, so it would never equal `fetchIssues`'s issues-only count even
- * on a perfectly healthy tracker.
+ * #788: THE ISSUE NUMBERS GITHUB ITSELF REPORTS OPEN, independent of `fetchIssues`'s own `gh issue list`
+ * call -- GitHub's search index, asked the identical question a second way, so the two can be compared
+ * rather than one trusted alone. `type:issue`/`is:open` (via `is:issue is:open`) deliberately does NOT
+ * use the repository API's own `open_issues_count`: that field is the well-documented quirk of counting
+ * open issues AND open pull requests together, so it would never equal `fetchIssues`'s issues-only count
+ * even on a perfectly healthy tracker.
  *
- * THROWS on any failure or an unparseable count, same discipline as every other fetcher here: a silent 0
- * would read as "no issues are open", the opposite of an honest "could not ask".
+ * #838: RETURNS THE NUMBERS, NOT JUST A COUNT -- the count-only version could say two reads disagreed,
+ * never which row was the difference, so a genuine population shrink and an ordinary single-row race
+ * (an issue opened or closed between two reads of a live tracker moving underneath it) printed the
+ * identical "examined 66, search reports 65" and were refused identically. `openIssueSetSummary` below
+ * needs the actual SET to tell them apart.
+ *
+ * THROWS on any failure or an unparseable number, same discipline as every other fetcher here: a silent
+ * empty list would read as "no issues are open", the opposite of an honest "could not ask".
  *
  * @param {{ run?: typeof defaultRun }} [deps]
- * @returns {number}
+ * @returns {number[]}
  */
-export function fetchReportedOpenIssueCount({ run = defaultRun } = {}) {
+export function fetchReportedOpenIssueNumbers({ run = defaultRun } = {}) {
   /** @type {string} */
   let raw;
   try {
     raw = run("gh", ["api", `search/issues?q=${encodeURIComponent(`repo:${REPO} is:issue is:open`)}`,
-      "--jq", ".total_count"]);
+      "--paginate", "--jq", ".items[].number"]);
   } catch (cause) {
-    throw new Error(`ready-label-audit: could not read GitHub's reported open-issue count -- refusing to `
-      + `guess whether the examined population is complete. ${/** @type {Error} */ (cause).message}`,
-      { cause });
+    throw new Error(`ready-label-audit: could not read GitHub's reported open-issue numbers -- refusing `
+      + `to guess whether the examined population is complete. `
+      + `${/** @type {Error} */ (cause).message}`, { cause });
   }
-  const count = Number(raw.trim());
-  if (!Number.isFinite(count)) {
-    throw new Error(`ready-label-audit: GitHub's reported open-issue count was not a number -- refusing `
-      + `to guess. Got: ${raw.slice(0, 200)}`);
-  }
-  return count;
+  return raw.split("\n").filter(Boolean).map((line) => {
+    const n = Number(line.trim());
+    if (!Number.isFinite(n)) {
+      throw new Error(`ready-label-audit: GitHub's reported open-issue numbers included a non-number `
+        + `line -- refusing to guess. Got: ${line.slice(0, 200)}`);
+    }
+    return n;
+  });
+}
+
+/**
+ * Pure: do two SETS of open-issue numbers agree, and if not, which numbers are in one and not the
+ * other? #838: named EXPLICITLY as "in one, not the other" rather than a bare count difference -- a
+ * count of 66 vs 65 says nothing about WHICH row, and cannot distinguish a genuine population shrink
+ * from the two sides each naming 65 of the same 66 rows plus one different straggler apiece (a count
+ * that could, by coincidence, even agree while the sets do not).
+ * @param {number[]} examined
+ * @param {number[]} reported
+ * @returns {{ agree: boolean, onlyExamined: number[], onlyReported: number[] }}
+ */
+export function openIssueSetSummary(examined, reported) {
+  const examinedSet = new Set(examined);
+  const reportedSet = new Set(reported);
+  const onlyExamined = examined.filter((n) => !reportedSet.has(n));
+  const onlyReported = reported.filter((n) => !examinedSet.has(n));
+  return { agree: onlyExamined.length === 0 && onlyReported.length === 0, onlyExamined, onlyReported };
 }
 
 /**
@@ -150,22 +176,38 @@ export function fetchReportedOpenIssueCount({ run = defaultRun } = {}) {
  * about the SEARCH, not only about its result -- an audit reporting "OK 74 open issues checked" has
  * examined only the rows its query could see, and #623 was reachable by NO label query at all.
  *
- * A GENUINE MISMATCH IS NOT NECESSARILY A BUG -- an issue opened or closed between the two reads would
- * produce one honestly. Refusing rather than guessing is still correct: this audit is a point-in-time
- * report, and reporting a count it cannot vouch for is the exact failure #715 names, whatever the cause.
+ * #838: A MISMATCH RE-READS ONCE BEFORE REFUSING. Measured live: "examined 66, search reports 65"
+ * refused FIVE of nine checks -- two reads a second apart across a tracker that keeps moving, the
+ * ORDINARY state for a live board, not a shrunk population. Two reads is not proof against a genuine
+ * shrink either, so the SECOND disagreement still refuses -- this buys one honest retry against a race,
+ * not infinite trust in whatever the tracker says. A mismatch the retry resolves is NAMED on stderr
+ * (which rows raced, and that a second read agreed), never silently swallowed: the audit proceeds, but
+ * the fact that it needed a second look is part of the record, not folded into a plain "OK".
  *
- * @param {{ run?: typeof defaultRun, fetchReportedCount?: typeof fetchReportedOpenIssueCount }} [deps]
+ * @param {{ run?: typeof defaultRun, fetchReportedNumbers?: typeof fetchReportedOpenIssueNumbers }} [deps]
  * @returns {{ issues: LabelledIssue[], reportedCount: number }}
  */
-export function fetchOpenIssuesChecked({ run = defaultRun, fetchReportedCount = fetchReportedOpenIssueCount } = {}) {
+export function fetchOpenIssuesChecked(
+  { run = defaultRun, fetchReportedNumbers = fetchReportedOpenIssueNumbers } = {}) {
   const issues = fetchOpenIssues({ run });
-  const reportedCount = fetchReportedCount({ run });
-  if (issues.length !== reportedCount) {
-    throw new Error(`ready-label-audit: examined ${issues.length} open issue(s) but GitHub's search `
-      + `index reports ${reportedCount} open -- refusing to audit a population that may have shrunk (or `
-      + `grown) silently between the two reads.`);
+  const reportedNumbers = fetchReportedNumbers({ run });
+  const first = openIssueSetSummary(issues.map((i) => i.number), reportedNumbers);
+  if (first.agree) return { issues, reportedCount: reportedNumbers.length };
+
+  const retryIssues = fetchOpenIssues({ run });
+  const retryReportedNumbers = fetchReportedNumbers({ run });
+  const second = openIssueSetSummary(retryIssues.map((i) => i.number), retryReportedNumbers);
+  if (second.agree) {
+    process.stderr.write(`ready-label-audit: the first read disagreed with GitHub's search index -- `
+      + `examined-only: ${first.onlyExamined.join(", ") || "none"}; search-only: `
+      + `${first.onlyReported.join(", ") || "none"}. A live tracker moving between two reads is the `
+      + `ordinary state; the second read agrees, so this is named here rather than counted as partial.\n`);
+    return { issues: retryIssues, reportedCount: retryReportedNumbers.length };
   }
-  return { issues, reportedCount };
+  throw new Error(`ready-label-audit: examined open issues disagree with GitHub's search index on BOTH `
+    + `reads -- refusing to audit a population that may have shrunk (or grown) for real, not merely `
+    + `raced. Examined but not in search: ${second.onlyExamined.join(", ") || "none"}. In search but `
+    + `not examined: ${second.onlyReported.join(", ") || "none"}.`);
 }
 
 /**
