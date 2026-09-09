@@ -264,6 +264,40 @@ because the only cost of an unused declaration is the time the extra fetch takes
 never become is a flag added to turn a red check green: it has no effect on which commands are refused
 or on their exit codes, only on how deep the checkout is before they run.
 
+### The declaration above is opt-in, and #621 stopped trusting it alone
+
+`board-style.test.ts` reached `gh` (through `collect()` in `scripts/board-data.mjs`) with **no
+`// requires:` header at all**, and #510's mechanism could not see it — an opt-in declaration cannot catch
+the file whose author did not know there was something to declare. Fourth instance of the shape in two
+days (#382, #619).
+
+**So the check now DERIVES a test's requirements from its import closure, checked before the header.**
+`acceptance-commands.mjs` walks the same local-import closure `gh-token-jobs.test.ts` already walks for
+its own question (shared via `scripts/local-import-closure.mjs`, never a second independently-drifting
+copy of the walk), and asks each file in it a factual question about what it DOES:
+
+| what a module in the closure does | implies |
+|---|---|
+| spawns `gh`, or reads `GH_TOKEN` | `token` |
+| reads `runs/` (via `runsRoot()` or its two override env vars) | `corpus` |
+| asks `git rev-parse --is-shallow-repository` | `history` |
+
+The refusal names the HOP, not just the capability — `board-style.test.ts requires token via collect →
+board-data.mjs:72` — because "this test needs a token" sends a reader to the test, and naming the module
+that actually spawns `gh` sends them to the cause. **Whatever the header says.** A file that declares
+`// requires: history` correctly is refused on the identical closure evidence a file with no header at all
+gets refused on; declaring honestly never changes which check catches you, only whether a second,
+independent signal happens to agree.
+
+**Keyed on the OPERATION, never the WORD — and this module is its own cautionary tale.** A pattern reading
+a bare identifier (`GH_TOKEN`, `RUNS_ROOT`) or a bare substring (`--is-shallow-repository`) will match a
+*comment describing* the operation as readily as the operation itself — and on its first real run, this
+mechanism derived requirements from `acceptance-commands.mjs`'s own prose describing the patterns, and
+separately from the patterns' own regex-literal SOURCE TEXT (comment-stripping fixes the first; it cannot
+fix the second, because that text is real code). Both are pinned regression tests now
+(`acceptance-commands.test.ts`'s `#621 SELF-REFERENCE REGRESSION` and its `local-import-closure.mjs`
+sibling) — the file that defines what counts as a real read must derive nothing from its own closure.
+
 ### Two traps inside the job itself
 
 **`PR_BODY` is the LIVE payload; the parser is the STALE checkout.** `ci.yml` passes
