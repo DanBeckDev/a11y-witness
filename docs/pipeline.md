@@ -513,8 +513,15 @@ So the two sources fail in opposite directions and at different moments:
 | `gh pr checks` / the rollup | shows a superseded check-run for a name the CURRENT run has not reached yet — reads as `fail` when the honest answer is `pending` |
 | every-run-at-this-sha | counts a superseded failed run as a live verdict — reads as `fail` when the honest answer is `pass` |
 
+**THE SHA IS NOT A RUN IDENTIFIER, and both of us treated it as one.** That is why a body edit is
+dangerous here: `pull_request: edited` re-runs CI **without moving the commit**. Every predicate keyed on
+"the sha" quietly assumes one run per sha, and that assumption is false for `edited`, for a
+`synchronize` after a no-op, and for any manual re-run. A sha identifies a tree; it does not identify an
+attempt to test one.
+
 **The predicate that survives both: newest check-run PER NAME, and a name with no run on the current run
-is PENDING, never failed.** That is what `queue-table.mjs` does and it is why the table said `pass` on
+is PENDING, never failed.** It survives because it asks about a NAME's current answer rather than about a
+run's existence. That is what `queue-table.mjs` does and it is why the table said `pass` on
 that PR while two hand-rolled waiters said otherwise, in opposite directions, within the same minute.
 
 **Fifth and sixth sites of this shape, and the first two that are reading tools rather than decisions.**
