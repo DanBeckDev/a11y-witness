@@ -93,14 +93,18 @@ jobs:
       # 1 when false" as a single `&&`/`||` expression when one of the two values IS zero. Exactly one of
       # these two steps runs, `if:`-guarded on the identical condition in both directions, so there is
       # only ever one real checkout per job -- never two, never zero.
-      - name: Checkout (full history -- the scoped test selector needs git diff <base>...HEAD)
-        if: inputs.run-ts-tests && inputs.ts-test-scope == 'scoped'
+      # #901 UPDATE, 2026-09-10: ONE FULL-HISTORY CHECKOUT FOR EVERY PATH. The two guarded steps above
+      # described (scoped = full, everything else = shallow) were right until #895 moved the revert-guard
+      # acceptance tests into a local clone (`--local`) of this checkout: a clone of a shallow checkout is
+      # shallow, `fc9b89d2` and `f2cdfaf3` (the two real merges the guard is proved against) are not in
+      # it, and the guard exits CANNOT_ASK. trunk-guard's `trunkBuildTest` is UNSCOPED, so it took the
+      # shallow step -- and main read red on every push from 48aef3f2 (2026-09-09 19:11Z) for 27 hours,
+      # each later push declined as INHERITED. Full history costs one ~30 MiB pack fetch per run, which is
+      # cheaper than a test suite that cannot run its own acceptance on the one job that runs it unscoped.
+      - name: Checkout (full history -- the scoped selector needs git diff <base>...HEAD, and the revert-guard acceptance needs the real merges)
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Checkout (shallow -- no path here runs a diff against history)
-        if: '!(inputs.run-ts-tests && inputs.ts-test-scope == ''scoped'')'
-        uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       # Same key, same reasoning as the original `ts` job's step: keyed on the lockfile because that is
