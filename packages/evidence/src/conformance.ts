@@ -60,6 +60,15 @@ export interface SweepOutcome {
    */
   trips?: number;
   found?: number;
+  /**
+   * WHAT THIS SWEEP WAS SEALED INSIDE — #897. `null` means the page was read and there was no modal;
+   * `undefined` means nobody asked, which is every capture taken before the field existed.
+   *
+   * A screen reader's quick navigation is confined to an open modal, so `exhausted` inside one is true
+   * about the dialog and not about the page. That is a stronger reason to withhold the full-page claim
+   * than #887's trips-short arithmetic, and a different one — it says WHICH scope was examined.
+   */
+  openDialog?: string | null;
 }
 
 export interface ConformanceRequirement {
@@ -249,6 +258,42 @@ export function sweepCoverage(input: ConformanceScopeInput): TypeCoverage[] {
 }
 
 /**
+ * THE RAW NUMERIC FIELDS on a `structureCensus` mark that are genuine element-type counts — `event`,
+ * `atMs` and `candidates` excluded by name, `graphicUnnamed`/`graphicExempted` kept.
+ *
+ * #865: EXTRACTED SO THIS PREDICATE IS STATED ONCE. `censusFromDiagnostics` and `censusElementCounts`
+ * used to write the identical denylist line separately — the exact "fact stated twice" shape this
+ * repository names as its own most-repeated defect — and that is how `candidates` (a diagnostic about
+ * the READ: how many CDP page targets `structuralCensus()` had to choose from, set via
+ * `census.candidates = target.candidates` in `browser-session.mjs`, never a fact about the page) reached
+ * both readers as an "element type" with nobody excluding it twice.
+ *
+ * STILL A DENYLIST, AND THAT IS NAMED HERE RATHER THAN SOLVED. A future flat numeric field on the mark
+ * leaks the same way `candidates` did, until this list is updated by hand or the field is NESTED at the
+ * source instead — the way `readAt` was nested for `readAtMs` (#854); `capture-probes.mjs`'s own comment
+ * on that nesting names the identical risk ("a flat readAtMs would arrive as an element type"). Reading
+ * the element-key list positively off `browser-session.mjs`'s own `structuralCensus()` literal would
+ * close this properly, but `packages/evidence` depends on nothing by design — `censusFromDiagnostics`
+ * below already states why ("capture-core bars the accessibility tree from becoming a model feature") —
+ * and `packages/nvda-worker` is the package that already depends on `@a11ign/evidence`, never the
+ * reverse. That fix belongs in `browser-session.mjs`, not here, and is out of this row's scope.
+ *
+ * `graphicUnnamed`/`graphicExempted` are NOT excluded: they are genuine sub-counts `reachableCountOf` and
+ * `elementCountOf` look up by name (`${key}Unnamed`) elsewhere in this file, not incidental leakage.
+ *
+ * @param mark a `structureCensus` diagnostic mark
+ */
+function censusNumericCounts(mark: Readonly<Record<string, unknown>>): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const [key, value] of Object.entries(mark)) {
+    if (key !== "event" && key !== "atMs" && key !== "candidates" && typeof value === "number") {
+      counts[key] = value;
+    }
+  }
+  return counts;
+}
+
+/**
  * The AX-tree element census, pulled out of a capture's diagnostics.
  *
  * It lives in a diagnostic rather than an evidence field because `capture-core` bars the accessibility tree
@@ -268,10 +313,7 @@ export function censusFromDiagnostics(diagnostics: readonly unknown[]): Record<s
   // every reader of this function (not just the coverage sentence) gets "coverage unknown" rather than a
   // real-looking number describing a document nobody asked to examine.
   if (mark.targetMatch === "fallback") return null;
-  const counts: Record<string, number> = {};
-  for (const [key, value] of Object.entries(mark)) {
-    if (key !== "event" && key !== "atMs" && typeof value === "number") counts[key] = value;
-  }
+  const counts = censusNumericCounts(mark);
   // DISTINCT NAMES WHEN THE CENSUS HAS THEM, because the sweep this is compared against DEDUPLICATES.
   // The comment on `coverageSentence` has named this mismatch since the sentence was written — 66 images
   // with 47 distinct alt values reported as "5 of 66" — and called it "still wrong" while having no better
@@ -445,12 +487,12 @@ export function censusCountsDistinctNames(diagnostics: readonly unknown[]): bool
 }
 
 /**
- * The census's RAW element counts — every numeric key on the mark, with NO `distinct` laid over them.
+ * The census's RAW element counts (`censusNumericCounts`, above), with NO `distinct` laid over them.
  *
  * `censusFromDiagnostics` deliberately overwrites the raw counts from `distinct`, because the sweep it is
  * compared against deduplicates by announcement. That is right for REACH and wrong for "how much of the
  * page went unlooked-at", which is why both readers now exist. Includes `graphicUnnamed` and any other
- * numeric key the mark carries, since those are what `reachableCountOf` subtracts.
+ * genuine element-count key the mark carries, since those are what `reachableCountOf` subtracts.
  *
  * Same `null` contract as `censusFromDiagnostics`: a failed census and an absent one both mean "coverage
  * unknown", never full coverage.
@@ -460,10 +502,7 @@ export function censusElementCounts(diagnostics: readonly unknown[]): Record<str
     (d): d is Record<string, unknown> =>
       typeof d === "object" && d !== null && (d as { event?: unknown }).event === "structureCensus");
   if (!mark || typeof mark.error === "string") return null;
-  const counts: Record<string, number> = {};
-  for (const [key, value] of Object.entries(mark)) {
-    if (key !== "event" && key !== "atMs" && typeof value === "number") counts[key] = value;
-  }
+  const counts = censusNumericCounts(mark);
   return Object.keys(counts).length > 0 ? counts : null;
 }
 
@@ -526,13 +565,37 @@ export function truncatedSweeps(sweeps: readonly SweepOutcome[] = []): SweepOutc
  * Both directions are recorded on one mark (`prevStop`/`nextStop`) because a sweep walks backwards and
  * forwards from the cursor, and either can truncate independently.
  */
+/** The `sweep` mark's shape, named once because two functions here read it. */
+type SweepMark = {
+  event?: string; type?: string; prevStop?: string; nextStop?: string; truncated?: boolean;
+  stop?: string; prevTrips?: number; nextTrips?: number; found?: number;
+  scope?: { openDialog?: string | null };
+};
+
+/**
+ * ONE DIRECTION OF ONE SWEEP, as an outcome.
+ *
+ * Split out of `sweepOutcomes` when #897's `scope` took it one branch over ESLint's complexity budget.
+ * That budget was telling the truth: the parent decides which KIND of mark it is looking at, and this
+ * decides what one direction of a sweep mark carries. Two things.
+ *
+ * Every field is carried only when the capture actually recorded it. A missing key and a `null` are
+ * different answers — `openDialog: null` is "read, and there was no modal", where absence is "nobody
+ * asked" — and collapsing them is the distinction the field exists for.
+ */
+function directionOutcome(m: SweepMark, stop: string, trips: number | undefined): SweepOutcome {
+  return {
+    type: String(m.type ?? "unknown"), stop,
+    ...(typeof trips === "number" ? { trips } : {}),
+    ...(typeof m.found === "number" ? { found: m.found } : {}),
+    ...(m.scope ? { openDialog: m.scope.openDialog ?? null } : {}),
+  };
+}
+
 export function sweepOutcomes(diagnostics: readonly unknown[] = []): SweepOutcome[] {
   const out: SweepOutcome[] = [];
   for (const mark of diagnostics) {
-    const m = mark as {
-      event?: string; type?: string; prevStop?: string; nextStop?: string; truncated?: boolean;
-      stop?: string; prevTrips?: number; nextTrips?: number; found?: number;
-    };
+    const m = mark as SweepMark;
     // The focus probe is not a quick-nav sweep, but it truncates the same way — it stops after a fixed
     // number of Tab presses — and the consequence is identical: content past that point was never
     // examined. Reported as a sweep outcome so 2.1.2 gets the same `cantTell` treatment as every other
@@ -551,16 +614,10 @@ export function sweepOutcomes(diagnostics: readonly unknown[] = []): SweepOutcom
       continue;
     }
     if (m?.event !== "sweep") continue;
+    // Carried through rather than recomputed downstream: this is the one place that reads the sweep
+    // mark, and a second reader of the same fields is how two answers to one question start.
     for (const [stop, trips] of [[m.prevStop, m.prevTrips], [m.nextStop, m.nextTrips]] as const) {
-      if (stop !== undefined) {
-        out.push({
-          type: String(m.type ?? "unknown"), stop,
-          // Carried through rather than recomputed downstream: this is the one place that reads the
-          // sweep mark, and a second reader of the same fields is how two answers to one question start.
-          ...(typeof trips === "number" ? { trips } : {}),
-          ...(typeof m.found === "number" ? { found: m.found } : {}),
-        });
-      }
+      if (stop !== undefined) out.push(directionOutcome(m, stop, trips));
     }
   }
   return out;
@@ -620,9 +677,11 @@ function renderSentence(input: ConformanceScopeInput): string {
  * key may not reach at all — #800's finding, and the reason `formControl` and `f` disagree — so a sweep
  * can legitimately make fewer trips than the census has elements.
  *
- * **Which is why this WITHHOLDS a claim rather than making one.** Requirement 2's full-page sentence is an
- * affirmative assertion that the page ran out; withholding it needs doubt, not proof, and that asymmetry
- * is the whole reason this direction is safe. The numbers are named so a reader can weigh them.
+ * **Which is why this WITHHOLDS a claim rather than making one. Withholding needs doubt; asserting needs
+ * proof.** Requirement 2's full-page sentence is an affirmative assertion that the page ran out, and that
+ * asymmetry is the whole reason this direction is safe: being wrong here costs a claim nobody was owed,
+ * while being wrong the other way puts a completeness sentence over a page that was never read. The
+ * numbers are named so a reader can weigh them rather than take the verdict.
  *
  * Only sweeps where BOTH directions ran out are considered — a half-exhausted sweep is already truncated
  * and `truncatedSweeps` reports it.
@@ -659,9 +718,68 @@ export function ranOutShortOfTheCensus(input: ConformanceScopeInput): {
   return out;
 }
 
+/**
+ * SWEEPS THAT RAN OUT INSIDE AN OPEN MODAL — #897, and the cause behind #887's consequence.
+ *
+ * A screen reader's quick navigation is confined to an open modal dialog, so NVDA's "no next link" is
+ * true about the DIALOG rather than about the page. Measured on `runs/781-r1-hubspot.json/capture-1`: the
+ * `landmark` sweep's last stop was `"Hub Bot, dialog"`, and the three sweeps that ran while HubSpot's
+ * chat widget was open found 12 chat-widget controls, 2 Hub Bot avatars and 1 link against a census of
+ * 79 — every one reporting `exhausted`, every one correct about where it was.
+ *
+ * **This is a stronger reason to withhold the full-page claim than #887's, and a different one.**
+ * #887 compares trips against a census and can only say the arithmetic does not support the claim;
+ * this says WHICH scope was examined, by name, and it is what a reader needs to go and look.
+ *
+ * Both directions only, for the same reason as `ranOutShortOfTheCensus`: a half-exhausted sweep is
+ * already truncated and `truncatedSweeps` reports it.
+ */
+export function ranOutInsideADialog(input: ConformanceScopeInput): { type: string, dialog: string }[] {
+  const byType = new Map<string, {
+    ranOut: boolean, directions: number, dialog: string | null | undefined,
+  }>();
+  for (const sweep of input.sweeps ?? []) {
+    // NO EARLY RETURN FOR AN ABSENT SCOPE, and the absence of one is deliberate. A guard here was written
+    // first and then removed: mutation showed it could not fail, because the `seen.dialog` filter below
+    // already rejects both `undefined` (a capture from before the field) and `null` (read, no modal).
+    // A guard that cannot fail is not a guard, and leaving it in invites a test that cannot fail either.
+    //
+    // The distinction still matters and is kept where it is OBSERVABLE — `sweepOutcomes` omits the key
+    // entirely for a capture that recorded no scope, rather than reporting `null`, so a reader can tell
+    // "nobody asked" from "asked, no dialog". That is asserted in `dialog-scope.test.ts`.
+    const seen = byType.get(sweep.type)
+      ?? { ranOut: true, directions: 0, dialog: sweep.openDialog };
+    seen.ranOut = seen.ranOut && SWEEP_RAN_OUT.includes(sweep.stop as SweepStop);
+    seen.directions += 1;
+    byType.set(sweep.type, seen);
+  }
+  return [...byType]
+    .filter(([, seen]) => seen.ranOut && seen.directions >= 2 && seen.dialog)
+    .map(([type, seen]) => ({ type, dialog: seen.dialog as string }));
+}
+
 function fullPages(input: ConformanceScopeInput): ConformanceRequirement {
   const truncated = truncatedSweeps(input.sweeps);
   const short = ranOutShortOfTheCensus(input);
+  const sealed = ranOutInsideADialog(input);
+  // SEALED INSIDE A DIALOG IS CHECKED FIRST, because it is the CAUSE and #887's arithmetic is the
+  // symptom: a sweep confined to a modal is usually also trips-short, and reporting the arithmetic when
+  // the capture can name the dialog would bury the answer under the evidence for it.
+  if (truncated.length === 0 && sealed.length > 0) {
+    const detail = sealed.map((s) => `${s.type} (inside "${s.dialog}")`).join(", ");
+    return {
+      number: 2,
+      name: "Full pages",
+      establishes: "Part of the page was examined.",
+      limitation: "A modal dialog was open, and a screen reader's quick navigation is confined to one — "
+        + `so these sweeps ran out of the DIALOG rather than of the page: ${detail}. Their `
+        + "`exhausted` is the screen reader's own answer and it is correct; it is correct about the "
+        + "dialog. What the page holds outside it was not examined." + coverageSentence(input)
+        + " Separately: one viewport only, iframes not entered, and any state reachable without a URL "
+        + "change is part of this same page and was not examined."
+        + renderSentence(input) + activationSentence(input),
+    };
+  }
   // A SWEEP THAT SAID IT RAN OUT, HAVING MADE FEWER TRIPS THAN THE CENSUS COUNTS, CANNOT SUPPORT THE
   // FULL-PAGE SENTENCE — #887. Checked before the truncation branch because a capture can have both, and
   // the affirmative claim must be withheld if EITHER is true. Reported in its own words rather than

@@ -648,21 +648,23 @@ test("the census read moment is not reported as an element count", () => {
 });
 
 /**
- * AND THE TRAP IS ALREADY SPRUNG — recorded here rather than fixed here, because fixing it is a
- * different change with a different blast radius (its own row).
+ * THE TRAP WAS SPRUNG, AND #865 IS THE FIX — this test used to assert the current (wrong) behaviour, so
+ * the day it was narrowed would be visible rather than silent. That day is this one: `candidates` (how
+ * many CDP page targets `structuralCensus()` had to choose from — a diagnostic about the READ, not the
+ * page) is now excluded by `censusNumericCounts`, the ONE shared predicate both `censusElementCounts` and
+ * `censusFromDiagnostics` call, replacing the two copies of the same denylist line this row's title names.
  *
- * The exclusion is `event` and `atMs`, so every OTHER numeric field on a real `structureCensus` mark is
- * already reported as an element type. Read off the marks of 8 real captures, the census carries
- * `candidates` (how many CDP page targets matched — a diagnostic about the READ, not the page) and the
- * two graphic sub-counts. No consumer is harmed today because every one of them looks a key up by name —
- * `sweepCoverage` iterates `CENSUS_KEY`, not the census — but the function's contract says "element
- * counts" and three of the things it returns are not that.
+ * `graphicUnnamed`/`graphicExempted` stay — they are genuine sub-counts `reachableCountOf` and
+ * `elementCountOf` look up by name elsewhere in `conformance.ts`, not incidental leakage, and #865's own
+ * design-decision comment (posted to the row before this code was written) is explicit that narrowing them
+ * too is not part of this fix.
  *
- * This test asserts the CURRENT behaviour, so the day someone narrows it the change is visible rather
- * than silent, and so the next person adding a census field finds the trap named instead of stepping in
- * it. It is not an endorsement.
+ * Read off the marks of 8 real captures at filing time, this was the ONLY field five years^Wminutes of a
+ * denylist missed; the risk that a FUTURE flat field repeats it is named in `censusNumericCounts`'s own
+ * comment, not solved here — solving it means nesting at the source (`browser-session.mjs`) or importing a
+ * canonical key list, both rejected for this row (see the design comment on #865 for why).
  */
-test("KNOWN: the element counts already include non-element numeric fields", () => {
+test("ACCEPTANCE #865: candidates -- a fact about the READ -- is no longer reported as an element count", () => {
   const realShape = [{
     event: "structureCensus", atMs: 452791,
     heading: 69, landmark: 12, link: 340, graphic: 165, formControl: 125,
@@ -671,9 +673,33 @@ test("KNOWN: the element counts already include non-element numeric fields", () 
     candidates: 1, targetMatch: "matched", targetUrl: "https://www.ikea.com/de/de/",
   }];
   assert.deepEqual(Object.keys(censusElementCounts(realShape) ?? {}).sort(),
-    ["candidates", "formControl", "graphic", "graphicExempted", "graphicUnnamed", "heading", "landmark",
-      "link"],
-    "`candidates` is a fact about the READ and it is in here; narrowing this is a separate change");
+    ["formControl", "graphic", "graphicExempted", "graphicUnnamed", "heading", "landmark", "link"],
+    "candidates must be gone; the two graphic sub-counts stay, they are genuine lookups, not leakage");
+  assert.deepEqual(Object.keys(censusFromDiagnostics(realShape) ?? {}).sort(),
+    ["formControl", "graphic", "graphicExempted", "graphicUnnamed", "heading", "landmark", "link"],
+    "both readers share censusNumericCounts now -- one predicate, not two, so they cannot disagree");
+});
+
+test("#865 ACCEPTANCE 2: the census-count exclusion is stated in exactly ONE place in the source -- a "
+  + "second copy is the exact defect this row's title names, drifting from this one silently", () => {
+  const source = readFileSync(fileURLToPath(new URL("./conformance.ts", import.meta.url)), "utf8");
+  const occurrences = [...source.matchAll(/key !== "event" && key !== "atMs"/g)];
+  assert.equal(occurrences.length, 1,
+    `expected the denylist predicate exactly once (inside censusNumericCounts), found ${occurrences.length}`);
+});
+
+test("KNOWN #865: the residual risk is real, not just named in a comment -- an UNRECOGNISED numeric "
+  + "field still leaks, exactly as censusNumericCounts's own comment warns", () => {
+  const contaminated = [{
+    event: "structureCensus", atMs: 452791,
+    heading: 69, landmark: 12,
+    // A field indistinguishable in SHAPE from a real element count -- this is what censusNumericCounts
+    // does NOT and cannot exclude by name, since it was never told about it.
+    invented: 4200,
+  }];
+  assert.deepEqual(Object.keys(censusElementCounts(contaminated) ?? {}).sort(), ["heading", "invented", "landmark"],
+    "an unrecognised numeric field is NOT filtered today -- pinned here so a future narrowing of this is "
+      + "visible rather than silent, same discipline as the readAtMs test above");
 });
 
 /**
