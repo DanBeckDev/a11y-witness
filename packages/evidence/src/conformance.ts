@@ -258,6 +258,42 @@ export function sweepCoverage(input: ConformanceScopeInput): TypeCoverage[] {
 }
 
 /**
+ * THE RAW NUMERIC FIELDS on a `structureCensus` mark that are genuine element-type counts — `event`,
+ * `atMs` and `candidates` excluded by name, `graphicUnnamed`/`graphicExempted` kept.
+ *
+ * #865: EXTRACTED SO THIS PREDICATE IS STATED ONCE. `censusFromDiagnostics` and `censusElementCounts`
+ * used to write the identical denylist line separately — the exact "fact stated twice" shape this
+ * repository names as its own most-repeated defect — and that is how `candidates` (a diagnostic about
+ * the READ: how many CDP page targets `structuralCensus()` had to choose from, set via
+ * `census.candidates = target.candidates` in `browser-session.mjs`, never a fact about the page) reached
+ * both readers as an "element type" with nobody excluding it twice.
+ *
+ * STILL A DENYLIST, AND THAT IS NAMED HERE RATHER THAN SOLVED. A future flat numeric field on the mark
+ * leaks the same way `candidates` did, until this list is updated by hand or the field is NESTED at the
+ * source instead — the way `readAt` was nested for `readAtMs` (#854); `capture-probes.mjs`'s own comment
+ * on that nesting names the identical risk ("a flat readAtMs would arrive as an element type"). Reading
+ * the element-key list positively off `browser-session.mjs`'s own `structuralCensus()` literal would
+ * close this properly, but `packages/evidence` depends on nothing by design — `censusFromDiagnostics`
+ * below already states why ("capture-core bars the accessibility tree from becoming a model feature") —
+ * and `packages/nvda-worker` is the package that already depends on `@a11ign/evidence`, never the
+ * reverse. That fix belongs in `browser-session.mjs`, not here, and is out of this row's scope.
+ *
+ * `graphicUnnamed`/`graphicExempted` are NOT excluded: they are genuine sub-counts `reachableCountOf` and
+ * `elementCountOf` look up by name (`${key}Unnamed`) elsewhere in this file, not incidental leakage.
+ *
+ * @param mark a `structureCensus` diagnostic mark
+ */
+function censusNumericCounts(mark: Readonly<Record<string, unknown>>): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const [key, value] of Object.entries(mark)) {
+    if (key !== "event" && key !== "atMs" && key !== "candidates" && typeof value === "number") {
+      counts[key] = value;
+    }
+  }
+  return counts;
+}
+
+/**
  * The AX-tree element census, pulled out of a capture's diagnostics.
  *
  * It lives in a diagnostic rather than an evidence field because `capture-core` bars the accessibility tree
@@ -277,10 +313,7 @@ export function censusFromDiagnostics(diagnostics: readonly unknown[]): Record<s
   // every reader of this function (not just the coverage sentence) gets "coverage unknown" rather than a
   // real-looking number describing a document nobody asked to examine.
   if (mark.targetMatch === "fallback") return null;
-  const counts: Record<string, number> = {};
-  for (const [key, value] of Object.entries(mark)) {
-    if (key !== "event" && key !== "atMs" && typeof value === "number") counts[key] = value;
-  }
+  const counts = censusNumericCounts(mark);
   // DISTINCT NAMES WHEN THE CENSUS HAS THEM, because the sweep this is compared against DEDUPLICATES.
   // The comment on `coverageSentence` has named this mismatch since the sentence was written — 66 images
   // with 47 distinct alt values reported as "5 of 66" — and called it "still wrong" while having no better
@@ -454,12 +487,12 @@ export function censusCountsDistinctNames(diagnostics: readonly unknown[]): bool
 }
 
 /**
- * The census's RAW element counts — every numeric key on the mark, with NO `distinct` laid over them.
+ * The census's RAW element counts (`censusNumericCounts`, above), with NO `distinct` laid over them.
  *
  * `censusFromDiagnostics` deliberately overwrites the raw counts from `distinct`, because the sweep it is
  * compared against deduplicates by announcement. That is right for REACH and wrong for "how much of the
  * page went unlooked-at", which is why both readers now exist. Includes `graphicUnnamed` and any other
- * numeric key the mark carries, since those are what `reachableCountOf` subtracts.
+ * genuine element-count key the mark carries, since those are what `reachableCountOf` subtracts.
  *
  * Same `null` contract as `censusFromDiagnostics`: a failed census and an absent one both mean "coverage
  * unknown", never full coverage.
@@ -469,10 +502,7 @@ export function censusElementCounts(diagnostics: readonly unknown[]): Record<str
     (d): d is Record<string, unknown> =>
       typeof d === "object" && d !== null && (d as { event?: unknown }).event === "structureCensus");
   if (!mark || typeof mark.error === "string") return null;
-  const counts: Record<string, number> = {};
-  for (const [key, value] of Object.entries(mark)) {
-    if (key !== "event" && key !== "atMs" && typeof value === "number") counts[key] = value;
-  }
+  const counts = censusNumericCounts(mark);
   return Object.keys(counts).length > 0 ? counts : null;
 }
 
@@ -647,9 +677,11 @@ function renderSentence(input: ConformanceScopeInput): string {
  * key may not reach at all — #800's finding, and the reason `formControl` and `f` disagree — so a sweep
  * can legitimately make fewer trips than the census has elements.
  *
- * **Which is why this WITHHOLDS a claim rather than making one.** Requirement 2's full-page sentence is an
- * affirmative assertion that the page ran out; withholding it needs doubt, not proof, and that asymmetry
- * is the whole reason this direction is safe. The numbers are named so a reader can weigh them.
+ * **Which is why this WITHHOLDS a claim rather than making one. Withholding needs doubt; asserting needs
+ * proof.** Requirement 2's full-page sentence is an affirmative assertion that the page ran out, and that
+ * asymmetry is the whole reason this direction is safe: being wrong here costs a claim nobody was owed,
+ * while being wrong the other way puts a completeness sentence over a page that was never read. The
+ * numbers are named so a reader can weigh them rather than take the verdict.
  *
  * Only sweeps where BOTH directions ran out are considered — a half-exhausted sweep is already truncated
  * and `truncatedSweeps` reports it.
