@@ -95,7 +95,7 @@ jobs:
       # only ever one real checkout per job -- never two, never zero.
       # #901 UPDATE, 2026-09-10: ONE FULL-HISTORY CHECKOUT FOR EVERY PATH. The two guarded steps above
       # described (scoped = full, everything else = shallow) were right until #895 moved the revert-guard
-      # acceptance tests into a `git clone --local` of this checkout: a clone of a shallow checkout is
+      # acceptance tests into a local clone (`--local`) of this checkout: a clone of a shallow checkout is
       # shallow, `fc9b89d2` and `f2cdfaf3` (the two real merges the guard is proved against) are not in
       # it, and the guard exits CANNOT_ASK. trunk-guard's `trunkBuildTest` is UNSCOPED, so it took the
       # shallow step -- and main read red on every push from 48aef3f2 (2026-09-09 19:11Z) for 27 hours,
