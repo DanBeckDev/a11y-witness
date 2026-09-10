@@ -3007,6 +3007,24 @@ it is a recorded gap and not a feature.
 
 The one comparison that survives inside a single build is `heading` on the afternoon three: the census counts **69 at load** and the sweep announces **80 by ~100 s**, on the one sweep with no `onItem`, so nothing the tool did can explain the gap. **The page gained at least eleven headings in the first hundred seconds of the capture**, and that is the fact under every ratio here: a completeness denominator taken at one instant does not bound a numerator gathered over the next seven minutes.
 
+**How many captures this actually costs, across the corpus:**
+
+```bash
+npm run lab:job -- -e job=full-page-claims      # the VERDICT, on the lab, which owns the corpus
+npm run lab:full-page-claims                    # the same script locally -- a PRE-CHECK only
+```
+
+`ranOutShortOfTheCensus` (#894) withholds Requirement 2's full-page sentence from a sweep that said it ran
+out having made fewer round trips than the census counts elements. `lab:full-page-claims` applies it to every
+real-page capture and names, per page, the sweep that withheld the claim and the three numbers behind it. It
+keeps *lost the claim*, *no usable census* and *predates #887's `trips`* as three separate totals, because
+collapsing them is the defect this whole area keeps producing — and it refuses below five captures, since a
+zero over an empty directory reads as "nothing was found" rather than "nothing was examined".
+
+**Run it on the lab or not at all.** `runs/` in any checkout is a copy only as fresh as its last sync; two
+local copies produced two different page lists for this question on 2026-09-09, which is why neither reached
+the board.
+
 **Three definitions remain three definitions** — `domCensus.formField` counts DOM elements, `structureCensus.formControl` counts AX nodes in `FORM_CONTROL_ROLES` (excluding `link`, `menuitem`, `option`, `tab`), and `sweep.found` counts distinct announcements — but the role set cannot be settled before the moment is. A wider bucket measured at load, compared against a sweep that ran five minutes later on content it partly revealed itself, is a corrected number about the wrong instant.
 
 **The lean this section carried is retracted, by the session that wrote it.** It read: *"At 926/265 the sweep is doing 3.5 trips per control, which is what every sweep type runs at — so it leans toward the page being real and the deadline being too small for it."* Trips per found control cannot decide that question, for two reasons that were each verified in the code before the lean was withdrawn. **It measures the other failure mode:** `collectPhrase` dedupes on `dedupeKey(phrase)` (`capture-probes.mjs:1155-1158`), so `found` is distinct announcements — one control announced under two distinct keys grows trips and `found` together and leaves the ratio flat, while an element revisited with an identical announcement moves it. The ratio sees walk efficiency and is blind to over-counting. **And the uniformity it rested on is the instrument:** `sweepInDirection` does `trips.count += 2` per step (`capture-probes.mjs:1260`), so `trips/found ≥ 2 × steps/found` by construction and every type inherits that floor; on this very capture the four sweeps that ran spread 1.9× — heading 2.25, landmark 4.33, formField 3.49, graphic 2.94 — with `formField` mid-range. *"What every sweep type runs at"* was a uniform answer read across a varied set, which is this repo's own recorded shape for a broken checker.
