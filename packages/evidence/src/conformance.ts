@@ -60,6 +60,15 @@ export interface SweepOutcome {
    */
   trips?: number;
   found?: number;
+  /**
+   * WHAT THIS SWEEP WAS SEALED INSIDE — #897. `null` means the page was read and there was no modal;
+   * `undefined` means nobody asked, which is every capture taken before the field existed.
+   *
+   * A screen reader's quick navigation is confined to an open modal, so `exhausted` inside one is true
+   * about the dialog and not about the page. That is a stronger reason to withhold the full-page claim
+   * than #887's trips-short arithmetic, and a different one — it says WHICH scope was examined.
+   */
+  openDialog?: string | null;
 }
 
 export interface ConformanceRequirement {
@@ -556,13 +565,37 @@ export function truncatedSweeps(sweeps: readonly SweepOutcome[] = []): SweepOutc
  * Both directions are recorded on one mark (`prevStop`/`nextStop`) because a sweep walks backwards and
  * forwards from the cursor, and either can truncate independently.
  */
+/** The `sweep` mark's shape, named once because two functions here read it. */
+type SweepMark = {
+  event?: string; type?: string; prevStop?: string; nextStop?: string; truncated?: boolean;
+  stop?: string; prevTrips?: number; nextTrips?: number; found?: number;
+  scope?: { openDialog?: string | null };
+};
+
+/**
+ * ONE DIRECTION OF ONE SWEEP, as an outcome.
+ *
+ * Split out of `sweepOutcomes` when #897's `scope` took it one branch over ESLint's complexity budget.
+ * That budget was telling the truth: the parent decides which KIND of mark it is looking at, and this
+ * decides what one direction of a sweep mark carries. Two things.
+ *
+ * Every field is carried only when the capture actually recorded it. A missing key and a `null` are
+ * different answers — `openDialog: null` is "read, and there was no modal", where absence is "nobody
+ * asked" — and collapsing them is the distinction the field exists for.
+ */
+function directionOutcome(m: SweepMark, stop: string, trips: number | undefined): SweepOutcome {
+  return {
+    type: String(m.type ?? "unknown"), stop,
+    ...(typeof trips === "number" ? { trips } : {}),
+    ...(typeof m.found === "number" ? { found: m.found } : {}),
+    ...(m.scope ? { openDialog: m.scope.openDialog ?? null } : {}),
+  };
+}
+
 export function sweepOutcomes(diagnostics: readonly unknown[] = []): SweepOutcome[] {
   const out: SweepOutcome[] = [];
   for (const mark of diagnostics) {
-    const m = mark as {
-      event?: string; type?: string; prevStop?: string; nextStop?: string; truncated?: boolean;
-      stop?: string; prevTrips?: number; nextTrips?: number; found?: number;
-    };
+    const m = mark as SweepMark;
     // The focus probe is not a quick-nav sweep, but it truncates the same way — it stops after a fixed
     // number of Tab presses — and the consequence is identical: content past that point was never
     // examined. Reported as a sweep outcome so 2.1.2 gets the same `cantTell` treatment as every other
@@ -581,16 +614,10 @@ export function sweepOutcomes(diagnostics: readonly unknown[] = []): SweepOutcom
       continue;
     }
     if (m?.event !== "sweep") continue;
+    // Carried through rather than recomputed downstream: this is the one place that reads the sweep
+    // mark, and a second reader of the same fields is how two answers to one question start.
     for (const [stop, trips] of [[m.prevStop, m.prevTrips], [m.nextStop, m.nextTrips]] as const) {
-      if (stop !== undefined) {
-        out.push({
-          type: String(m.type ?? "unknown"), stop,
-          // Carried through rather than recomputed downstream: this is the one place that reads the
-          // sweep mark, and a second reader of the same fields is how two answers to one question start.
-          ...(typeof trips === "number" ? { trips } : {}),
-          ...(typeof m.found === "number" ? { found: m.found } : {}),
-        });
-      }
+      if (stop !== undefined) out.push(directionOutcome(m, stop, trips));
     }
   }
   return out;
@@ -689,9 +716,68 @@ export function ranOutShortOfTheCensus(input: ConformanceScopeInput): {
   return out;
 }
 
+/**
+ * SWEEPS THAT RAN OUT INSIDE AN OPEN MODAL — #897, and the cause behind #887's consequence.
+ *
+ * A screen reader's quick navigation is confined to an open modal dialog, so NVDA's "no next link" is
+ * true about the DIALOG rather than about the page. Measured on `runs/781-r1-hubspot.json/capture-1`: the
+ * `landmark` sweep's last stop was `"Hub Bot, dialog"`, and the three sweeps that ran while HubSpot's
+ * chat widget was open found 12 chat-widget controls, 2 Hub Bot avatars and 1 link against a census of
+ * 79 — every one reporting `exhausted`, every one correct about where it was.
+ *
+ * **This is a stronger reason to withhold the full-page claim than #887's, and a different one.**
+ * #887 compares trips against a census and can only say the arithmetic does not support the claim;
+ * this says WHICH scope was examined, by name, and it is what a reader needs to go and look.
+ *
+ * Both directions only, for the same reason as `ranOutShortOfTheCensus`: a half-exhausted sweep is
+ * already truncated and `truncatedSweeps` reports it.
+ */
+export function ranOutInsideADialog(input: ConformanceScopeInput): { type: string, dialog: string }[] {
+  const byType = new Map<string, {
+    ranOut: boolean, directions: number, dialog: string | null | undefined,
+  }>();
+  for (const sweep of input.sweeps ?? []) {
+    // NO EARLY RETURN FOR AN ABSENT SCOPE, and the absence of one is deliberate. A guard here was written
+    // first and then removed: mutation showed it could not fail, because the `seen.dialog` filter below
+    // already rejects both `undefined` (a capture from before the field) and `null` (read, no modal).
+    // A guard that cannot fail is not a guard, and leaving it in invites a test that cannot fail either.
+    //
+    // The distinction still matters and is kept where it is OBSERVABLE — `sweepOutcomes` omits the key
+    // entirely for a capture that recorded no scope, rather than reporting `null`, so a reader can tell
+    // "nobody asked" from "asked, no dialog". That is asserted in `dialog-scope.test.ts`.
+    const seen = byType.get(sweep.type)
+      ?? { ranOut: true, directions: 0, dialog: sweep.openDialog };
+    seen.ranOut = seen.ranOut && SWEEP_RAN_OUT.includes(sweep.stop as SweepStop);
+    seen.directions += 1;
+    byType.set(sweep.type, seen);
+  }
+  return [...byType]
+    .filter(([, seen]) => seen.ranOut && seen.directions >= 2 && seen.dialog)
+    .map(([type, seen]) => ({ type, dialog: seen.dialog as string }));
+}
+
 function fullPages(input: ConformanceScopeInput): ConformanceRequirement {
   const truncated = truncatedSweeps(input.sweeps);
   const short = ranOutShortOfTheCensus(input);
+  const sealed = ranOutInsideADialog(input);
+  // SEALED INSIDE A DIALOG IS CHECKED FIRST, because it is the CAUSE and #887's arithmetic is the
+  // symptom: a sweep confined to a modal is usually also trips-short, and reporting the arithmetic when
+  // the capture can name the dialog would bury the answer under the evidence for it.
+  if (truncated.length === 0 && sealed.length > 0) {
+    const detail = sealed.map((s) => `${s.type} (inside "${s.dialog}")`).join(", ");
+    return {
+      number: 2,
+      name: "Full pages",
+      establishes: "Part of the page was examined.",
+      limitation: "A modal dialog was open, and a screen reader's quick navigation is confined to one — "
+        + `so these sweeps ran out of the DIALOG rather than of the page: ${detail}. Their `
+        + "`exhausted` is the screen reader's own answer and it is correct; it is correct about the "
+        + "dialog. What the page holds outside it was not examined." + coverageSentence(input)
+        + " Separately: one viewport only, iframes not entered, and any state reachable without a URL "
+        + "change is part of this same page and was not examined."
+        + renderSentence(input) + activationSentence(input),
+    };
+  }
   // A SWEEP THAT SAID IT RAN OUT, HAVING MADE FEWER TRIPS THAN THE CENSUS COUNTS, CANNOT SUPPORT THE
   // FULL-PAGE SENTENCE — #887. Checked before the truncation branch because a capture can have both, and
   // the affirmative claim must be withheld if EITHER is true. Reported in its own words rather than
