@@ -17,10 +17,25 @@ name: trunk-guard
 # gating. This workflow is not pre-merge gating; it cannot stop a merge that already landed, and does not
 # try to. It is the reactive half: verify, and where it is safe to, fix forward. See
 # `push-trigger-allowlist.test.ts`'s `TRUNK_GATE_ALLOWLIST` for why this is its own closed category,
-# structurally distinct from the lightweight, continue-on-error watchdogs (`board-liveness.yml`,
-# `npm-token-liveness.yml`, `workflow-run-liveness.yml`) that were the only push-to-main precedent before
-# this row -- this workflow DOES build, DOES run the full suite, and is NOT continue-on-error, because a
-# red run here is exactly the signal that drives the revert, not something to observe and move past.
+# structurally distinct from the lightweight, continue-on-error watchdogs that were the only push-to-main
+# precedent before this row -- the `trunkGate`/`trunkBuildTest`/`decideRevert` chain DOES build, DOES run
+# the full suite, and is NOT continue-on-error, because a red run there is exactly the signal that drives
+# the revert, not something to observe and move past.
+#
+# THE WATCHDOGS LIVE HERE TOO, SINCE #901 (The CI Reset, step 1), AS THE SEPARATE `watchdogs` JOB BELOW.
+# Until 2026-09-10 they were three workflows of their own, each firing on every push to main -- 777 runs
+# on the day measured, for three scripts that each take seconds. They ask whether the board editions are
+# still arriving (`board-report.yml` and `board-summary-check.yml`, watched by
+# `scripts/board-schedule-liveness.mjs`), whether the first-publish NPM_TOKEN is still present (#73), and
+# whether the pull request that produced this commit was actually tested (#118). Each is a property of
+# TIME, and each MUST still run on push and never on a cron: GitHub disables scheduled workflows
+# repository-wide after 60 days of inactivity, so a scheduled watchdog dies in the same breath as the jobs
+# it guards, while a push cannot be disabled by inactivity because a push IS the activity. This workflow
+# already runs on every push, so the three steps here cost no workflow runs of their own. They are
+# `continue-on-error`, deliberately: each finding is about the pipeline or a secret, never about the commit
+# that happened to trigger it, and failing the push would blame an unrelated author. `decideRevert` does
+# not depend on this job, so a red watchdog can never drive a revert. `board-liveness.test.ts`,
+# `npm-token-liveness.test.ts` and `workflow-run-liveness.test.ts` pin all of that against this file.
 #
 # UNSCOPED, DELIBERATELY, unlike `ci.yml`'s per-package `ts` job. A push to `main` is a merge, which by
 # definition can touch anything, and pushes to `main` are far less frequent than PR commits -- there is no
@@ -56,6 +71,35 @@ jobs:
   # backstop this row needed is #417 (an interim scheduled sweep, gated on `main`'s tip carrying zero
   # check runs) and #416 (the permanent fix: arm with a real PAT so bot merges stop being invisible to
   # every `pull_request`/`push` trigger in this repository, not just this one).
+
+  # THE WATCHDOGS (#901): three continue-on-error steps, one per liveness script. See the header for why
+  # they are here rather than in `nightly.yml`, and why `decideRevert` must never depend on this job.
+  watchdogs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write          # one comment per stale spell, on the report issue (#20) or on #73
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - name: Was the pull request that produced this commit actually tested? (#118)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/workflow-run-liveness.mjs --sha=${{ github.sha }}
+      - run: npm ci --ignore-scripts
+      - name: Are the board editions still arriving? (#272, #590)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/board-schedule-liveness.mjs --post --issue=20
+      - name: Is NPM_TOKEN still there? (#73)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.ORG_SECRETS_READ_TOKEN || github.token }}
+        run: node scripts/npm-token-liveness.mjs --post --issue=73
 
   # THE ONLY QUESTION THIS JOB ANSWERS: did this push silently revert work already on main. `trunkBuildTest`
   # below answers the OTHER half (is main's new tip actually green); `decideRevert` decides whether either
