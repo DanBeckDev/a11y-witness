@@ -243,3 +243,10 @@ Upgrading guidepup is an evidence change: run `npm run evidence:check` and expec
   its `runsRoot()`). Both names are honoured, because both were already in use before either script read
   the other's spelling; set either when `runs/` needs to point somewhere other than `<repo>/runs`, most
   commonly a machine where it is mounted or symlinked from a different path than this checkout's default.
+- **`REAL_CORPUS_ROOT` points the real-page corpus alone somewhere specific**, overriding the default of
+  `<runsRoot()>/real-page-corpus`. Leave it unset and the real-page corpus follows `RUNS_ROOT` like every
+  other root. **The sentence above was not true for this root until #930**: `realCorpusRoot()` resolved
+  `runs/real-page-corpus` against the repo root directly, so moving `runs/` relocated the dataset and the
+  captures and left the real-page corpus behind — and `capture-real-pages.mjs` writes through it, so on a
+  machine with `runs/` mounted elsewhere, captures landed in the wrong tree. Found by pointing `RUNS_ROOT`
+  at an empty directory and watching `lab:full-page-claims` report 28 captures from the real corpus.
