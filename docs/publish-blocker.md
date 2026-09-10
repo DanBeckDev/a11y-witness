@@ -105,7 +105,7 @@ and package names, not the org-level secret, and #72's own configuration step is
    permission**, and store it as the organisation secret `ORG_SECRETS_READ_TOKEN`. This is a much smaller
    credential than `NPM_TOKEN` — it can list secret *names*, not values, and it cannot publish anything —
    but it is still a standing credential, so creating it is a deliberate decision and not something this
-   row assumes. Without it, `npm-token-liveness.yml` reports `CANNOT_TELL` on every run (see below), which
+   row assumes. Without it, the token watchdog reports `CANNOT_TELL` on every run (see below), which
    is honest but requires a human to run the check by hand instead.
 
 ## What is already built, and what it proves
@@ -118,10 +118,11 @@ npm run npm-token:check              # what it can tell today, from wherever you
 npm run npm-token:check -- --post    # and comment once on #73 if it is a real finding
 ```
 
-- **Runs on `push`, never on a schedule** (`.github/workflows/npm-token-liveness.yml`) — the same reason
-  `board-liveness.yml` does: GitHub disables a scheduled workflow after 60 days without repository
-  activity, silently, so a watchdog that is itself scheduled has the disease it watches for. A push cannot
-  be disabled by inactivity, because a push *is* the activity.
+- **Runs on `push`, never on a schedule** — as a `continue-on-error` step in `.github/workflows/trunk-guard.yml`'s
+  `watchdogs` job since #901 (it was a workflow of its own, `npm-token-liveness.yml`, until 2026-09-10). The
+  reason is the same one the board watchdog has: GitHub disables a scheduled workflow after 60 days without
+  repository activity, silently, so a watchdog that is itself scheduled has the disease it watches for. A
+  push cannot be disabled by inactivity, because a push *is* the activity.
 - **Before 2026-11-20**, any answer is informational — the token still has a legitimate reason to exist.
 - **On or after 2026-11-20**, `NPM_TOKEN` present is the finding #73 describes, and the check refuses to
   guess which of the three causes it is (never configured, configured but left behind, or nobody looked)
