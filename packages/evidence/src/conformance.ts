@@ -647,9 +647,11 @@ function renderSentence(input: ConformanceScopeInput): string {
  * key may not reach at all — #800's finding, and the reason `formControl` and `f` disagree — so a sweep
  * can legitimately make fewer trips than the census has elements.
  *
- * **Which is why this WITHHOLDS a claim rather than making one.** Requirement 2's full-page sentence is an
- * affirmative assertion that the page ran out; withholding it needs doubt, not proof, and that asymmetry
- * is the whole reason this direction is safe. The numbers are named so a reader can weigh them.
+ * **Which is why this WITHHOLDS a claim rather than making one. Withholding needs doubt; asserting needs
+ * proof.** Requirement 2's full-page sentence is an affirmative assertion that the page ran out, and that
+ * asymmetry is the whole reason this direction is safe: being wrong here costs a claim nobody was owed,
+ * while being wrong the other way puts a completeness sentence over a page that was never read. The
+ * numbers are named so a reader can weigh them rather than take the verdict.
  *
  * Only sweeps where BOTH directions ran out are considered — a half-exhausted sweep is already truncated
  * and `truncatedSweeps` reports it.
