@@ -535,14 +535,37 @@ export function truncatedSweeps(sweeps: readonly SweepOutcome[] = []): SweepOutc
  * Both directions are recorded on one mark (`prevStop`/`nextStop`) because a sweep walks backwards and
  * forwards from the cursor, and either can truncate independently.
  */
+/** The `sweep` mark's shape, named once because two functions here read it. */
+type SweepMark = {
+  event?: string; type?: string; prevStop?: string; nextStop?: string; truncated?: boolean;
+  stop?: string; prevTrips?: number; nextTrips?: number; found?: number;
+  scope?: { openDialog?: string | null };
+};
+
+/**
+ * ONE DIRECTION OF ONE SWEEP, as an outcome.
+ *
+ * Split out of `sweepOutcomes` when #897's `scope` took it one branch over ESLint's complexity budget.
+ * That budget was telling the truth: the parent decides which KIND of mark it is looking at, and this
+ * decides what one direction of a sweep mark carries. Two things.
+ *
+ * Every field is carried only when the capture actually recorded it. A missing key and a `null` are
+ * different answers — `openDialog: null` is "read, and there was no modal", where absence is "nobody
+ * asked" — and collapsing them is the distinction the field exists for.
+ */
+function directionOutcome(m: SweepMark, stop: string, trips: number | undefined): SweepOutcome {
+  return {
+    type: String(m.type ?? "unknown"), stop,
+    ...(typeof trips === "number" ? { trips } : {}),
+    ...(typeof m.found === "number" ? { found: m.found } : {}),
+    ...(m.scope ? { openDialog: m.scope.openDialog ?? null } : {}),
+  };
+}
+
 export function sweepOutcomes(diagnostics: readonly unknown[] = []): SweepOutcome[] {
   const out: SweepOutcome[] = [];
   for (const mark of diagnostics) {
-    const m = mark as {
-      event?: string; type?: string; prevStop?: string; nextStop?: string; truncated?: boolean;
-      stop?: string; prevTrips?: number; nextTrips?: number; found?: number;
-      scope?: { openDialog?: string | null };
-    };
+    const m = mark as SweepMark;
     // The focus probe is not a quick-nav sweep, but it truncates the same way — it stops after a fixed
     // number of Tab presses — and the consequence is identical: content past that point was never
     // examined. Reported as a sweep outcome so 2.1.2 gets the same `cantTell` treatment as every other
@@ -561,20 +584,10 @@ export function sweepOutcomes(diagnostics: readonly unknown[] = []): SweepOutcom
       continue;
     }
     if (m?.event !== "sweep") continue;
+    // Carried through rather than recomputed downstream: this is the one place that reads the sweep
+    // mark, and a second reader of the same fields is how two answers to one question start.
     for (const [stop, trips] of [[m.prevStop, m.prevTrips], [m.nextStop, m.nextTrips]] as const) {
-      if (stop !== undefined) {
-        out.push({
-          type: String(m.type ?? "unknown"), stop,
-          // Carried through rather than recomputed downstream: this is the one place that reads the
-          // sweep mark, and a second reader of the same fields is how two answers to one question start.
-          ...(typeof trips === "number" ? { trips } : {}),
-          ...(typeof m.found === "number" ? { found: m.found } : {}),
-          // Carried only when the capture actually recorded a scope. `"scope" in m` rather than a
-          // truthiness test, because `openDialog: null` is a real answer — the page was read and there
-          // was no modal — and collapsing it into "nobody asked" is the distinction this field exists for.
-          ...(m.scope ? { openDialog: m.scope.openDialog ?? null } : {}),
-        });
-      }
+      if (stop !== undefined) out.push(directionOutcome(m, stop, trips));
     }
   }
   return out;
