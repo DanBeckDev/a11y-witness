@@ -1,4 +1,25 @@
-name: coverage
+# nightly -- the checks that are properties of TIME, not of a diff, run once a day (#901, The CI Reset, step 1).
+#
+# WHY THIS FILE EXISTS. Measured 2026-09-09 UTC: 3,317 workflow runs for 193 merges. `ready-label-audit`
+# alone was 1,040 of them with zero successes -- it re-fired on every label event and cancelled itself
+# (#862) -- and four push-triggered checks were another 777. None of the five asks a question whose answer
+# changes when a commit lands. So:
+#
+# - `coverage` (below, unchanged) was already nightly; it moved here from `coverage.yml` so there is ONE
+#   scheduled file to read.
+# - `ready-audit` runs `npm run ready:audit` once a night instead of hourly plus on every issue event.
+#   `ready-label-audit.yml` is DELETED, not renamed: its hourly-plus-event shape was the livelock, and its
+#   findings are the tracker owner's, who reads them once a day and runs the script by hand for a same-day
+#   answer. Do not re-add an `issues:` trigger here; that is the 1,040-run shape.
+# - The three liveness watchdogs (token, board editions, workflow-run) are NOT here. They must run on push,
+#   never on a cron, because GitHub disables scheduled workflows repository-wide after 60 days of
+#   inactivity and a scheduled watchdog dies with the thing it watches -- `board-liveness.test.ts` pins
+#   this. They are three continue-on-error steps in `trunk-guard.yml`'s `watchdogs` job, which already
+#   runs on every push to main, so they cost no workflow runs of their own.
+# - `board-report.yml` and `board-summary-check.yml` stay separate: they are gated on London's clock and
+#   `board-schedule.test.ts` pins the hours.
+#
+name: nightly
 
 # NIGHTLY COVERAGE, OFF THE PR PATH -- chairman's direction, 2026-09-06, follow-up to #133/#140. `npm run
 # coverage` re-runs the WHOLE suite under c8 against `.c8rc.json`'s 78% threshold, measured at 154s of
@@ -73,3 +94,28 @@ jobs:
             --log=coverage-output.log \
             --run-url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}")
           gh issue comment 169 --body "$BODY"
+
+  ready-audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main, fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci --ignore-scripts
+      - name: Audit the tracker's labels once a day
+        env:
+          A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          if [ -n "$A11IGN_BOT_TOKEN" ]; then
+            export GH_TOKEN="$A11IGN_BOT_TOKEN"
+          else
+            export GH_TOKEN="$GITHUB_TOKEN"
+            echo "::warning::A11IGN_BOT_TOKEN is not set -- GITHUB_TOKEN cannot resolve a user-owned ProjectV2, so the board-membership check will report as unable to run. See #416."
+          fi
+          npm run ready:audit
