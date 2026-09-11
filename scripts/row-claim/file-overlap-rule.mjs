@@ -26,7 +26,7 @@
 // must not block every other claim in the queue.
 import { REPO } from "../repo-identity.mjs";
 import { gh, lookup } from "../merge-guard/lookups.mjs";
-import { declaredRegionFiles } from "../region-paths.mjs";
+import { declaredRegionFiles, regionCovers } from "../region-paths.mjs";
 
 /** @type {(path: string) => boolean} */
 const isChangeset = (path) => path.startsWith(".changeset/");
@@ -34,7 +34,8 @@ const isChangeset = (path) => path.startsWith(".changeset/");
 /**
  * THE VERDICT, PURE.
  *
- * @param {string[]} myFiles this row's own declared Region paths (changeset entries already excluded by
+ * @param {string[]} myFiles this row's own declared Region paths -- files, and (#941) directory prefixes
+ *   ending in `/` (changeset entries already excluded by
  *   the caller is NOT required -- this function excludes them itself, so either side can pass a raw list)
  * @param {{ number: number, files: string[] }[]} otherPrFiles every OTHER open PR and its changed files
  * @returns {{ reason: string | null, emptyOtherPrs: number[] }}
@@ -51,7 +52,8 @@ export function fileOverlapReason(myFiles, otherPrFiles) {
       emptyOtherPrs.push(other.number);
       continue;
     }
-    const overlap = theirs.filter((p) => mine.has(p));
+    // #941: an entry ending in `/` is a directory the row declared, and it covers every file under it.
+    const overlap = theirs.filter((p) => [...mine].some((entry) => regionCovers(entry, p)));
     if (overlap.length > 0) {
       return {
         emptyOtherPrs,
@@ -70,8 +72,8 @@ export function fileOverlapReason(myFiles, otherPrFiles) {
  * quote of someone else's file). `null` on a failed lookup OR a body with no Region section at all -- the
  * caller (`sessionEligibilityReason`) already treats a `null` result as "cannot ask" and skips the
  * overlap check rather than refusing, so a genuinely Region-less row is never blocked over a comparison
- * it cannot make. `[]` for a Region section that names no source path (prose, bare directories with no
- * file extension) -- a real, comparable answer, distinct from having nothing to read at all.
+ * it cannot make. `[]` for a Region section that names no source path (prose only) -- a real, comparable
+ * answer, distinct from having nothing to read at all. A standalone directory line is a prefix since #941.
  *
  * @param {number} issueNumber
  * @param {{ run?: (args: string[]) => string }} [deps]
