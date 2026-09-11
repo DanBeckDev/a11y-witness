@@ -16,8 +16,63 @@
 // `reportReachability`) precisely so importing it would not become the default; reaching into it for one
 // regex would have quietly defeated that.
 
+// The one import, and it stays leaf-shaped: `git-env.mjs` imports nothing itself, so `row-claim.mjs`'s
+// pre-install import graph gains no package specifier. Every git spawn in this repo scrubs `GIT_*`
+// (`git-spawn-classification.test.ts`), including a read-only one: an inherited `GIT_DIR` would have this
+// module list another repository's root files and report on them as though they were ours.
+import { execFileSync } from "node:child_process";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { sandboxGitEnv } from "./git-env.mjs";
+
 /** Repo-relative source paths named anywhere in a row's prose — its Region, and whatever else it cites. */
 export const PATH_IN_PROSE = /(?:^|[\s`"'(])((?:packages|scripts|docs|\.github)\/[A-Za-z0-9/_.-]+\.[A-Za-z]{2,4})/g;
+
+/**
+ * #975: A ROOT-LEVEL FILE NAMED IN A REGION IS A DECLARATION -- `package.json`, `CLAUDE.md`, `README.md`.
+ *
+ * `PATH_IN_PROSE` needs one of four prefixes, so a Region naming the repository's most-edited files declared
+ * NOTHING for them and the claim-time overlap check was blind to them. Measured on 2026-09-11: 10 of 66 open
+ * rows named a root file the parser dropped, found while matching #921's Region to PR #973.
+ *
+ * ANCHORED TO THE TREE, not to "any word with a dot". A candidate counts only when `origin/main` has a file
+ * of that name at the root, so `evidence.json` in prose about a capture declares nothing, while
+ * `eslint.config.js` does. That is the same discipline `DIRECTORY_ITEM` has: a rule a person can check against
+ * something real, rather than a shape that happens to look like a path.
+ */
+const ROOT_FILE_CANDIDATE = /(?:^|[\s`"'([])([A-Za-z0-9_][A-Za-z0-9_.-]*\.[A-Za-z0-9]{1,10})(?=$|[\s`"',.;:)\]])/g;
+
+/** @type {Set<string> | null} */
+let rootFiles = null;
+
+/**
+ * The files `origin/main` has at the repository root, read once per process.
+ *
+ * `origin/main` rather than the working tree: a Region declares a file of THIS project, and an untracked
+ * scratch file beside the checkout is not one. Falls back to `HEAD` (a clone with no `origin/main` ref, which
+ * a fresh worktree can be mid-fetch), then to the empty set -- a root file then declares nothing, exactly as
+ * before this row, rather than throwing inside a claim check.
+ * @returns {Set<string>}
+ */
+export function rootFilesOnMain() {
+  if (rootFiles) return rootFiles;
+  const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+  for (const ref of ["origin/main", "HEAD"]) {
+    try {
+      const listing = execFileSync("git", ["ls-tree", ref, "--"],
+        { cwd: repo, env: sandboxGitEnv(), encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+      const names = listing.split("\n")
+        .filter((line) => line.includes(" blob "))
+        .map((line) => line.slice(line.indexOf("\t") + 1).trim())
+        .filter(Boolean);
+      if (names.length > 0) return (rootFiles = new Set(names));
+    } catch (error) {
+      void error; // an unreadable ref is "cannot say", and the next one may answer
+    }
+  }
+  return (rootFiles = new Set());
+}
 
 /**
  * Every repo-relative path named anywhere in an issue's body text, deduplicated. `.matchAll` needs a
@@ -117,18 +172,25 @@ export function regionCovers(entry, file) {
  * #941: a standalone directory item is declared as that PREFIX (`packages/control/ansible/`), after the
  * files -- see `DIRECTORY_ITEM` and `regionCovers`. It used to vanish, so a Region of only directories
  * declared the empty set and overlap-checked as touching nothing.
+ *
+ * #975: so is a ROOT-LEVEL file the tree has (`package.json`) -- see `ROOT_FILE_CANDIDATE`.
  * @param {string} body
+ * @param {{ rootFiles?: Set<string> }} [options] the tree's root files; defaults to `origin/main`'s, and a test
+ *   passes its own so the rule can be checked without the repository it runs in
  * @returns {string[] | null}
  */
-export function declaredRegionFiles(body) {
+export function declaredRegionFiles(body, { rootFiles: known = rootFilesOnMain() } = {}) {
   const section = extractRegionSection(body);
   if (section === null) return null;
+  // #975: root-level files, which have no prefix for `PATH_IN_PROSE` to match. Anchored to the tree: a
+  // candidate declares only when `origin/main` has a file of that name at the root.
+  const roots = [...section.matchAll(ROOT_FILE_CANDIDATE)].map((m) => m[1]).filter((name) => known.has(name));
   const directories = section.split(/\r\n|\r|\n/)
     .flatMap((line) => line.split(LIST_SEPARATOR))
     .map((item) => DIRECTORY_ITEM.exec(item.trim())?.[1])
     .filter((path) => path !== undefined)
     .filter(isTreePath);
-  return [...new Set([...regionPathsFromBody(section), ...directories])];
+  return [...new Set([...regionPathsFromBody(section), ...directories, ...roots])];
 }
 
 /**
