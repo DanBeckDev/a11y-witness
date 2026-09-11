@@ -434,6 +434,38 @@ const LANDMARK_ROLES = ["main", "navigation", "banner", "contentinfo", "compleme
  * So the oracle is counted HERE, from the accessibility tree, over the roles NVDA actually visits.
  * Deliberately a separate bucket from `dom.formField` rather than a widening of it: that count is load
  * bearing for 2.1.2 and changing it would move a denominator this is not about.
+ *
+ * ## #844: THIS LIST IS NOT THE FIRST PROBLEM, AND WIDENING IT IS AIMED THE WRONG WAY
+ *
+ * #800 asked whether IKEA serves 265 form controls or the sweep walks more than is there, and the obvious
+ * reading was that this bucket is too narrow. **Measured on the first captures to carry
+ * `structureCensus.readAt` (#854), it is not.** The DOM census sitting beside this one is the
+ * discriminator:
+ *
+ *     capture       DOM formField    AX formControl    sweep found    heading ratio
+ *     ikea                     51               136            270             1.16
+ *     salesforce                7                18             27             1.11
+ *     tfl                    1392                15             34             1.00
+ *     w3.org                   15                15             15             1.00
+ *
+ * **On ikea and salesforce this bucket is already WIDER than the DOM's form elements** — 136 against 51.
+ * Widening it moves the denominator further from the page, not closer, so the row's first option is
+ * refused by measurement rather than by preference.
+ *
+ * **And the moment comes first, which is why no correction to this list could have settled it.** The
+ * census is read at 28–67 s; `formField` walks at 37–280 s and activates every control it finds while it
+ * walks. `heading` is the control — no `onItem`, and a heading is a heading to every instrument — and its
+ * ratio is exactly 1 on w3.org and tfl while `formField` reads 2.27 on tfl. **A gap that survives a
+ * still page is not the page changing, and it is not this list being short.**
+ *
+ * **The decision, recorded here because this is where the next reader will come looking:** neither
+ * widening this list (option 1, refuted above) nor a per-role breakdown (option 2, which costs nothing
+ * and attributes nothing) answers the question. **Only recording the role each announcement came from can
+ * tell a narrow bucket from a growing page**, because only that compares the two bucket by bucket. That is
+ * its own row and it is the successor to this one.
+ *
+ * Until then `sweep-vs-census.mjs` issues no verdict from a comparison the `heading` control has not
+ * cleared, which is #844's acceptance 2 and 4.
  */
 /** @type {string[]} */
 const FORM_CONTROL_ROLES = [
@@ -1105,6 +1137,43 @@ const DOM_CENSUS_EXPRESSION = `(() => {
           && !el.hasAttribute("hidden") && !el.hasAttribute("disabled")
           && (typeof el.checkVisibility !== "function" || el.checkVisibility())
           && (typeof el.closest !== "function" || !el.closest("[inert]"))).length,
+      // WHAT THE QUICK-NAVIGATION CURSOR IS SEALED INSIDE, if anything -- #897.
+      //
+      // A screen reader's quick navigation is confined to an open modal, and NVDA's "no next link" is
+      // then TRUE about the dialog rather than about the page. Measured on
+      // \`runs/781-r1-hubspot.json/capture-1\`: the \`landmark\` sweep's last stop was literally
+      // "Hub Bot, dialog", and the three sweeps that ran while it was open found 12 chat-widget
+      // controls, 2 Hub Bot avatars and 1 link against a census of 79 -- each reporting \`exhausted\`,
+      // each correct about the dialog. Nothing on the record said which they had examined.
+      //
+      // A STRING, NEVER A COUNT, and that is load-bearing rather than stylistic. \`censusElementCounts\`
+      // and \`censusFromDiagnostics\` build the element counts from every NUMERIC field on a census mark
+      // except two, so a numeric \`openDialogCount\` would arrive downstream as an element type. A label
+      // cannot, and it is also the more useful thing: "Hub Bot" names the dialog a reader has to go and
+      // look at, where a 1 only says one exists.
+      //
+      // MODAL ONLY. A non-modal dialog does not seal quick navigation, so reporting one would mark
+      // sweeps that were never confined -- the false-accusation direction this project pays most for.
+      // \`<dialog open>\` without \`modal\` is deliberately excluded for the same reason: only
+      // \`showModal()\` sets \`:modal\`, and only that form is inert-backed.
+      openDialog: (() => {
+        const modal = all("[role='dialog'][aria-modal='true'], [role='alertdialog'][aria-modal='true']")
+          .find((el) => typeof el.checkVisibility !== "function" || el.checkVisibility())
+          || [...document.querySelectorAll("dialog")]
+            .find((el) => typeof el.matches === "function" && el.matches(":modal")
+              // RENDERED on this branch too, and the symmetry is the point rather than the case.
+              // \`:modal\` means the dialog is in the top layer, which normally implies it renders — but a
+              // \`showModal()\` dialog given \`display: none\` afterwards stays \`:modal\` and shows nothing,
+              // and a check that is explicit on one branch and implied on the other is a difference the
+              // next reader has to reason about. It costs nothing to not make them.
+              && (typeof el.checkVisibility !== "function" || el.checkVisibility()));
+        if (!modal) return null;
+        // The dialog's own accessible name where it has one, else a shape a human can find it by.
+        return ((modal.getAttribute("aria-label") || "").trim()
+          || (modal.getAttribute("aria-labelledby") || "").trim()
+          || (modal.getAttribute("id") || "").trim()
+          || modal.tagName.toLowerCase()).slice(0, 80);
+      })(),
     };
 })()`;
 

@@ -1119,3 +1119,78 @@ the group, unconditionally, with no health filter -- so a dead box there is disp
 pooling job and takes the run down with it. Measured 2026-09-07: `capture-only` died on *"The worker at
 http://<a11y-worker-10>:8765 did not answer /health"* after the job had already started.
 
+## Guard triage 4 of 6: the tracker, board and label guards, and why each existed
+
+**The CI Reset (10 September 2026) retired the nine-session org shape these guards policed** --
+`session:dispatcher`, `session:orchestrator`, `session:worker-audit`, `session:worker-contracts` and
+`session:worker-config` are gone, and the four roles left are product-manager, eng-capture, eng-judge and
+fleet. A guard that checks a label nobody applies cannot fail, which is worse than no guard: it is a green
+check nobody can interpret. Each one had a real incident behind it, and the incident is still true -- only
+the org shape it was policing is retired. Recorded here per the chairman's condition on the deletion,
+rather than let the incidents disappear with the files.
+
+**`board-style.test.ts`** (#20, #159, #284) -- pinned the board body's word cap (925 words) and a curated
+verb/style list, after #576 sent the body over cap and turned `trunk-guard` red until reverted. The board
+report survives with one smoke test (below); the style policy is now a human editorial judgement, not a
+build dependency.
+
+**`board-markdown.test.ts`** (#159, #827) -- pinned `toHtml`/`inline`'s Markdown-to-board rendering rules.
+Retired with the rest of the board content-policing family; the render mechanism itself is covered by the
+new smoke test.
+
+**`board-schedule.test.ts`** (#590) -- pinned `board-report.yml`/`board-summary-check.yml`'s cron
+expressions against the London hour claimed in the workflow's own logic, plus a retired-21:00-entry ghost
+check. The underlying schedule is unchanged by this row (#901 explicitly kept it), but asserting the
+workflow's *internal* time-consistency at the pull-request level is the same shape as the other retiring
+board-content pins: a fact about the board's own operation, not about whether the code that shipped works.
+
+**`board-summary-origin.test.ts`** (#22, #131, #159) -- pinned that the 21:00 (later 07:45) summary check
+reads `origin/main`, never a working tree, after a summary was found reporting on state that did not exist
+as far as the edition was concerned.
+
+**`board-achievement-retirement.test.ts`** (#284, #827) -- pinned the three-edition rule for how long an
+achievement stays in the board body before moving to the record.
+
+**`board-achievement-staleness.test.ts`** (#90) -- pinned that an authored capability claim in the board's
+own §3 gets re-checked rather than trusted forever once written.
+
+**`board-record.test.ts`** (#576, #577, #806) -- pinned that writing a board achievement record refuses at
+write time when it would displace one, after the word cap incident above cost a red `trunk-guard` until
+reverted.
+
+**`board-report.test.ts`** (#9) -- the detailed render-section test for `scripts/board-report.mjs`,
+replaced by a single smoke test (`board-report-smoke.test.ts`) proving the renderer produces output
+without throwing. The detail this file asserted (individual section wording, pluralisation, edge counts)
+is now a human's read of the rendered document, not a build dependency.
+
+**`audit-citation-index.test.ts`** and **`audit-findings-dispositioned.test.ts`** -- pinned that
+`docs/architecture-audit.md`'s frozen findings were each dispositioned (closed, or cited by a test that
+would fail if the finding recurred) somewhere the audit's own freeze policy could not reach. The audit
+document and its disposition-tracking apparatus are a tracker mechanism from the nine-session org; the
+findings themselves, where still relevant, live on as ordinary GitHub issues under the new org.
+
+### Five candidates named in the plan, checked and NOT deleted
+
+`workflow-lane-check.test.ts`, `a-hold-means-cannot-merge.test.ts`, `pr-hold.test.ts`,
+`merge-guard-pr-hold-rule.test.ts` and `arm-pr.test.ts` all name "hold", "lane" or "session-label" --
+families this row's own plan lists as retiring. Read individually rather than deleted on the name match,
+because each tests a mechanism **currently, actively wired into a required CI job today**, not merely a
+retired label taxonomy:
+
+- `workflow-lane-check.mjs` runs as its own step inside `ci.yml`'s `mergeSafety` job, right now, on every
+  pull request.
+- `merge-guard-pr-hold-rule.test.ts` covers one rule composed into `merge-guard.mjs`'s
+  `mergeSafetyVerdict`, which `mergeSafety` calls directly (`node scripts/merge-guard.mjs --ci-gate`).
+  `mergeSafety` is removed as a job by #902 -- not yet merged at the time of this row -- and only then
+  does this rule's test stop guarding something live.
+- `pr-hold.test.ts` and `a-hold-means-cannot-merge.test.ts` between them are the **only** test coverage
+  for `pr-hold-state.mjs`'s `armVerdict`/`armabilityOf`/`disarmVerdict` -- the exact functions
+  `auto-arm.yml`'s "Enable auto-merge... unless held" step calls on every arm attempt.
+- `arm-pr.test.ts` covers `arm-pr.mjs`'s `armDecision`, invoked by `auto-arm.yml` on every PR armed
+  (`node scripts/arm-pr.mjs --pr=... --repo=...`). `claim-provenance.mjs` (#848) is a durable *second*
+  answer to "who worked this row" -- it does not make `arm-pr.mjs` itself dead code today.
+
+Deleting any of the five would leave a live, merge-blocking mechanism with no test at all until the row
+that retires its *calling* workflow lands. Left in place; a future row may retire them once #902 (and
+whatever eventually replaces `pr-hold`/`arm-pr`'s labeling for the new four-role org) actually ships.
+

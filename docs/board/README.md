@@ -251,6 +251,8 @@ scheduled has the disease it watches for, because the disable is repository-wide
 disabled by inactivity **because a push IS the activity** — so the one condition that silences the
 schedule is the one condition that silences this check, and in that condition a repository nobody has
 touched for sixty days having no board edition is not a defect to report.
-`board-liveness.test.ts` pins the absence of a `schedule:` key in `board-liveness.yml`, because moving it
-onto a cron would look like tidying three workflows into a neater set.
+`board-liveness.test.ts` pins the absence of a `schedule:` key in `trunk-guard.yml`, where the watchdog has
+been a step of the `watchdogs` job since #901 (until 2026-09-10 it was a workflow of its own,
+`board-liveness.yml`, firing once per push alongside two siblings — 777 runs a day for three scripts that
+take seconds). Moving it onto a cron would look like tidying, and would remove the only reason it works.
 
