@@ -13,6 +13,35 @@
 export const SATISFIED = new Set(["success", "skipped", "neutral"]);
 
 /**
+ * A CANCELLED RUN REACHED NO VERDICT, so it is a WAIT rather than a failure -- #1007.
+ *
+ * MEASURED on #1005 at 2026-09-11T23:14Z, and it cost two claims in one hour. `gh pr ready` triggers CI,
+ * `cancel-in-progress` kills the run already going, and the cancelled run's `gate` job leaves a check-run
+ * whose conclusion is `cancelled`. That was the NEWEST `gate` on the head -- the replacement run's had not
+ * reported yet -- so #902's newest-per-name rule was working exactly as designed and could not help:
+ *
+ *     newest per name: … gate=completed/cancelled, ts / run=in_progress/null …
+ *     REASONS:         ["STILL RUNNING: ts / run…", "FAILING: gate (cancelled)."]
+ *
+ * `row-claim` turned that into "RED (a required check is failing)" and refused the author's next claim,
+ * while `gh pr checks` on the same PR showed 6 success, 8 skipped, 1 in progress and NO failure -- it does
+ * not list a cancelled check-run at all. Two tools, two answers, and the one an engineer reaches for first
+ * is the one that hides it.
+ *
+ * NOT `SATISFIED`, WHICH IS THE TEMPTING WRONG FIX AND STRICTLY WORSE THAN THE BUG. Putting `cancelled`
+ * beside `success` would let a merge proceed on a required context that never decided anything. The
+ * distinction this module's own header draws is the one that matters: never-ran, still-running and failing
+ * are different states because each sends the reader to a different fix. A cancelled context sends them
+ * where a still-running one does -- ask again, the replacement run is already going -- so it is reported
+ * under that sentence, with its own reason attached so nobody mistakes it for a job still in flight.
+ *
+ * `ci.yml`'s `gate` already carries the matching half (`if: always() && !cancelled()`, #902): a superseded
+ * run should report nothing rather than a red. This is that same ruling applied to the READER, for the
+ * cancelled conclusions already sitting on heads.
+ */
+const NO_VERDICT = "cancelled";
+
+/**
  * THE NEWEST RUN PER NAME -- #902, and it is a correctness fix rather than tidying.
  *
  * GitHub keeps every check run for a head, so one name appears once per workflow run: a cancelled or
@@ -57,8 +86,13 @@ export function checkReasons(pr, required, runs) {
   const latest = newestPerName(runs);
   const byName = new Map(latest.map((run) => [run.name, run]));
   const missing = required.filter((context) => !byName.has(context));
-  const unfinished = latest.filter((run) => run.status !== "completed").map((run) => run.name);
-  const failing = latest.filter((run) => run.status === "completed" && !SATISFIED.has(run.conclusion ?? ""))
+  // #1007: a cancelled run joins the WAIT, annotated, and is kept out of `failing` so it cannot be both.
+  const inFlight = latest.filter((run) => run.status !== "completed").map((run) => run.name);
+  const superseded = latest.filter((run) => run.status === "completed" && run.conclusion === NO_VERDICT)
+    .map((run) => `${run.name} (cancelled: superseded, so it reached no verdict)`);
+  const unfinished = [...inFlight, ...superseded];
+  const failing = latest.filter((run) => run.status === "completed"
+    && run.conclusion !== NO_VERDICT && !SATISFIED.has(run.conclusion ?? ""))
     .map((run) => `${run.name} (${run.conclusion})`);
 
   // `.filter(Boolean)` does not narrow `(string | false)[]` to `string[]` -- a well-known TS gap, not a
