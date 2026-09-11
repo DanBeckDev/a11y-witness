@@ -108,8 +108,9 @@ worked, and the session running it had predicted it would not, so the reasons ar
   commit, so two worktrees on two commits means one of them is refused and which depends on who deployed
   last. **One driver for all of it.**
 - **A fresh worktree has NO corpus** — `runs/` is gitignored — so `check-signals`, `rules:gate` and
-  `verify.corpus.test.ts` all skip there. The pre-push hook skips them *loudly*, which is honest and still
-  means a delegated change gets a weaker gate than the main checkout's. Symlink `runs/` and `.venv` in, and
+  `verify.corpus.test.ts` all skip there. The pre-push hook does not run the first two at all since #911
+  and says so unconditionally, which is honest and still means a delegated change gets a weaker gate than
+  the main checkout's. Symlink `runs/` and `.venv` in, and
   run the corpus-dependent gates at merge time where they are real.
 - **Do NOT drive the fleet and review diffs at the same time.** That is how a progress file describing a
   FINISHED run was read while a new one was a minute old — see the diagnostics table above; it cost 12
@@ -999,11 +1000,47 @@ Review before pushing, not after: a review that lands after the commit becomes a
 
 ### The pre-push hook's scope, verbatim
 
-The pre-push hook holds only what costs nothing: measured at ~5 s, no worker, no Codex, no network. It
-SKIPS the corpus-dependent checks loudly when `runs/` is absent rather than passing quietly, because a
-check that reports success having examined nothing is how "verified" comes to mean "unexamined".
-`A11Y_SKIP_VERIFY=1 git push` overrides it, and says so. The worker- and Codex-dependent gates stay
-release-time: a 75-minute check on `git push` gets the hook deleted within a day.
+**Three checks, since #911 (2026-09-11, step 4 of the CI Reset). The hook is a COURTESY; CI is the gate.**
+
+| | |
+|---|---|
+| **lint** | the paths this branch changed against `origin/main`, PLUS anything dirty in the tree. By PATH and not by changed PACKAGE: `changed-packages.mjs` lists `packages/<name>` directories only, so a `scripts/`-only change — the most common shape of a row here — scopes to the EMPTY list, and a check handed an empty population reports clean about a population it never read. And the tree as well as the diff, because every note in the hook says the gate reads the TREE rather than the commits being pushed: a list built from `origin/main...HEAD` alone lints nothing on the first push of a new branch |
+| **typecheck** | the WHOLE program, and the reason is the mechanism rather than a preference. tsc's unit is the program, not the file. Measured at `40e36ba4`: the root program is 953 files (534 `.test.ts`, 130 top-level `scripts/`); `tsc -p packages/<name>` is **0** test files, because every package tsconfig carries `"exclude": ["src/**/*.test.ts"]`; and no package program contains top-level `scripts/`. So "typecheck the changed packages" drops 664 of 953 and reports clean — the root tsconfig's own comment records that regression happening once already, 25 test files silently unchecked |
+| **the leak scan** | `tracked-source-leak-guard.test.ts` and `tracked-prose-leak-guard.test.ts`, by name. **The one check whose value is being BEFORE the push rather than before the merge**: this repository is public, so a pushed branch is visible the moment it lands. It was two of the 22 files in `guards:sweep`, which is why "keep the leak scan and delete the sweep" would, taken literally, have deleted it |
+
+**What went, and why none of it is a reduction in what gets checked:** the 22-file tree-wide sweep, an
+`.mjs` parse check, a board-guard glob and a changeset gate all run again in CI minutes later, on the
+whole tree. Wall clock at `40e36ba4`: the sweep alone was 30.22 s of about 39 s; lint 3.93 s, typecheck
+4.86 s, the two leak guards 1.39 s. The hook is about 10 s now, and **75% of that saving is the sweep**.
+
+**`training:check-signals` and `rules:gate` are not run here at all, and the hook says so unconditionally**,
+naming the lab job that answers each. They read the corpus in gitignored `runs/`, and the 2026-09-06 ruling
+is that such a gate gives a VERDICT only when the agent driving the fleet and the lab runs it — in this
+hook it could only ever have been a pre-check. Unconditional matters: the old form was gated on `runs/`
+being present, so it was SILENT on exactly the machine holding a stale copy, which is the machine that most
+needs telling. One measured here was 89 hours old.
+
+**The fast/full split is gone with it, and it had a hole worth recording**: the BOARD-ONLY path ran the
+board guards instead of lint and typecheck, and never ran the sweep — so it never ran the leak guards, on
+the one kind of diff (`docs/board/summaries/*.md`) made entirely of the prose they scan.
+
+**The git-only refusals stay** and are outside the "three checks" claim by name: the stale-base check,
+`resolve-toward-main`, the 300-deletion warning, the armed-PR lookup and the `A11Y_SKIP_VERIFY` gate. None
+is a copy of CI, each costs milliseconds, and each is push SAFETY rather than verification.
+`A11Y_SKIP_VERIFY_REASON="<why>" A11Y_SKIP_VERIFY=1 git push` overrides the checks and prints the reason; a
+bare `=1` is refused. The worker- and Codex-dependent gates stay release-time: a 75-minute check on
+`git push` gets the hook deleted within a day.
+
+**What it held before #911, kept verbatim because CLAUDE.md's own line is the thing that changed:**
+
+```
+git push                      # pre-push hook: lint, typecheck, tests, check-signals, rules:gate (~5s)
+```
+
+> The pre-push hook holds only what costs nothing (~5s, no worker, no network) and SKIPS corpus-dependent checks loudly when `runs/` is absent, rather than passing quietly. `A11Y_SKIP_VERIFY=1 git push` overrides it.
+
+`pre-push-hook-scope.test.ts` is what holds the hook to three — it parses the hook's own `run` call sites
+and every npm/node invocation outside them, and a fourth check fails it.
 
 ## Why the deprecation note exists, and what "kept" means
 
