@@ -5,15 +5,15 @@
   "lanes": [
     {
       "lane": "the pipeline",
-      "owner": "dispatcher",
+      "owner": "ceo",
       "branchPrefixes": [
-        "dispatcher/",
+        "ceo/",
         "revert/"
       ],
       "paths": [
         ".github/workflows/"
       ],
-      "why": "trunk health and the merge queue. A workflow edited by a session that is not watching the queue is a red check nobody owns -- measured 2026-09-08, when a pull_request trigger attached a failing audit to seven merged PRs and sat red for ninety minutes before anyone in the org read the view the chairman reads. revert/ is here because trunk-guard's own decideRevert opens those branches and they carry whatever the reverted commit touched.",
+      "why": "trunk health and the merge queue. Owner moved from dispatcher to ceo on 2026-09-11 (#913): dispatcher was retired in the Org Reset of 2026-09-10, and a lane whose owner no longer exists refuses every PR with a message nobody can act on. Until #902 removes this check with the mergeSafety job, an engineer's pipeline change is assigned per PR by a Lane-exception line naming ceo. trunk health and the merge queue. A workflow edited by a session that is not watching the queue is a red check nobody owns -- measured 2026-09-08, when a pull_request trigger attached a failing audit to seven merged PRs and sat red for ninety minutes before anyone in the org read the view the chairman reads. revert/ is here because trunk-guard's own decideRevert opens those branches and they carry whatever the reverted commit touched.",
       "except": [
         ".github/workflows/consumer-gate.yml"
       ],
