@@ -26,6 +26,7 @@ import { WCAG_22_AA } from "@a11ign/evidence/wcag";
 
 import { assessedCriteria, criterionNumber } from "./coverage.js";
 import { hasEvidenceFor, type CaptureEvidence } from "./local-judge.js";
+import { EXAMINED_IN_FULL } from "./channel-comparison.js";
 import type { RequirementMapping } from "./judge.js";
 
 /** ACT's five outcomes. https://www.w3.org/TR/act-rules-format/#output-outcome */
@@ -189,23 +190,46 @@ const COMPLETENESS_OF: Readonly<Record<string, string>> = {
 };
 
 /**
- * Which of this criterion's sweeps DISAGREE with the browser's own count?
+ * Which of this criterion's sweeps examined LESS of the page than a pass needs?
  *
- * `unknown` is deliberately not incomplete — every capture predating the counter reports it, and treating
- * it as incompleteness would turn the whole corpus `cantTell` overnight. The same trade C2 makes, for the
- * same reason.
+ * Anything outside `EXAMINED_IN_FULL`, which is the one spelling of that set and says why `unknown` is in
+ * it -- treating it as incompleteness would turn the whole corpus `cantTell` overnight, the same trade C2
+ * makes. Asked as "not examined" rather than as a list of bad verdicts, so a verdict added later withdraws
+ * the pass instead of reporting "examined in full" (#951's `elsewhere` did exactly that until named).
  *
  * @param criterion the WCAG criterion number
  * @param completeness per-type verdicts from `oracleCounts`
- * @returns the sweep names whose completeness is `truncated`, `phantom` or `elsewhere`
+ * @returns the sweep names whose completeness is anything but `exact` or `unknown`
  */
 function incompleteFeeds(criterion: string, completeness: Readonly<Record<string, string>>): string[] {
   return (SWEEPS_FEEDING[criterion] ?? []).filter((sweep) => {
     const verdict = completeness[COMPLETENESS_OF[sweep] ?? ""];
-    // `elsewhere` (#951): the sweep ran out of a container, not the page, so it fed this criterion from less
-    // of the page than it seemed to.
-    return verdict === "truncated" || verdict === "phantom" || verdict === "elsewhere";
+    return verdict !== undefined && !EXAMINED_IN_FULL.has(verdict);
   });
+}
+
+/** What each partial verdict means, in the words the `cantTell` reason uses. */
+const WHY_PARTIAL: Readonly<Record<string, string>> = {
+  truncated: "announced a different number of elements than the browser exposes",
+  phantom: "announced a different number of elements than the browser exposes",
+  elsewhere: "ran out inside a container on the page rather than covering the page",
+};
+
+/**
+ * The `cantTell` reason for sweeps that examined less than the page, grouped by WHY -- a sweep of a chat
+ * widget did not "announce a different number of elements", it examined a different thing (#951), and a
+ * reader told the wrong reason goes looking for the wrong defect. A verdict with no entry is named as it is.
+ */
+function partialExaminationReason(short: string[], completeness: Readonly<Record<string, string>>): string {
+  const byWhy = new Map<string, string[]>();
+  for (const sweep of short) {
+    const verdict = completeness[COMPLETENESS_OF[sweep] ?? ""] ?? "";
+    const why = WHY_PARTIAL[verdict] ?? `returned "${verdict}", which is not a verdict of a complete examination`;
+    byWhy.set(why, [...(byWhy.get(why) ?? []), sweep]);
+  }
+  const said = [...byWhy].map(([why, sweeps]) => `the ${sweeps.join(" and ")} sweep ${why}`).join("; ");
+  return `${said.charAt(0).toUpperCase()}${said.slice(1)}, so this criterion rests on an examination known `
+    + "to be partial.";
 }
 
 /** Did a truncated sweep feed this criterion? Returns the sweep names, so the reason can name them. */
@@ -301,11 +325,7 @@ function outcomeFor(criterion: string, input: OutcomeInput): CriterionOutcome {
   // before this, such a capture reported "examined in full".
   const short = incompleteFeeds(criterion, input.completeness ?? {});
   if (short.length) {
-    return {
-      criterion, outcome: "cantTell",
-      reason: `The ${short.join(" and ")} sweep announced a different number of elements than the browser `
-        + "exposes, so this criterion rests on an examination known to be partial.",
-    };
+    return { criterion, outcome: "cantTell", reason: partialExaminationReason(short, input.completeness ?? {}) };
   }
   const applies = applicabilityOf(criterion, input.capture);
   if (applies === "notProbed") {
