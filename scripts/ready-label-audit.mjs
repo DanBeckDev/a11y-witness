@@ -44,8 +44,12 @@ import { realpathSync, readFileSync } from "node:fs";
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { REPO } from "./repo-identity.mjs";
 import { fetchBoardItems, PROJECT_NUMBER } from "./board-snapshot.mjs";
-import { fetchClosedRowEvents, claimsFromEvents, describeClaims, unattributableClosedRows,
-  PROVENANCE_REQUIRED_FROM } from "./claim-provenance.mjs";
+// `claimsFromEvents`/`describeClaims` are no longer imported: a row that reaches the report has NO claim
+// events by construction, so describing them printed "no session ever claimed this row" every time --
+// a sentence that was true, said nothing, and read as the whole answer. `attributionFor` says which of
+// the three states it is instead.
+import { fetchClosedRowEvents, unattributableClosedRows, reportableUnattributable, attributionFor,
+  fetchClosingPullRequest, PROVENANCE_REQUIRED_FROM } from "./claim-provenance.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
 import { READY_LABEL, WAS_READY_LABEL } from "./claim-labels.mjs";
 // #782: THE PURE DECISION ONLY -- `labelsToStrip` classifies a label, it never calls `gh`. Importing it
@@ -1066,25 +1070,68 @@ function reportUnattributableClosedRows() {
   // it prints when it read nothing at all.
   const rows = fetchClosedRowEvents({ openIssues: fetchOpenIssues() });
   const historical = unattributableClosedRows(rows);
-  const gated = unattributableClosedRows(rows, { since: PROVENANCE_REQUIRED_FROM });
+  const gated = reportableUnattributable(rows, { since: PROVENANCE_REQUIRED_FROM });
+  const notPlanned = unattributableClosedRows(rows, { since: PROVENANCE_REQUIRED_FROM }).length
+    - gated.length;
   const recovered = rows.length - historical.length;
   process.stdout.write(`${rows.length} closed row(s) read; ${recovered} name their claimant and the `
     + `window from the timeline, label or no label. ${historical.length} carry no claim event at all -- `
     + `rows claimed by hand before #673 closed that route, where no record was ever written and none can `
-    + `be recovered.\n`);
-  if (gated.length === 0) {
-    process.stdout.write(`OK  every row closed since ${PROVENANCE_REQUIRED_FROM} names its claimant\n`);
+    + `be recovered. ${notPlanned} row(s) closed NOT_PLANNED are not counted: they were never worked, so `
+    + `"who worked this" has no answer and its absence is not a defect.\n`);
+  return reportProvenanceOf(gated);
+}
+
+/** What each verdict prints as. Only `undeclared` is counted: see `attributionFor`. */
+const PROVENANCE_MARK = { worker: "ATTRIBUTED", work: "WORK, NOT WORKER", undeclared: "NEEDS A PERSON" };
+
+/**
+ * Every reportable row with its verdict. PURE given `closingPrFor`, and exported so the finding count is
+ * tested without the network -- the first version counted by `!attributed`, which put the middle verdict
+ * in the finding, and nothing that ran it could see that.
+ *
+ * @param {ReturnType<typeof reportableUnattributable>} gated
+ * @param {(number: number) => ReturnType<typeof fetchClosingPullRequest>} closingPrFor
+ */
+export function provenanceVerdicts(gated, closingPrFor) {
+  return gated.map(({ number, title, closedAt }) => ({ number, title, closedAt, ...attributionFor(closingPrFor(number)) }));
+}
+
+/**
+ * The rows the provenance check returns as its FINDING: `undeclared` only. Its own function so the count the
+ * audit exits with is the one the test reads -- a test that recomputed it would pass whatever the audit did.
+ *
+ * @param {ReturnType<typeof provenanceVerdicts>} verdicts @returns {number[]}
+ */
+export function provenanceFindings(verdicts) {
+  return verdicts.filter((v) => v.verdict === "undeclared").map((v) => v.number);
+}
+
+/**
+ * The three verdicts, printed apart, because collapsing them is what made ten rows read as one
+ * population on 2026-09-09: five had been closed by a merged pull request that declared them, and
+ * calling those UNATTRIBUTABLE put work that shipped correctly beside a row whose history cannot be
+ * reconstructed at all. Only `undeclared` is returned as a finding.
+ *
+ * @param {ReturnType<typeof reportableUnattributable>} gated
+ * @returns {number}
+ */
+function reportProvenanceOf(gated) {
+  const verdicts = provenanceVerdicts(gated, fetchClosingPullRequest);
+  for (const { number, title, closedAt, verdict, line } of verdicts) {
+    process.stdout.write(`${PROVENANCE_MARK[verdict]}  #${number} "${title}" -- closed ${closedAt}, ${line}\n`);
+  }
+  const undeclared = provenanceFindings(verdicts);
+  if (undeclared.length === 0) {
+    process.stdout.write(`OK  every row closed since ${PROVENANCE_REQUIRED_FROM} that was actually `
+      + `worked names its claimant or the pull request that declared it\n`);
     return 0;
   }
-  for (const { number, title, closedAt, events } of gated) {
-    process.stdout.write(`UNATTRIBUTABLE  #${number} "${title}" -- closed ${closedAt}, `
-      + `${describeClaims(claimsFromEvents(events))}\n`);
-  }
-  process.stderr.write(`\n${gated.length} row(s) closed since ${PROVENANCE_REQUIRED_FROM} carry no claim `
-    + `event, so nothing can say who worked them. A hand claim got past \`row-claim.mjs\` -- find who `
-    + `pushed the branch named on the row and have them re-run \`row-claim.mjs claim\` against it, so the `
-    + `next audit can read what this one could not.\n`);
-  return gated.length;
+  process.stderr.write(`\n${undeclared.length} row(s) closed since ${PROVENANCE_REQUIRED_FROM} cannot `
+    + `name their worker: ${undeclared.map((n) => `#${n}`).join(", ")}. A branch name identifies the `
+    + `WORK, never the worker -- have whoever pushed it re-run \`row-claim.mjs claim\`, so the next `
+    + `audit reads what this one could not.\n`);
+  return undeclared.length;
 }
 
 // #870: A ROW CAN READ `COMPLETED` WITH NOTHING BEHIND IT. #79 was closed 40 seconds after PR #89 --
