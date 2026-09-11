@@ -56,6 +56,7 @@ import { pathToFileURL } from "node:url";
 import { stripComments } from "@a11ign/evidence/source-text";
 import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
+import { changedFiles } from "./changed-files.mjs";
 import { knownPackages, readWorkspaceDependencyGraph, classify, ROOT_TS_FILES } from "./ci-changed.mjs";
 // The parser only: importing `walk-scope.mjs` would install its read observer in this process.
 import { parseWalkScope, inScope } from "./walk-scope-declaration.mjs";
@@ -661,21 +662,10 @@ function writeOutputs(result) {
   appendFileSync(outFile, `${lines.join("\n")}\n`);
 }
 
-/**
- * The paths a pull request changed, repo-relative -- BOTH SIDES OF A RENAME.
- *
- * `--no-renames`, because `git diff --name-only` detects renames by default and prints only where a file
- * went: a PR moving `scripts/a.mjs` to `tools/a.mjs` listed `tools/a.mjs` alone. `narrowByDeclaredScope`
- * (#929) needs the side that LEFT -- without it, a guard declared on `scripts` was left out of the very run
- * that took a file out of its population. Every other consumer here only ever selects more from a longer
- * list, so the extra path cannot narrow anything.
- *
- * @param {string} base @param {string} repoRoot @returns {string[]}
- */
-export function changedFiles(base, repoRoot) {
-  return execFileSync("git", ["diff", "--name-only", "--no-renames", `${base}...HEAD`],
-    { cwd: repoRoot, env: sandboxGitEnv(), encoding: "utf8" }).split("\n").filter(Boolean);
-}
+// #939: the copy that lived here is now `scripts/changed-files.mjs`, which every reader of "which paths did
+// this change touch" imports. #938 wrote it here for `narrowByDeclaredScope` (#929), which needs the side a
+// file LEFT -- and eight other readers were still asking bare, one of them a lane-check bypass.
+
 
 async function main() {
   refuseUnknownFlags(["--base", "--repo"], { entry: import.meta.url, command: "select-changed-tests" });
@@ -686,7 +676,7 @@ async function main() {
       + "same shape ci-changed.mjs refuses, for the identical reason.");
     process.exit(2);
   }
-  const files = changedFiles(base, repoRoot);
+  const files = changedFiles([`${base}...HEAD`], { repoRoot });
   if (files.length === 0) {
     console.error(`select-changed-tests: "git diff --name-only --no-renames ${base}...HEAD" returned nothing.`);
     process.exit(2);
