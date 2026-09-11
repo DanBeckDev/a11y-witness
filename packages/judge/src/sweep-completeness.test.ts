@@ -106,6 +106,16 @@ test("PHANTOM REFUSES EITHER CLAIM; TRUNCATED refuses only ABSENCE", () => {
   assert.equal(at(undefined, "absence"), true, "an older capture behaves as it did before this existed");
 });
 
+test("#951: ELSEWHERE refuses ABSENCE, exactly like truncated -- never the fall-through that allows it", () => {
+  // A sweep that ran out of a container (a chat widget, a modal) heard what is IN it -- which is on the page --
+  // and says nothing about the rest. An unrecognised verdict falls through to `true` at the bottom of
+  // `assertableSweep`, which would let a sweep of a chat widget support "the page has no links".
+  const at = (claim: "presence" | "absence") =>
+    assertableSweep({ completeness: { link: "elsewhere" } } as unknown as RuleInput, "link", claim);
+  assert.equal(at("absence"), false, "a sweep of a container cannot say the PAGE has none");
+  assert.equal(at("presence"), true, "what it heard is on the page");
+});
+
 test("A TRUNCATED SWEEP STILL REPORTS THE UNNAMED CONTROL IT HEARD", () => {
   // Measured on the shipped code before this fix: 1 finding on `exact`, 0 on `truncated`. The button was
   // ANNOUNCED. `completeness.ts` had warned about exactly this on 2026-08-24 — withholding a presence

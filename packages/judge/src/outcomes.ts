@@ -197,12 +197,14 @@ const COMPLETENESS_OF: Readonly<Record<string, string>> = {
  *
  * @param criterion the WCAG criterion number
  * @param completeness per-type verdicts from `oracleCounts`
- * @returns the sweep names whose completeness is `truncated` or `phantom`
+ * @returns the sweep names whose completeness is `truncated`, `phantom` or `elsewhere`
  */
 function incompleteFeeds(criterion: string, completeness: Readonly<Record<string, string>>): string[] {
   return (SWEEPS_FEEDING[criterion] ?? []).filter((sweep) => {
     const verdict = completeness[COMPLETENESS_OF[sweep] ?? ""];
-    return verdict === "truncated" || verdict === "phantom";
+    // `elsewhere` (#951): the sweep ran out of a container, not the page, so it fed this criterion from less
+    // of the page than it seemed to.
+    return verdict === "truncated" || verdict === "phantom" || verdict === "elsewhere";
   });
 }
 

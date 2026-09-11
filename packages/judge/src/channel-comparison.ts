@@ -528,8 +528,11 @@ export function assertableSweep(input: RuleInput, type: string, claim: "presence
   const verdict = input.completeness?.[type];
   // A sweep that announced more than the page exposes may have announced THIS one. Fatal to either claim.
   if (verdict === "phantom") return false;
-  // Short: it cannot rule anything out, but what it DID hear was still heard.
-  if (verdict === "truncated") return claim === "presence";
+  // Short: it cannot rule anything out, but what it DID hear was still heard. `elsewhere` (#951) is the same
+  // answer for a different reason -- the sweep ran out of a container on the page, so what it heard is on
+  // the page and what it did not hear says nothing. It must be named here: an unrecognised verdict falls
+  // through to `true` below, which would let a sweep of a chat widget support "the page has no links".
+  if (verdict === "truncated" || verdict === "elsewhere") return claim === "presence";
   // `exact`, and `unknown` — which is deliberately allowed and COUNTED rather than refused, because every
   // capture predating the counter reports it and refusing would silence 2.1.1 across the whole corpus.
   return true;
