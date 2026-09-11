@@ -1333,7 +1333,8 @@ change nothing about what the evidence MEANS, so this is additive exactly as `fa
 **Boy-scout, in passing:** `runCapture` crossed the 90-line physical budget, so the desktop preparation is
 now `prepareDesktop` — extracted because it does one thing at one level of abstraction, not merely to
 shorten its caller. `function-size.test.ts` caught it; ESLint could not, because `skipComments: true`
-lets a comment-dense function run to twice its budget.
+lets a comment-dense function run to twice its budget. (As of #986 ESLint does catch it: the same
+budget is `local/max-physical-lines-per-function`, and the test is gone.)
 
 ---
 
