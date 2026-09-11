@@ -256,11 +256,9 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run build
       # docs/coverage.md is GENERATED and DELIBERATELY UNTRACKED (issue #158) -- a fresh checkout has no
-      # copy on disk, and the guards that READ it (`coverage-doc.test.ts`, `user-facing-docs-file-facts.
-      # test.ts`, `generated-paths.test.ts`) would otherwise be reading an absent file. Regenerating it
-      # here keeps them honest without resurrecting the git conflict untracking it was meant to remove.
-      # #954: `doc-references.test.ts` was the original reason and is gone -- its rule runs in the nightly
-      # doc cross-reference report, which regenerates nothing and knows how to account for this file.
+      # copy on disk, so `doc-references.test.ts` below (which asserts every path the top-level docs cite
+      # actually exists) would report a real reference as broken. Regenerating it here keeps that citation
+      # honest without resurrecting the git conflict untracking it was meant to remove.
       - run: npm run docs:coverage
       # The doc/tracker/board guards -- `backlog.test.ts`, `backlog-ready.test.ts`, `known-gaps-file-
       # facts.test.ts`, `board-liveness.test.ts` and their siblings, all of which read `docs/*.md` content
