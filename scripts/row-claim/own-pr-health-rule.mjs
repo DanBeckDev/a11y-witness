@@ -18,6 +18,14 @@
 //               commit for; one that names none is a settings change, a ruling, a measurement on the row
 //   its own     it has no sub-issues. A parent's deliverable is its sub-rows' commits, not its own
 //
+// WHAT `owed` CANNOT SEE, and it is a property of the parser rather than of this rule: `declaredRegionFiles`
+// answers `[]` both for "names no path" and for "names paths its grammar cannot read". #999 fixed one
+// instance of the second today (a fenced extension-less path) and another is open (a Region written as
+// prose naming an extension-less file). Such a row would read as "deliverable is not a commit" and fail to
+// block. MEASURED across all 67 open rows (worker-capture, reviewing #1012): 64 declare paths, 1 has no
+// Region, and 2 parse to `[]` -- #623 and #149, both correctly classified. No live instance, so this is a
+// sentence rather than a guard; the fix belongs in the parser, where the next grammar gap will also land.
+//
 // MEASURED BEFORE IT WAS WRITTEN (#989's own row carries the workings). `closedByPullRequestsReferences`
 // takes an `includeClosedPrs` argument defaulting to FALSE, so a closed-unmerged PR is invisible to the
 // query below -- confirmed on real data, issues #79 and #93, whose abandoned PRs (#89, #107) appear only
@@ -124,15 +132,16 @@ export function lookupOtherHeldIssues(mySession, excludeIssueNumber, { run = gh 
 }
 
 /**
- * Which PR (if any) would close `issueNumber`, and whether that PR's head is RED right now.
+ * Which PR (if any) would close `issueNumber`, and what state it is in -- #989 removed the check-state
+ * read, so this reports the PR's STATE and nothing about its colour.
  *
  * `closedByPullRequestsReferences` is resolved server-side by GitHub, never a `Closes #N` regex over a
  * PR body -- the same discipline `merge-guard.mjs`'s `lookupClosingIssues` already applies in reverse.
- * `null` on a failed lookup; `{ number, state: "OPEN"/"MERGED"/"CLOSED", reasons }` when a closing PR
- * exists (`reasons` is `checkReasons`'s own exact returned array, `[]` when nothing blocks or when the
- * required-contexts/check-runs sub-lookup itself failed -- see #476's own "fail open" rule); an issue with
- * NO closing PR at all (nobody has opened one yet) is reported as `undefined`, distinct from a failed
- * lookup -- "nothing to check" and "could not ask" are different states.
+ * `null` on a failed lookup; `{ number, state: "OPEN"/"MERGED"/"CLOSED" }` when a closing PR exists; an
+ * issue with NO closing PR at all (nobody has opened one yet) is reported as `undefined`, distinct from a
+ * failed lookup -- "nothing to check" and "could not ask" are different states, and `isInBuild` reads them
+ * differently: an abandoned (CLOSED) PR leaves the row in build, no PR at all likewise, a MERGED one does
+ * not.
  *
  * @param {number} issueNumber
  * @param {{ run?: (args: string[]) => string }} [deps]
