@@ -67,8 +67,11 @@ export function lookupBranchTip(branchName) {
 export function lookupCheckRuns(sha) {
   return lookup(() => JSON.parse(
     gh(["api", `repos/${REPO}/commits/${sha}/check-runs`, "--paginate"])).check_runs
-    .map((/** @type {{name: string, status: string, conclusion: string | null, completed_at: string | null}} */ run) => (
-      { name: run.name, status: run.status, conclusion: run.conclusion, completedAt: run.completed_at })));
+    // #902: `id` IS CARRIED, because `checkReasons` groups by name and takes the newest, and an ordering
+    // key it is never given is a rule it cannot apply. GitHub keeps EVERY check run for a head, so a
+    // superseded or cancelled attempt sits in this list beside the one that actually decided.
+    .map((/** @type {{id: number, name: string, status: string, conclusion: string | null, completed_at: string | null}} */ run) => (
+      { id: run.id, name: run.name, status: run.status, conclusion: run.conclusion, completedAt: run.completed_at })));
 }
 
 /**

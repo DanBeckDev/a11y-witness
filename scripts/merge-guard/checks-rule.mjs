@@ -13,9 +13,37 @@
 export const SATISFIED = new Set(["success", "skipped", "neutral"]);
 
 /**
+ * THE NEWEST RUN PER NAME -- #902, and it is a correctness fix rather than tidying.
+ *
+ * GitHub keeps every check run for a head, so one name appears once per workflow run: a cancelled or
+ * superseded attempt sits in the list beside the one that actually decided. This module read EVERY entry
+ * (`unfinished` and `failing` swept the whole array, and `new Map` kept whichever came last in it), so a
+ * single cancelled run made a green pull request read red. **Measured on 2026-09-11: two different
+ * sessions read #996 as red within twenty minutes, from a `gate` job in a run that had been cancelled
+ * 22 seconds after it started.**
+ *
+ * BY ID, NOT BY `completedAt`: an id is monotonic and always present, while a run still in flight has no
+ * completion time at all -- ordering on that would drop exactly the in-flight run the STILL RUNNING
+ * sentence exists to report. A run carrying no id sorts oldest and ties go to array order, so a caller
+ * that does not supply ids keeps precisely its previous behaviour rather than silently losing runs.
+ *
+ * @param {{id?: number, name: string, status: string, conclusion: string | null}[]} runs
+ * @returns {{id?: number, name: string, status: string, conclusion: string | null}[]}
+ */
+export function newestPerName(runs) {
+  /** @type {Map<string, {id?: number, name: string, status: string, conclusion: string | null}>} */
+  const byName = new Map();
+  for (const run of runs) {
+    const seen = byName.get(run.name);
+    if (!seen || (run.id ?? 0) >= (seen.id ?? 0)) byName.set(run.name, run);
+  }
+  return [...byName.values()];
+}
+
+/**
  * @param {{headRefOid: string}} pr
  * @param {string[]} required
- * @param {{name: string, status: string, conclusion: string | null}[]} runs
+ * @param {{id?: number, name: string, status: string, conclusion: string | null}[]} runs
  * @returns {string[]}
  */
 export function checkReasons(pr, required, runs) {
@@ -24,10 +52,13 @@ export function checkReasons(pr, required, runs) {
       + "  Nothing has tested this code. This is the state that reads as `CLEAN`, because a required\n"
       + "  context that never ran is not a failing check; it is the absence of one."];
   }
-  const byName = new Map(runs.map((run) => [run.name, run]));
+  // #902: every sentence below is about the NEWEST run of each name. Reading all of them let a superseded
+  // attempt speak for a context that has since concluded differently.
+  const latest = newestPerName(runs);
+  const byName = new Map(latest.map((run) => [run.name, run]));
   const missing = required.filter((context) => !byName.has(context));
-  const unfinished = runs.filter((run) => run.status !== "completed").map((run) => run.name);
-  const failing = runs.filter((run) => run.status === "completed" && !SATISFIED.has(run.conclusion ?? ""))
+  const unfinished = latest.filter((run) => run.status !== "completed").map((run) => run.name);
+  const failing = latest.filter((run) => run.status === "completed" && !SATISFIED.has(run.conclusion ?? ""))
     .map((run) => `${run.name} (${run.conclusion})`);
 
   // `.filter(Boolean)` does not narrow `(string | false)[]` to `string[]` -- a well-known TS gap, not a

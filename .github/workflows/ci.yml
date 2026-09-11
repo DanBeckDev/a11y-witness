@@ -519,9 +519,26 @@ jobs:
           printf '%s' "$BODY" > /tmp/body.txt
           node scripts/owned-path-signoff.mjs --diff=/tmp/changed.txt --body=/tmp/body.txt
 
+  # #902, step 2 of the CI Reset (chairman-approved): THE REQUIRED CHECK IS THE PRODUCT, NOT THE PROCESS.
+  # Of the last forty red `ci` runs on pull requests, 13 were `ts` -- a real test, lint or typecheck
+  # failure -- and the rest were the process jobs: `acceptance` 10, `mergeSafety` 10, `docs` 9,
+  # `changed`/`ownedPaths` 5. Two of every three red pull requests were red for something that said
+  # nothing about whether the code works.
+  #
+  # THE FIVE ARE DROPPED FROM `needs`, NOT DELETED: `docs`, `board`, `acceptance`, `ownedPaths` and
+  # `mergeSafety` still run on every pull request and still report their own verdict. They stop deciding
+  # whether it can merge. Where each one's authority goes is on #902; the load-bearing one is
+  # `mergeSafety`'s head-versus-tip check, which branch protection's "require branches to be up to date"
+  # now enforces natively -- ceo turned `strict` on at 21:5xZ on 2026-09-11, BEFORE this landed, which is
+  # #928's rule: never retire a watcher before its replacement is answering.
+  #
+  # `!cancelled()`: a cancelled run's jobs report `cancelled`, which is neither success nor skipped, so
+  # this step FAILED every time a push superseded its own run -- and that failure then sat on the head as
+  # a `gate` check-run beside the real one. Two sessions read #996 as red from exactly that on
+  # 2026-09-11. A superseded run should report nothing, not a red.
   gate:
-    needs: [changed, ts, python, ansible, docs, board, changeset, rulesFitness, mergeSafety, acceptance, ownedPaths]
-    if: always()
+    needs: [changed, ts, python, ansible, changeset, rulesFitness]
+    if: always() && !cancelled()
     runs-on: ubuntu-latest
     steps:
       - name: Every job that ran, ran clean
@@ -531,13 +548,8 @@ jobs:
             "${{ needs.ts.result }}" \
             "${{ needs.python.result }}" \
             "${{ needs.ansible.result }}" \
-            "${{ needs.docs.result }}" \
-            "${{ needs.board.result }}" \
             "${{ needs.changeset.result }}" \
-            "${{ needs.rulesFitness.result }}" \
-            "${{ needs.mergeSafety.result }}" \
-            "${{ needs.acceptance.result }}" \
-            "${{ needs.ownedPaths.result }}"
+            "${{ needs.rulesFitness.result }}"
           do
             if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
               echo "::error::a job reported '$result', which is neither success nor skipped"
