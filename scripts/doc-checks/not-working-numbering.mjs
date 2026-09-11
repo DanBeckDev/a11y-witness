@@ -4,6 +4,9 @@
 // `a`. This is the invariant that makes a `§N` citation into that page RESOLVABLE, which is why it moves with
 // `doc-citation-integrity` (product-manager's ruling on #905). Moved out of `not-working-numbering.test.ts`,
 // which now asserts on these same functions; see its header for the scheme and why it exists.
+// #954: `not-working-numbering.test.ts` IS GONE. The sentences above describing what it asserts are the record of where this
+// rule came from, not a claim about today: this module is now the only copy, and the nightly doc
+// cross-reference report is where it runs. A pull request no longer fails on it.
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
