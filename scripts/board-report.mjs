@@ -144,7 +144,8 @@ export function authorship(d, L) {
 /** @param {any} d @param {string[]} L */
 export function lastGate(d, L) {
   const { latestGate, gateIsFresh } = d;
-  L.push("## Last gate result");
+  // WHICH GATE, named (#429): `latestGate` is the newest CONFORMANCE result, not the newest entry of any kind.
+  L.push("## Last conformance gate result (`rules-real-pages`)");
   if (!latestGate) {
     L.push("**Not reported.** No gate output has been recorded in `docs/board/reported/`. This report "
       + "does not read gates itself and must not: a checkout's `runs/` is only as fresh as its last sync "
