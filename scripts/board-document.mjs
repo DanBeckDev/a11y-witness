@@ -496,7 +496,7 @@ function sourceTable(d) {
   // `board-report.mjs` printed the gate's whole output into the GitHub edition. Two editions that would
   // have disagreed about whether a check passed, with the silent one being the one the board reads.
   const worst = d.latestGate ? worstVerdict(d.latestGate.output) : null;
-  push("Most recent automated check result",
+  push("Most recent conformance check result",
     d.latestGate
       ? gateHeadline(d.latestGate, worst, d.gateIsFresh)
       : "**not reported**",
