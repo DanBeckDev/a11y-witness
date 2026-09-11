@@ -71,7 +71,7 @@ import { READY_LABEL, WAS_READY_LABEL } from "./ready-label-audit.mjs";
 import { gitCommonDir, appendJsonl } from "./merge-guard.mjs";
 import { withBoardSnapshot, PROJECT_OWNER, PROJECT_NUMBER } from "./board-snapshot.mjs";
 import { runnerReason } from "./row-claim/runner-rule.mjs";
-import { ownPrHealthReason, lookupOwnPrHealth } from "./row-claim/own-pr-health-rule.mjs";
+import { inBuildReason, lookupHeldRows } from "./row-claim/own-pr-health-rule.mjs";
 import { resolveBlockedByOverride, blockedByExceptionNote } from "./row-claim/blocked-by-rule.mjs";
 import { fileOverlapReason, lookupMyRegionFiles, lookupOpenPrFiles } from "./row-claim/file-overlap-rule.mjs";
 import { templateFieldsReason, lookupIssueBody } from "./row-claim/template-fields-rule.mjs";
@@ -367,27 +367,26 @@ export function moveProjectStatus(issueNumber, statusName,
  * choice made the other way: a convenience guard that blocks all work on a lookup failure gets bypassed
  * and then never consulted again, which is worse than the rare miss it would have caught.
  *
- * `requiredContexts`/`checkRuns` are separately injectable (rather than folded into `run`) because
- * `own-pr-health-rule.mjs`'s own lookup reads them through `merge-guard/lookups.mjs`'s dedicated helpers,
- * not through an arbitrary `gh` argv -- a test overriding only `run` would otherwise reach a real network
- * call the moment a fixture's own PR reads OPEN, which is exactly the trap `lookupClosingPrHealth`'s own
- * comment names.
- *
+ * #989: THE CHECK-STATE DEPS ARE GONE. B2 used to read the session's own PR colour and this paragraph
+ * explained why `requiredContexts`/`checkRuns` were injected separately from `run` -- they reach `gh`
+ * through `merge-guard/lookups.mjs`'s own helper, so a fixture injecting `run` alone placed a real network
+ * call. B2 now asks whether a ROW is in build and reads no check state at all, so the deps have no
+ * subject; callers still passing them are simply ignored, which is why no test had to change for it.
  * @param {number} issueNumber the row about to be claimed -- excluded from B2's "other held rows" check
  * @param {string} mySession
  * @param {{ run?: typeof defaultRun,
- *           requiredContexts?: () => (string[] | null),
- *           checkRuns?: (sha: string) => ({name: string, status: string, conclusion: string | null,
- *             completedAt: string | null}[] | null) }} deps
+ *           }} deps
  * @returns {string | null}
  */
-export function sessionEligibilityReason(issueNumber, mySession,
-  { run = defaultRun, requiredContexts, checkRuns } = {}) {
+export function sessionEligibilityReason(issueNumber, mySession, { run = defaultRun } = {}) {
   const ghRun = (/** @type {string[]} */ args) => run("gh", args);
 
-  const ownPr = lookupOwnPrHealth(mySession, issueNumber, { run: ghRun, requiredContexts, checkRuns });
-  const health = ownPrHealthReason(ownPr);
-  if (health) return health;
+  // #989: B2 asks whether a ROW is in build, not whether a PR is open. `null` from the lookup is
+  // INCONCLUSIVE and returns no refusal, exactly as the PR-shaped version did -- a failed lookup must
+  // never invent a block any more than it may invent a clearance.
+  const heldRows = lookupHeldRows(mySession, issueNumber, { run: ghRun });
+  const inBuild = heldRows === null ? null : inBuildReason(heldRows);
+  if (inBuild) return inBuild;
 
   const myFiles = lookupMyRegionFiles(issueNumber, { run: ghRun });
   const otherPrFiles = lookupOpenPrFiles({ run: ghRun });
@@ -416,18 +415,20 @@ export function sessionEligibilityReason(issueNumber, mySession,
  * of `ineligible`.
  *
  * @param {{ issueNumber: number, mySession: string, ineligible: string, blockedBy: string | undefined }} attempt
- * @param {{ ghRun: (args: string[]) => string, requiredContexts?: () => (string[] | null),
- *           checkRuns?: (sha: string) => ({name: string, status: string, conclusion: string | null,
- *             completedAt: string | null}[] | null) }} deps
+ * @param {{ ghRun: (args: string[]) => string }} deps
  * @returns {{ proceed: true, blockedByNote: string | null } | { proceed: false, reason: string }}
  */
 function eligibilityWithBlockedBy({ issueNumber, mySession, ineligible, blockedBy }, deps) {
   if (!blockedBy) return { proceed: false, reason: ineligible };
-  const ownPr = lookupOwnPrHealth(mySession, issueNumber,
-    { run: deps.ghRun, requiredContexts: deps.requiredContexts, checkRuns: deps.checkRuns });
-  const health = ownPrHealthReason(ownPr);
-  if (!health) return { proceed: false, reason: ineligible };
-  const override = resolveBlockedByOverride(ownPr, blockedBy, { run: deps.ghRun });
+  const heldRows = lookupHeldRows(mySession, issueNumber, { run: deps.ghRun });
+  const inBuild = heldRows === null ? null : inBuildReason(heldRows);
+  if (!inBuild) return { proceed: false, reason: ineligible };
+  // #741's OVERRIDE NEEDS AN OPEN PR TO CARRY ITS MEASUREMENT COMMENT, AND A ROW IN BUILD HAS NONE -- that
+  // is what "in build" means. So the override cannot fire on a #989 refusal, and `resolveBlockedByOverride`
+  // says exactly that ("no open PR of this session's own was found to attach a measurement comment to")
+  // rather than being silently skipped. Moving the measurement comment onto the ROW is a separate row; it
+  // is a change to what #741 asks for, not a rename.
+  const override = resolveBlockedByOverride(null, blockedBy, { run: deps.ghRun });
   if (!override.ok) {
     return { proceed: false,
       reason: `${ineligible} (--blocked-by=${blockedBy} did not apply: ${override.reason})` };
@@ -479,13 +480,11 @@ function applyClaimLabels(issueNumber, { run, sessionLabel, extraLabels, branchL
  * @param {string[]} extraLabels labels written alongside `in-progress` + `session:<name>` -- `[]` for a
  *   dispatch, `[STARTED_LABEL]` for a claim/start
  * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus, branch?: string,
- *           worktree?: string, blockedBy?: string, requiredContexts?: () => (string[] | null),
- *           checkRuns?: (sha: string) => ({name: string, status: string, conclusion: string | null,
- *             completedAt: string | null}[] | null) }} deps
+ *           worktree?: string, blockedBy?: string }} deps
  * @returns {{ claimed: true, statusMoved: true } | { claimed: true, statusMoved: false, notOnBoard: boolean, statusReason: string } | { claimed: false, reason: string }}
  */
 function writeRowLabels(issueNumber, mySession, extraLabels,
-  { run = defaultRun, moveStatus = moveProjectStatus, branch, worktree, blockedBy, requiredContexts, checkRuns } = {}) {
+  { run = defaultRun, moveStatus = moveProjectStatus, branch, worktree, blockedBy } = {}) {
   const before = fetchLabels(issueNumber, { run });
   const decision = decideClaim(before.labels, mySession);
   if (!decision.proceed) return { claimed: false, reason: decision.reason };
@@ -510,10 +509,10 @@ function writeRowLabels(issueNumber, mySession, extraLabels,
   const alreadyMine = claimStatus(before.labels).sessions.includes(mySession);
   let blockedByNote = null;
   if (!alreadyMine) {
-    const ineligible = sessionEligibilityReason(issueNumber, mySession, { run, requiredContexts, checkRuns });
+    const ineligible = sessionEligibilityReason(issueNumber, mySession, { run });
     if (ineligible) {
       const eligibility = eligibilityWithBlockedBy({ issueNumber, mySession, ineligible, blockedBy },
-        { ghRun: ghRunForBody, requiredContexts, checkRuns });
+        { ghRun: ghRunForBody });
       if (!eligibility.proceed) return { claimed: false, reason: eligibility.reason };
       blockedByNote = eligibility.blockedByNote;
     }
@@ -615,11 +614,7 @@ function reportReachability(issueNumber) {
  *
  * @param {number} issueNumber
  * @param {string} mySession
- * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus,
- *           requiredContexts?: () => (string[] | null),
- *           checkRuns?: (sha: string) => ({name: string, status: string, conclusion: string | null,
- *             completedAt: string | null}[] | null) }} [deps]
- * @returns {{ claimed: true, statusMoved: true } | { claimed: true, statusMoved: false, notOnBoard: boolean, statusReason: string } | { claimed: false, reason: string }}
+ * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus }} [deps]
  */
 export function dispatchRow(issueNumber, mySession, deps = {}) {
   return writeRowLabels(issueNumber, mySession, [], deps);
@@ -642,9 +637,7 @@ export function dispatchRow(issueNumber, mySession, deps = {}) {
  * @param {number} issueNumber
  * @param {string} mySession
  * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus, branch?: string,
- *           worktree?: string, blockedBy?: string, requiredContexts?: () => (string[] | null),
- *           checkRuns?: (sha: string) => ({name: string, status: string, conclusion: string | null,
- *             completedAt: string | null}[] | null) }} [deps]
+ *           worktree?: string, blockedBy?: string }} [deps]
  * @returns {{ claimed: true, statusMoved: true } | { claimed: true, statusMoved: false, notOnBoard: boolean, statusReason: string } | { claimed: false, reason: string }}
  */
 export function claimRow(issueNumber, mySession, deps = {}) {
