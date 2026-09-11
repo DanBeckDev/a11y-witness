@@ -29,12 +29,18 @@ may not exist on the machine that holds the corpus.
 `/visit/all/edinburgh-castle/`: same site, same page, an address the publisher has changed. Nothing reads
 it. That is RETIRED.
 
-**Every fixture page is RELOCATED**, and they must never be deleted. They are declared
-`http://localhost:5050/…` and captured `http://192.0.2.10:5050/…`, because a fleet worker cannot reach
-`localhost` — that resolves to *itself*, not the host serving pages. Both sides are individually correct
-and nothing reconciles them; issue #146 is the fix. Five of the ten are the only real-page grounding
-**2.4.1, 2.4.2, 2.4.3, 2.1.1 and 1.4.13** have, so deleting one would turn a matching bug into a data-loss
-bug and take those criteria's grounding with it.
+**A fixture page reached at another origin is RELOCATED**, and it must never be deleted. Fixtures are
+declared `http://localhost:5050/…` and captured `http://192.0.2.10:5050/…`, because a fleet worker cannot
+reach `localhost` — that resolves to *itself*, not the host serving pages. Five of the ten are the only
+real-page grounding **2.4.1, 2.4.2, 2.4.3, 2.1.1 and 1.4.13** have, so deleting one would turn a matching
+bug into a data-loss bug and take those criteria's grounding with it.
+
+**Since #881, `realPageFor` reconciles the ordinary case**: a fixture captured at an IPv4 address, on its
+declared port and path, resolves to its declaration and is scored. So the ten are no longer orphans, and
+this tool no longer sees them. RELOCATED is what remains for a page-server capture the matcher does not
+undo — a named host, another port — and `rules:real-pages` prints those under their own heading rather
+than as undeclared. Until #881 they read as undeclared, and #881's first version asked for them to be
+deleted on that basis.
 
 RELOCATED wins over RETIRED wherever both could apply, and `corpus-prune-orphans.test.ts` asserts that
 asymmetry by name. It is not decoration: it is the difference between tidying and destroying.
@@ -52,4 +58,5 @@ evidence taken under Edge 151 cannot be re-made now 152 ships. There is no undo.
 leaving the corpus is how a gate goes quiet, and quieter is only good if it has not gone deaf — the lesson
 `rules:gate` exists to enforce.
 
-See #143 (the orphans) and #146 (the fixture-origin mismatch that creates the RELOCATED ones).
+See #143 (the orphans), #146 (the fixture-origin mismatch that creates the RELOCATED ones) and #881 (the
+matcher that reconciles it).
