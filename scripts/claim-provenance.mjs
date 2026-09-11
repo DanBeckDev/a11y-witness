@@ -180,8 +180,8 @@ export function reportableUnattributable(rows, { since } = {}) {
  * put work that shipped correctly in the same bucket as a row whose history cannot be reconstructed at
  * all.
  *
- * - `worker` -- **a PR opened after `ARM_LABELS_FROM` carries the row's `session:*` label**, so it names
- *   the WORKER.
+ * - `worker` -- **a PR opened after `ARM_LABELS_FROM` that carries a `session:*` label**, so it names the
+ *   WORKER (see the cutoff note below for where that label can come from).
  * - `work` -- **a PR opened before it names the WORK and not the worker.** `agent/exhausted-over-a-gap-887`
  *   identifies a row; it does not identify who ran it, and four of that evening's five used the generic
  *   `agent/` prefix. Saying "attributed" of a branch name would collapse work and worker, which is this
@@ -191,6 +191,12 @@ export function reportableUnattributable(rows, { since } = {}) {
  *   and nothing declared it; OR a PR opened after #839 that carries no `session:` label, where the label's
  *   absence DOES mean something -- `arm-pr` copies the row's label, so a PR without one closed a row that
  *   was never claimed through `row-claim`.
+ *
+ * IN EFFECT A DATE CUTOFF ON THE CLOSING PR, WITH A HAND-LABEL EXCEPTION -- worker-capture's reading, and the
+ * right one. A row only reaches this function if it has NO claim event, so it never carried a `session:`
+ * label for `arm-pr` to copy onto its PR. After #839, then, "no label" is what every such PR looks like, and
+ * `worker` separates out only a PR somebody labelled BY HAND. Do not expect `arm-pr`'s copied label to show
+ * up here; for these rows it cannot.
  *
  * A `verdict`, not a boolean, and #848's first version is why: it returned `attributed: boolean`, so the
  * middle case came back `false` and the audit counted it beside the undeclared one -- the five record gaps
@@ -280,11 +286,21 @@ export function closingPrFromResponse(raw, number) {
   const pr = nodes.map((/** @type {any} */ n) => n?.closer)
     .filter((/** @type {any} */ c) => typeof c?.number === "number").pop();
   if (!pr) return null;
+  // `createdAt` IS THE ONE FIELD WHOSE ABSENCE WOULD LEAVE THE FINDING, so it throws where the others default.
+  // A missing `merged` reads `false` and missing labels read `[]`, and both land in `undeclared` -- they fail
+  // closed. A missing `createdAt` defaulted to `""` compares earlier than #839, reads as `work`, and is not
+  // counted: a malformed response silently emptying the finding, which `parseClosedRows`'s `stateReason`
+  // comment refuses for the same reason (worker-capture's review of #942).
+  if (typeof pr.createdAt !== "string" || pr.createdAt === "") {
+    throw new Error(`claim-provenance: #${number}'s closing PR #${pr.number} came back with no createdAt -- `
+      + "refusing to guess which side of #839 it was opened on, because read as the earlier side it leaves "
+      + "the finding.");
+  }
   return {
     number: pr.number,
     headRefName: typeof pr.headRefName === "string" ? pr.headRefName : "an unrecorded branch",
     merged: pr.merged === true,
-    createdAt: typeof pr.createdAt === "string" ? pr.createdAt : "",
+    createdAt: pr.createdAt,
     sessionLabels: (pr.labels?.nodes ?? []).map((/** @type {any} */ l) => l?.name)
       .filter((/** @type {unknown} */ n) => typeof n === "string" && n.startsWith("session:")),
   };
