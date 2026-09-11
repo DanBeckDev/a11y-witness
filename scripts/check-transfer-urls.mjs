@@ -5,7 +5,7 @@
 //   #63) and paste the output on #524.
 //
 // #524: every public doc URL naming a11ign/a11ign is a 404 today, and nothing tracked that interval.
-// `repo-identity-consolidated.test.ts` and `action-reference.test.ts` correctly pin PRODUCT_REPO into
+// `repo-identity-consolidated.test.ts` and the `action-reference` check correctly pin PRODUCT_REPO into
 // badges/security/provisioning URLs and REPO into `uses:` lines as two DELIBERATELY different values
 // (#66) -- that split is right and stays right until the transfer (#63) actually happens. This is not a
 // test of that split; it is the thing nothing else does: PROVE the interval has closed, on the day it is

@@ -276,13 +276,16 @@ export function discoverTestFiles(repoRoot, pkgDirs) {
 // *"my test is weak"* and *"my test is old"* read the same, and here *"my guard passes"* and *"my guard
 // cannot see the file"* read the same. The discriminator is a `git add`.
 //
-// A DOC CHECK'S MODULE IS JUDGED BY THE TEST'S RULE -- #905. Those guards' walks moved out of their tests
-// into `scripts/doc-checks/<name>.mjs` (one copy, which the nightly doc cross-reference report also runs), and
-// under the helper rule a flat `readdirSync` stopped counting: five guards left this set with no change to
-// what they check, and `commands-documented` -- whose population is `scripts/*.mjs`, which no `docs` job
-// catches -- stopped running on the very PRs it exists for (worker-capture's review of #960). The module is
-// the test's population moved one file over, not the behaviour of a module under test, so the test's rule is
-// the honest one. `doc-cross-reference-report.test.ts` pins it.
+// A DOC CHECK'S MODULE WAS JUDGED BY THE TEST'S RULE -- #905, AND #954 RETIRED THAT. Those guards' walks
+// moved out of their tests into `scripts/doc-checks/<name>.mjs`, and under the helper rule a flat
+// `readdirSync` stopped counting: five guards left this set with no change to what they check, and
+// `commands-documented` -- whose population is `scripts/*.mjs`, which no `docs` job catches -- stopped
+// running on the very PRs it exists for (worker-capture's review of #960). The exemption fixed that.
+//
+// #954 then took the doc cross-reference guards off the pull-request path altogether: six test files are
+// deleted and the eight that remain assert fixture logic rather than the tree, so the exemption became a
+// rule about files that no longer exist. It is gone, and every imported module is judged as a helper again.
+// `doc-cross-reference-report.test.ts` asserts that it is gone, and that no retired guard is still selected.
 //
 // WHAT IT DOES NOT REACH, said plainly rather than left to be discovered: a guard that walks ONE fixed
 // tracked directory (`adr-index` over `docs/adr/`, `commands-documented` over the docs) IS in this set,
@@ -299,9 +302,6 @@ export function discoverTestFiles(repoRoot, pkgDirs) {
  */
 const ENUMERATES_TRACKED =
   /\b[A-Za-z_$][\w$]*\(\s*["']git["'],\s*\[\s*["'](?:ls-files|grep|for-each-ref|branch|tag|log)["']/;
-
-/** Where a doc cross-reference check's population logic lives, moved out of its test (#905). */
-const DOC_CHECKS_DIR = "scripts/doc-checks/";
 
 /** A directory walk of any kind -- the other way a population is discovered from disk. */
 const WALKS_A_DIRECTORY = /\b(?:readdirSync|globSync)\s*\(/;
@@ -376,8 +376,9 @@ export function alwaysRunTests(testFiles, { closureOf, repoRoot, readSource }) {
     for (const abs of closureOf(testFile)) {
       const rel = relative(repoRoot, abs);
       if (rel === testFile) continue;
-      // A doc check's module is its test's population, so it gets the test's rule (#905, see the header).
-      if (discoversFromTree(read(rel), { asHelper: !rel.startsWith(DOC_CHECKS_DIR) })) {
+      // #954: the doc checks came off the pull-request path, so `scripts/doc-checks/` no longer gets the
+      // TEST's rule here. Every imported module is judged as a helper again, as it was before #905.
+      if (discoversFromTree(read(rel), { asHelper: true })) {
         guards.push({ test: testFile, why: `imports the tree walker ${rel}` });
         break;
       }
