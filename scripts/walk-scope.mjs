@@ -27,7 +27,7 @@
 // `declared-walk-scope.test.ts` pins the ordering.
 import { createRequire, syncBuiltinESMExports } from "node:module";
 import { fileURLToPath } from "node:url";
-import { isAbsolute, relative, resolve } from "node:path";
+import { basename, isAbsolute, relative, resolve } from "node:path";
 // THE STRING-AWARE ONE, which `select-changed-tests.mjs` already uses. `local-import-closure.mjs` has its own
 // `stripComments`, a regex that does not know about strings -- so a `//` inside one (any URL) blanks the rest
 // of its line. The first version of this file imported that one, and a guard whose first import named a
@@ -133,20 +133,34 @@ export function inScope(path, scope) {
 
 // ---------------------------------------------------------------------------------------------------------
 // THE OBSERVER -- installed on import, so it sees every read after this module evaluates.
+//
+// A DECLARATION IS ONLY AS GOOD AS WHAT THIS SEES, and an unseen read is a false pass: the exact defect the
+// check exists to catch. So every route to the tree is either recorded or FAILS CLOSED.
+//   - `fs`: every call that lists, opens or tests a path, in all three spellings -- sync, callback, and
+//     `fs.promises`, which is the same object as `node:fs/promises`. The first version wrapped only the sync
+//     calls, so a guard walking with `await readdir(...)` would have passed any declaration at all.
+//   - `git` with an argv: `ls-files`, and `grep` after `--`, are recorded by pathspec; `rev-parse`, `config`
+//     and `var` read no population; EVERY OTHER subcommand is the whole repository.
+//   - ANY OTHER CHILD PROCESS -- `node`, `rg`, a shell, `git` inside a shell string -- is the whole
+//     repository. What a child reads is invisible from here, so a guard that spawns one cannot be verified,
+//     and an unverifiable declaration is the one #929 exists to refuse.
+// Not seen: `import()` of a computed path (the loader reads off this thread) and worker threads. Neither is
+// recorded, so `declared-walk-scope.test.ts` pins both as absent from every declaring guard instead.
 // ---------------------------------------------------------------------------------------------------------
 
 /** @type {Set<string>} */
-const observedReads = new Set();
+let observedReads = new Set();
 
-/** @param {unknown} target @returns {string | null} repo-relative, or null when it is not a path in this repo */
-function repoPath(target) {
+/** @param {string} how */
+const unbounded = (how) => `${WHOLE_REPOSITORY} -- ${how}`;
+
+/** @param {unknown} target @param {string} base @returns {string | null} repo-relative ("" is the root), or null */
+function repoPath(target, base) {
   let path = target;
-  if (path instanceof URL) path = fileURLToPath(path);
-  else if (typeof path === "string" && path.startsWith("file:")) path = fileURLToPath(path);
+  if (path instanceof URL || (typeof path === "string" && path.startsWith("file:"))) path = fileURLToPath(path);
   if (typeof path !== "string" && !Buffer.isBuffer(path)) return null; // a file descriptor: not a path
-  const absolute = resolve(process.cwd(), String(path));
-  const rel = relative(REPO_ROOT, absolute);
-  if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) return null;
+  const rel = relative(REPO_ROOT, resolve(base, String(path)));
+  if (rel === ".." || rel.startsWith("../") || isAbsolute(rel)) return null;
   if (rel.split("/").some((segment) => segment === "node_modules" || segment === ".git")) return null;
   // `runs/` is gitignored, so nothing under it can ever be a changed file -- it cannot select or deselect a
   // guard. Counted, a guard that reads the corpus when one happens to exist would fail its own check on a
@@ -155,50 +169,142 @@ function repoPath(target) {
   return rel;
 }
 
-// `git` subcommands that read the TREE. `ls-files` and `grep` are bounded by their pathspecs; the rest read
-// content or history in ways a path cannot bound, so they are recorded as the whole repository. Anything
-// else (`rev-parse`, `config`, `worktree list`) reads no population and is not recorded.
-const BOUNDED_GIT = new Set(["ls-files", "grep"]);
-const UNBOUNDED_GIT = new Set(["show", "cat-file", "diff", "log", "for-each-ref", "branch", "tag", "archive"]);
+/** @param {unknown} cwd @returns {string} */
+const baseOf = (cwd) => resolve(process.cwd(),
+  cwd instanceof URL ? fileURLToPath(cwd) : typeof cwd === "string" ? cwd : ".");
 
-/** @param {unknown[]} args @param {{ cwd?: unknown } | undefined} options */
-function recordGit(args, options) {
-  const strings = args.map(String);
-  const dashC = strings.indexOf("-C");
-  const where = dashC >= 0 ? strings[dashC + 1] : String(options?.cwd ?? process.cwd());
-  if (repoPath(resolve(process.cwd(), where)) === null && resolve(process.cwd(), where) !== REPO_ROOT) return;
-  const rest = dashC >= 0 ? strings.filter((_, i) => i !== dashC && i !== dashC + 1) : strings;
-  const subcommand = rest.find((arg) => !arg.startsWith("-"));
-  if (subcommand && UNBOUNDED_GIT.has(subcommand)) { observedReads.add(WHOLE_REPOSITORY); return; }
-  if (!subcommand || !BOUNDED_GIT.has(subcommand)) return;
-  const pathspecs = rest.slice(rest.indexOf(subcommand) + 1).filter((arg) => !arg.startsWith("-") && arg !== "--");
-  if (pathspecs.length === 0) { observedReads.add(WHOLE_REPOSITORY); return; }
-  for (const spec of pathspecs) {
-    const bare = spec.replace(/^:\([^)]*\)/, "").replace(/\/?\*.*$/, "");
-    observedReads.add(bare === "" ? WHOLE_REPOSITORY : bare);
+/** A path the process opened, statted or tested. The root itself is no population. */
+function recordRead(/** @type {unknown} */ target, base = process.cwd()) {
+  const path = repoPath(target, base);
+  if (path) observedReads.add(path);
+}
+
+/** A directory the process LISTED. Listing the root is walking the whole repository. */
+function recordListing(/** @type {unknown} */ target, base = process.cwd()) {
+  const path = repoPath(target, base);
+  if (path !== null) observedReads.add(path === "" ? unbounded("listed the repository root") : path);
+}
+
+/** A glob lists from its static prefix: `packages/{a,b}/src/**` walks `packages`. */
+function recordGlob(/** @type {unknown} */ pattern, /** @type {{ cwd?: unknown } | undefined} */ options) {
+  for (const each of [pattern].flat()) {
+    const segments = String(each).split("/");
+    const literal = segments.slice(0, Math.max(0, segments.findIndex((s) => /[*?[\]{}()!]/.test(s))));
+    recordListing(segments.some((s) => /[*?[\]{}()!]/.test(s)) ? literal.join("/") : String(each), baseOf(options?.cwd));
   }
 }
 
+// `git`'s own options that take a value in the NEXT argument. Unskipped, `git -c core.quotepath=off ls-files
+// scripts` reads its subcommand as `core.quotepath=off` -- unknown, so the whole repository. That fails closed,
+// but it fails a declaration that was right; skipping the value is what lets the pathspec bound it.
+const GIT_OPTION_WITH_VALUE = new Set(["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env"]);
+const POPULATION_FREE_GIT = new Set(["rev-parse", "config", "var", "version", "check-ref-format"]);
+
+/**
+ * Where `git` runs and what it was asked, past its own options.
+ * @param {string[]} argv @param {string} base
+ */
+function gitInvocation(argv, base) {
+  let where = base;
+  let at = 0;
+  for (; at < argv.length && argv[at].startsWith("-"); at += 1) {
+    if (argv[at] === "-C") where = resolve(where, argv[at + 1] ?? ".");
+    if (GIT_OPTION_WITH_VALUE.has(argv[at])) at += 1;
+  }
+  return { where, subcommand: argv[at], rest: argv.slice(at + 1) };
+}
+
+/**
+ * The pathspecs a tree-reading subcommand was bounded to, or null when nothing bounds it.
+ *
+ * `ls-files` takes pathspecs anywhere; `grep`'s first operand is its PATTERN, so only what follows `--` is a
+ * path. Recorded by operand position, `git grep scripts` -- the word, searched for everywhere -- read as a
+ * walk of `scripts/` and passed a declaration of it.
+ * @param {string} subcommand @param {string[]} rest
+ * @returns {string[] | null}
+ */
+function gitPathspecs(subcommand, rest) {
+  if (subcommand !== "ls-files" && subcommand !== "grep") return null;
+  const dashes = rest.indexOf("--");
+  if (dashes >= 0) return rest.slice(dashes + 1);
+  return subcommand === "ls-files" ? rest.filter((arg) => !arg.startsWith("-")) : null;
+}
+
+/** @param {unknown[]} args @param {{ cwd?: unknown } | undefined} options */
+function recordGit(args, options) {
+  const { where, subcommand, rest } = gitInvocation(args.map(String), baseOf(options?.cwd));
+  // A git run somewhere else entirely -- a fixture repository in a temp directory -- reads nothing here.
+  if (repoPath(where, where) === null) return;
+  if (subcommand === undefined || POPULATION_FREE_GIT.has(subcommand)) return;
+  const pathspecs = gitPathspecs(subcommand, rest);
+  if (pathspecs === null) { observedReads.add(unbounded(`git ${subcommand}`)); return; }
+  if (pathspecs.length === 0) recordListing(".", where);
+  for (const spec of pathspecs) recordGlob(spec.replace(/^:\([^)]*\)/, ""), { cwd: where });
+}
+
+// A command line only a shell can read: `git ls-files | wc -l` is two processes, and which paths the second
+// touches is not in the string.
+const SHELL_SYNTAX = /[|&;<>()$`\\"'*?[\]{}~!#\n]/;
+
+/** @param {unknown} command @param {{ cwd?: unknown } | undefined} options */
+function recordCommandLine(command, options) {
+  const line = String(command).trim();
+  if (/^git\s/.test(line) && !SHELL_SYNTAX.test(line)) recordGit(line.split(/\s+/).slice(1), options);
+  else observedReads.add(unbounded(`a shell ran \`${line.slice(0, 60)}\``));
+}
+
+/** @param {unknown} file @param {unknown[]} rest the arguments after `file`, in whichever overload was used */
+function recordSpawn(file, rest) {
+  const args = Array.isArray(rest[0]) ? rest[0] : [];
+  const options = /** @type {{ cwd?: unknown, shell?: unknown } | undefined} */ (
+    rest.find((r) => r !== null && typeof r === "object" && !Array.isArray(r)));
+  if (options?.shell) recordCommandLine([file, ...args].join(" "), options);
+  else if (basename(String(file)) === "git") recordGit(args, options);
+  else observedReads.add(unbounded(`a child process, \`${basename(String(file))}\`, whose reads are not visible here`));
+}
+
+/**
+ * Replace `owner[name]` with a wrapper that records before it calls through. Own properties are carried
+ * across: `realpathSync.native` is called directly, and `exists` keeps a `util.promisify.custom`.
+ * @param {Record<string, any>} owner @param {string} name @param {(args: unknown[]) => void} record
+ */
+function wrap(owner, name, record) {
+  const original = owner[name];
+  if (typeof original !== "function") return;
+  const observed = function observed(/** @type {unknown[]} */ ...args) {
+    record(args);
+    // @ts-expect-error -- `this` is whatever the caller bound, passed through untouched
+    return original.apply(this, args);
+  };
+  for (const key of Reflect.ownKeys(original)) {
+    if (key === "length" || key === "name" || key === "prototype") continue;
+    Object.defineProperty(observed, key, /** @type {PropertyDescriptor} */ (Object.getOwnPropertyDescriptor(original, key)));
+  }
+  owner[name] = observed;
+}
+
+const LISTS = ["readdir", "opendir"];
+const READS = ["readFile", "stat", "lstat", "access", "open", "realpath", "readlink", "exists"];
+
 function install() {
-  for (const name of ["readdirSync", "readFileSync", "statSync", "lstatSync", "existsSync", "opendirSync", "globSync"]) {
-    const original = fs[name];
-    if (typeof original !== "function") continue;
-    fs[name] = function observed(/** @type {unknown} */ target, /** @type {unknown[]} */ ...rest) {
-      const path = repoPath(target);
-      if (path !== null) observedReads.add(path);
-      return original.call(this, target, ...rest);
-    };
+  const read = (/** @type {unknown[]} */ [target]) => recordRead(target);
+  const list = (/** @type {unknown[]} */ [target]) => recordListing(target);
+  const glob = (/** @type {unknown[]} */ [pattern, options]) => recordGlob(pattern, /** @type {any} */ (options));
+  for (const owner of [fs, fs.promises]) {
+    for (const name of LISTS) { wrap(owner, name, list); wrap(owner, `${name}Sync`, list); }
+    for (const name of READS) { wrap(owner, name, read); wrap(owner, `${name}Sync`, read); }
+    wrap(owner, "glob", glob);
+    wrap(owner, "globSync", glob);
   }
-  for (const name of ["execFileSync", "spawnSync", "execFile", "spawn"]) {
-    const original = childProcess[name];
-    childProcess[name] = function observed(/** @type {unknown} */ file, /** @type {unknown} */ args, /** @type {unknown[]} */ ...rest) {
-      if (file === "git" && Array.isArray(args)) {
-        recordGit(args, /** @type {any} */ (rest.find((r) => r && typeof r === "object")));
-      }
-      return original.call(this, file, args, ...rest);
-    };
+  wrap(fs, "createReadStream", read);
+  for (const name of ["execFileSync", "spawnSync", "execFile", "spawn", "fork"]) {
+    wrap(childProcess, name, ([file, ...rest]) => (name === "fork" ? recordSpawn(process.execPath, rest) : recordSpawn(file, rest)));
   }
-  // Named ESM imports of a builtin are a snapshot of its exports; this re-points them at the wrappers.
+  for (const name of ["exec", "execSync"]) {
+    wrap(childProcess, name, ([command, options]) => recordCommandLine(command, /** @type {any} */ (options)));
+  }
+  // Named ESM imports of a builtin are a snapshot of its exports; this re-points them at the wrappers -- for
+  // `node:fs/promises` too, whose exports are `fs.promises`.
   syncBuiltinESMExports();
 }
 install();
@@ -206,6 +312,24 @@ install();
 /** Every repo-relative path read since this module was imported. */
 export function readsSoFar() {
   return [...observedReads].sort();
+}
+
+/**
+ * The paths read while `run` runs, and only those -- how `declared-walk-scope.test.ts` proves each route is
+ * seen. Tested against `readsSoFar()` instead, a path something else had already read would pass vacuously.
+ * @param {() => unknown} run
+ * @returns {Promise<string[]>}
+ */
+export async function readsDuring(run) {
+  const outer = observedReads;
+  observedReads = new Set();
+  try {
+    await run();
+    return [...observedReads].sort();
+  } finally {
+    for (const path of observedReads) outer.add(path);
+    observedReads = outer;
+  }
 }
 
 /**
@@ -219,7 +343,7 @@ export function readsSoFar() {
  * @param {ReadonlySet<string>} ownFiles repo-relative paths in the guard's import closure
  */
 export function readsOutsideScope(reads, scope, ownFiles) {
-  return reads.filter((path) => path === WHOLE_REPOSITORY || (!ownFiles.has(path) && !inScope(path, scope)));
+  return reads.filter((path) => path.startsWith(WHOLE_REPOSITORY) || (!ownFiles.has(path) && !inScope(path, scope)));
 }
 
 /**
