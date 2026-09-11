@@ -1,5 +1,5 @@
 {
-  "note": "Lifted verbatim from runs/781-r1-hubspot.json. The sweep marks and the census, nothing else. #951 adds runs/887-r9A-hubspot-w7.json capture-1 (the chat widget traps the link and graphic sweeps) and capture-2 (the same page, same box, minutes later, healthy), lifted the same way, with the census's `distinct` counts, which #951's rule divides by.",
+  "note": "Lifted verbatim from runs/781-r1-hubspot.json. The sweep marks and the census, nothing else. #951 adds runs/887-r9A-hubspot-w7.json capture-1 (the chat widget traps the link and graphic sweeps) and capture-2 (the same page, same box, minutes later, healthy), lifted the same way, with the census's `distinct` counts, which #951's rule divides by. #951 then adds seven captures from the lab's real-page corpus (snapshot corpus-2026-09-11_03-35-45, fetched 03:36Z, handed over by orchestrator for gate 1), trimmed to the same fields: the three middle-band link sweeps, the three evaluable zeros-and-ones below 0.1, and a dataset page whose census counts one distinct link. No URL is carried: the dataset page's lab address stays out of the tree.",
   "captures": [
     {
       "source": "runs/781-r1-hubspot.json/capture-1.json",
@@ -635,6 +635,359 @@
           "phrases": [
             "Chat Widget, region, Chat Widget, frame, clickable, Open live chat, button, opens dialog"
           ]
+        }
+      ]
+    },
+    {
+      "source": "lab corpus-2026-09-11_03-35-45: nrscotland.gov.uk/publications",
+      "census": {
+        "heading": 32,
+        "landmark": 21,
+        "link": 62,
+        "graphic": 4,
+        "formControl": 21,
+        "targetMatch": "matched",
+        "distinct": {
+          "landmark": 21,
+          "heading": 32,
+          "link": 50,
+          "graphic": 4,
+          "formControl": 20
+        }
+      },
+      "sweeps": [
+        {
+          "type": "graphic",
+          "found": 0,
+          "prevTrips": 3,
+          "nextTrips": 3,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 0,
+          "phrases": []
+        },
+        {
+          "type": "link",
+          "found": 23,
+          "prevTrips": 31,
+          "nextTrips": 37,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 14,
+          "phrases": [
+            "list, with 2 items, You Tube : 2, region, list, with 2 items, Description of Secure-YEC set by You Tube, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (policies dot google dot com), link, Open policy for You Tube in new window",
+            "Description of YSC set by You Tube, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (policies dot google dot com), link, Open policy for You Tube in new window",
+            "Google Analytics : 7, region, list, with 7 items, Description of ga star set by Google Analytics, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (business dot safety dot google), link, Open policy for Google Analytics in new window",
+            "Description of ga star set by Google Analytics, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (business dot safety dot google), link, Open policy for Google Analytics in new window",
+            "Description of ga set by Google Analytics, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (business dot safety dot google), link, Open policy for Google Analytics in new window",
+            "Description of gat set by Google Analytics, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (business dot safety dot google), link, Open policy for Google Analytics in new window",
+            "Description of gat dot star set by Google Analytics, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (business dot safety dot google), link, Open policy for Google Analytics in new window",
+            "Description of gid set by Google Analytics, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (business dot safety dot google), link, Open policy for Google Analytics in new window",
+            "Description of ga dot star set by Google Analytics, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (business dot safety dot google), link, Open policy for Google Analytics in new window",
+            "list, with 6 items, You Tube : 1, region, list, with 1 item, Description of VISITOR PRIVACY METADATA set by You Tube, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (policies dot google dot com), link, Open policy for You Tube in new window",
+            "Google re CAPTCHA : 1, region, list, with 1 item, Description of GRECAPTCHA set by Google re CAPTCHA, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (business dot safety dot google), link, Open policy for Google re CAPTCHA in new window",
+            "Cookie Tractor : 1, region, list, with 1 item, Description of cc cookie Consent set by Cookie Tractor, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (cookietractor dot com), link, Open policy for Cookie Tractor in new window",
+            "Cloudflare : 1, region, list, with 1 item, Description of cf bm set by Cloudflare, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (cloudflare dot com), link, Open policy for Cloudflare in new window",
+            "cookies page, visited, link",
+            "Read more about our cookies, region, list, with 3 items, list, with 6 items, Cloudflare : 1, region, list, with 1 item, Description of cf bm set by Cloudflare, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (cloudflare dot com), link, Open policy for Cloudflare in new window",
+            "You Tube : 1, region, list, with 1 item, Description of VISITOR PRIVACY METADATA set by You Tube, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (policies dot google dot com), link, Open policy for You Tube in new window",
+            "list, with 2 items, Google Analytics : 7, region, list, with 7 items, Description of ga dot star set by Google Analytics, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (business dot safety dot google), link, Open policy for Google Analytics in new window",
+            "You Tube : 2, region, list, with 2 items, Description of YSC set by You Tube, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (policies dot google dot com), link, Open policy for You Tube in new window",
+            "Description of Secure-YEC set by You Tube, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (policies dot google dot com), link, Open policy for You Tube in new window",
+            "list, with 1 item, You Tube : 3, region, list, with 3 items, Description of Secure-YNID set by You Tube, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (policies dot google dot com), link, Open policy for You Tube in new window",
+            "Description of Secure-ROLLOUT TOKEN set by You Tube, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (policies dot google dot com), link, Open policy for You Tube in new window",
+            "Description of VISITOR INFO 1 LIVE set by You Tube, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (policies dot google dot com), link, Open policy for You Tube in new window",
+            "Powered by Cookie Tractor, link, Read more about Cookie Tractor (opens in new window)"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "lab corpus-2026-09-11_03-35-45: nrscotland.gov.uk/statistics-and-data",
+      "census": {
+        "heading": 15,
+        "landmark": 18,
+        "link": 48,
+        "graphic": 4,
+        "formControl": 20,
+        "targetMatch": "matched",
+        "distinct": {
+          "landmark": 17,
+          "heading": 15,
+          "link": 36,
+          "graphic": 4,
+          "formControl": 19
+        }
+      },
+      "sweeps": [
+        {
+          "type": "graphic",
+          "found": 0,
+          "prevTrips": 3,
+          "nextTrips": 3,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 0,
+          "phrases": []
+        },
+        {
+          "type": "link",
+          "found": 23,
+          "prevTrips": 31,
+          "nextTrips": 37,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 14,
+          "phrases": [
+            "list, with 2 items, You Tube : 2, region, list, with 2 items, Description of Secure-YEC set by You Tube, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (policies dot google dot com), link, Open policy for You Tube in new window",
+            "Description of YSC set by You Tube, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (policies dot google dot com), link, Open policy for You Tube in new window",
+            "Google Analytics : 7, region, list, with 7 items, Description of ga star set by Google Analytics, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (business dot safety dot google), link, Open policy for Google Analytics in new window",
+            "Description of ga star set by Google Analytics, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (business dot safety dot google), link, Open policy for Google Analytics in new window",
+            "Description of ga set by Google Analytics, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (business dot safety dot google), link, Open policy for Google Analytics in new window",
+            "Description of gat set by Google Analytics, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (business dot safety dot google), link, Open policy for Google Analytics in new window",
+            "Description of gat dot star set by Google Analytics, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (business dot safety dot google), link, Open policy for Google Analytics in new window",
+            "Description of gid set by Google Analytics, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (business dot safety dot google), link, Open policy for Google Analytics in new window",
+            "Description of ga dot star set by Google Analytics, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (business dot safety dot google), link, Open policy for Google Analytics in new window",
+            "list, with 6 items, You Tube : 1, region, list, with 1 item, Description of VISITOR PRIVACY METADATA set by You Tube, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (policies dot google dot com), link, Open policy for You Tube in new window",
+            "Google re CAPTCHA : 1, region, list, with 1 item, Description of GRECAPTCHA set by Google re CAPTCHA, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (business dot safety dot google), link, Open policy for Google re CAPTCHA in new window",
+            "Cookie Tractor : 1, region, list, with 1 item, Description of cc cookie Consent set by Cookie Tractor, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (cookietractor dot com), link, Open policy for Cookie Tractor in new window",
+            "Cloudflare : 1, region, list, with 1 item, Description of cf bm set by Cloudflare, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (cloudflare dot com), link, Open policy for Cloudflare in new window",
+            "cookies page, visited, link",
+            "Read more about our cookies, region, list, with 3 items, list, with 6 items, Cloudflare : 1, region, list, with 1 item, Description of cf bm set by Cloudflare, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (cloudflare dot com), link, Open policy for Cloudflare in new window",
+            "You Tube : 1, region, list, with 1 item, Description of VISITOR PRIVACY METADATA set by You Tube, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (policies dot google dot com), link, Open policy for You Tube in new window",
+            "list, with 2 items, Google Analytics : 7, region, list, with 7 items, Description of ga dot star set by Google Analytics, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (business dot safety dot google), link, Open policy for Google Analytics in new window",
+            "You Tube : 2, region, list, with 2 items, Description of YSC set by You Tube, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (policies dot google dot com), link, Open policy for You Tube in new window",
+            "Description of Secure-YEC set by You Tube, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (policies dot google dot com), link, Open policy for You Tube in new window",
+            "list, with 1 item, You Tube : 3, region, list, with 3 items, Description of Secure-YNID set by You Tube, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (policies dot google dot com), link, Open policy for You Tube in new window",
+            "Description of Secure-ROLLOUT TOKEN set by You Tube, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (policies dot google dot com), link, Open policy for You Tube in new window",
+            "Description of VISITOR INFO 1 LIVE set by You Tube, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (policies dot google dot com), link, Open policy for You Tube in new window",
+            "Powered by Cookie Tractor, link, Read more about Cookie Tractor (opens in new window)"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "lab corpus-2026-09-11_03-35-45: sepa.org.uk/environment/water/bathing-waters",
+      "census": {
+        "heading": 17,
+        "landmark": 8,
+        "link": 67,
+        "graphic": 28
+      },
+      "sweeps": [
+        {
+          "type": "graphic",
+          "found": 0,
+          "prevTrips": 3,
+          "nextTrips": 3,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 0,
+          "phrases": []
+        },
+        {
+          "type": "link",
+          "found": 31,
+          "prevTrips": 23,
+          "nextTrips": 61,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 10,
+          "phrases": [
+            "navigation landmark, list, with 8 items, FA Qs, link",
+            "Classifications, link",
+            "Designation, link",
+            "Profiles, link",
+            "Monitoring, link",
+            "Predictions, link",
+            "Locations and results, link",
+            "Home, same page, link, current page",
+            "banner landmark, Return to the homepage, same page, link",
+            "Skip to main content, same page, link",
+            "navigation landmark, list, with 8 items, Home, same page, link, current page",
+            "FA Qs, link",
+            "main landmark, Water Safety Scotland, link, www dot watersafetyscotland dot org dot uk",
+            "Nairn (East), link, bathingwaters dot sepa dot org dot uk",
+            "https: slash slash beta dot sepa dot scot slash news slash 2026 slash sepa-and-scottish-water-warn-beach-users-of-pollution-affecting-the-kinghorn-burn slash, link",
+            "daily bathing water quality predictions, link",
+            "profiles, link",
+            "designation, link",
+            "Water Safety Scotland, link",
+            "Wild swimming: how to swim safely in Scotland's outdoor water, link",
+            "contact us, link",
+            "content info landmark, list, with 4 items, X Twitter, link",
+            "Facebook, link",
+            "You Tube, link",
+            "Linked In, link",
+            "list, with 5 items, Home, same page, link",
+            "Privacy Policy, link",
+            "Cookie Policy, link",
+            "Accessibility, link",
+            "Access to Information, link",
+            "Return to the main SEPA website, same page, link, Return to the homepage"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "lab corpus-2026-09-11_03-35-45: gov.scot/publications",
+      "census": {
+        "heading": 20,
+        "landmark": 9,
+        "link": 46,
+        "graphic": 5,
+        "formControl": 99,
+        "targetMatch": "matched",
+        "distinct": {
+          "landmark": 9,
+          "heading": 20,
+          "link": 45,
+          "graphic": 5,
+          "formControl": 95
+        }
+      },
+      "sweeps": [
+        {
+          "type": "graphic",
+          "found": 0,
+          "prevTrips": 3,
+          "nextTrips": 3,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 0,
+          "phrases": []
+        },
+        {
+          "type": "link",
+          "found": 0,
+          "prevTrips": 3,
+          "nextTrips": 3,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 0,
+          "phrases": []
+        }
+      ]
+    },
+    {
+      "source": "lab corpus-2026-09-11_03-35-45: nidirect.gov.uk/information-and-services/motoring/mot-and-vehicle-testing",
+      "census": {
+        "heading": 9,
+        "landmark": 8,
+        "link": 166,
+        "graphic": 4,
+        "formControl": 6,
+        "targetMatch": "matched",
+        "distinct": {
+          "landmark": 8,
+          "heading": 9,
+          "link": 164,
+          "graphic": 4,
+          "formControl": 6
+        }
+      },
+      "sweeps": [
+        {
+          "type": "graphic",
+          "found": 0,
+          "prevTrips": 3,
+          "nextTrips": 3,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 0,
+          "phrases": []
+        },
+        {
+          "type": "link",
+          "found": 0,
+          "prevTrips": 3,
+          "nextTrips": 3,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 0,
+          "phrases": []
+        }
+      ]
+    },
+    {
+      "source": "lab corpus-2026-09-11_03-35-45: leeds.ac.uk/undergraduate",
+      "census": {
+        "heading": 33,
+        "landmark": 18,
+        "link": 78,
+        "graphic": 23,
+        "formControl": 19,
+        "targetMatch": "matched",
+        "distinct": {
+          "landmark": 18,
+          "heading": 32,
+          "link": 75,
+          "graphic": 23,
+          "formControl": 19
+        }
+      },
+      "sweeps": [
+        {
+          "type": "graphic",
+          "found": 0,
+          "prevTrips": 3,
+          "nextTrips": 3,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 0,
+          "phrases": []
+        },
+        {
+          "type": "link",
+          "found": 1,
+          "prevTrips": 5,
+          "nextTrips": 3,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 1,
+          "phrases": [
+            "cookies to collect information, link"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "lab corpus-2026-09-11_03-35-45: focus-panel-undismissable-help/good.html (dataset page)",
+      "census": {
+        "heading": 1,
+        "landmark": 2,
+        "link": 1,
+        "graphic": 0,
+        "formControl": 3,
+        "targetMatch": "matched",
+        "distinct": {
+          "landmark": 2,
+          "heading": 1,
+          "link": 1,
+          "graphic": 0,
+          "formControl": 3
+        }
+      },
+      "sweeps": [
+        {
+          "type": "graphic",
+          "found": 0,
+          "prevTrips": 3,
+          "nextTrips": 3,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 0,
+          "phrases": []
+        },
+        {
+          "type": "link",
+          "found": 0,
+          "prevTrips": 3,
+          "nextTrips": 3,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 0,
+          "phrases": []
         }
       ]
     }
