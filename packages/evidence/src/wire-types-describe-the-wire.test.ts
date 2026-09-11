@@ -43,7 +43,7 @@ const EMITTED_INTERACTION = ["controls", "stateChanges", "formChanges", "postSub
 // while this type omitted them, which is what made `cli.ts` cast around `environment` instead of the
 // published type describing it.
 const EMITTED_RESULT = ["screenReader", "url", "task", "transcript", "structure", "interaction",
-  "capturedAt", "diagnostics", "meta", "media", "observed", "environment"];
+  "capturedAt", "diagnostics", "meta", "media", "formInputs", "observed", "environment"];
 
 test("CaptureStructure declares every sweep a capture emits", () => {
   // Compile-time: naming each key proves it is declared. An undeclared key makes this a type error, which
@@ -68,7 +68,7 @@ test("CaptureResult declares every field a capture response carries, environment
   const declared: Required<CaptureResult> = {
     screenReader: "", url: "", task: "", transcript: [], structure: { headings: [], landmarks: [], formFields: [] },
     interaction: { controls: [], stateChanges: [], formChanges: [], postSubmitFields: [] },
-    capturedAt: "", diagnostics: [], meta: {}, media: null, observed: {},
+    capturedAt: "", diagnostics: [], meta: {}, media: null, formInputs: null, observed: {},
     environment: {
       measuredAt: "", screenReader: "", screenReaderVersion: "", browser: "", browserVersion: "",
       guidepupVersion: "", screenReaderSettings: "", nodeVersion: "", windowsVersion: "", architecture: "",

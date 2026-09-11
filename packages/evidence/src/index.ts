@@ -216,6 +216,13 @@ export interface CaptureResult {
    */
   media?: { tag: string; autoplay: boolean; muted: boolean; controls: boolean; loop: boolean }[] | null;
   /**
+   * Each form control's `autocomplete` ATTRIBUTE, from the DOM — 1.3.5 Identify Input Purpose (#170). Same
+   * contract as `media`: `autocomplete` has no accessibility-tree equivalent, `null` means the census did not
+   * run (NOT an empty page), and `autocomplete: null` on an entry means that control has no attribute. The
+   * attribute as written, never the browser's normalised property, which reads a malformed token as `""`.
+   */
+  formInputs?: { tag: string; type: string | null; autocomplete: string | null }[] | null;
+  /**
    * What this capture ASKED about each optional channel, beside what it heard — "the probe is opt-in and
    * this case did not request it" and "the page had no control to activate" are different facts, and a
    * consumer that only sees an empty array cannot tell them apart. Keyed by channel name.
