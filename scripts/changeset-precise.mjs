@@ -14,10 +14,9 @@
 // identical thing after its `npm ci`. A second regex or a second `npm pack` call here would be the
 // fact-stated-twice shape this repo keeps finding in its own tooling.
 import { pathToFileURL } from "node:url";
-import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { classify, knownPackages } from "./ci-changed.mjs";
-import { sandboxGitEnv } from "./git-env.mjs";
+import { changedFiles } from "./changed-files.mjs";
 import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -42,7 +41,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
     console.error("Usage: node scripts/changeset-precise.mjs <base-ref>   e.g. origin/main");
     process.exit(2);
   }
-  const files = execFileSync("git", ["diff", "--name-only", `${base}...HEAD`],
-    { cwd: REPO_ROOT, env: sandboxGitEnv(), encoding: "utf8" }).split("\n").filter(Boolean);
+  // #939: both sides of a rename -- a package a file moved AWAY from asked for no changeset.
+  const files = changedFiles([`${base}...HEAD`], { repoRoot: REPO_ROOT });
   process.stdout.write(touchesPublishedPackedFile(files, REPO_ROOT) ? "true" : "false");
 }
