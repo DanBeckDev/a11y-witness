@@ -45,6 +45,12 @@ deleted on that basis.
 RELOCATED wins over RETIRED wherever both could apply, and `corpus-prune-orphans.test.ts` asserts that
 asymmetry by name. It is not decoration: it is the difference between tidying and destroying.
 
+**A fixture is decided by its declaration's `role`, never by its host alone (#940).** The host is
+`FIXTURE_BASE`, which `DATASET_BASE_URL` overrides. Until #940, setting that documented variable to any
+non-loopback address made every fixture capture RETIRED, and `--apply` deleted all ten. `isFixture` is the one
+predicate the prune tool, the matcher and `rules:real-pages` share, so they cannot disagree about which
+captures are fixtures.
+
 ## It reports by default, and that is not decorum
 
 `runs/` is gitignored and these captures are hours of worker time that **cannot be recreated** —
