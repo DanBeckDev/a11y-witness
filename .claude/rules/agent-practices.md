@@ -17,6 +17,14 @@ whether they are followed.
 - `/clear` between unrelated topics; a fresh window beats stale history.
 - Batch related requests into one message; every round-trip re-sends the whole config stack.
 
+## Web research
+
+- Measured 2026-09-11 over 30 days: 576 web search and fetch calls put about 2.9 million tokens of page
+  content into main-session contexts. Run research in a subagent (`haiku` to gather, `sonnet` to
+  digest) so the pages stay in its context and only the digest reaches yours; ask for a digest with
+  sources, never a page dump. One fetch that the main session must read itself is the exception, not
+  the habit.
+
 ## Timers and state
 
 - Every session holds one standing cron (engineers every 10 min, the fleet operator every 10 min while
