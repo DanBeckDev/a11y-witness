@@ -76,7 +76,7 @@ const EVENTS_JQ = '.[] | select(.event == "labeled" or .event == "unlabeled")'
 
 /**
  * @typedef {{ event: "labeled" | "unlabeled", label: string, at: string }} LabelEvent
- * @typedef {{ number: number, title: string, closedAt: string, events: LabelEvent[] }} ClosedRowEvents
+ * @typedef {{ number: number, title: string, closedAt: string, stateReason?: string, events: LabelEvent[] }} ClosedRowEvents
  * @typedef {{ session: string, from: string, to: string | null }} Claim
  */
 
@@ -169,8 +169,7 @@ export function unattributableClosedRows(rows, { since } = {}) {
  * @returns {ClosedRowEvents[]}
  */
 export function reportableUnattributable(rows, { since } = {}) {
-  return unattributableClosedRows(rows, { since })
-    .filter((r) => /** @type {any} */ (r).stateReason !== "NOT_PLANNED");
+  return unattributableClosedRows(rows, { since }).filter((r) => r.stateReason !== "NOT_PLANNED");
 }
 
 /**
@@ -181,33 +180,44 @@ export function reportableUnattributable(rows, { since } = {}) {
  * put work that shipped correctly in the same bucket as a row whose history cannot be reconstructed at
  * all.
  *
- * - **A PR armed after `ARM_LABELS_FROM` carries the row's `session:*` label**, so it names the WORKER.
- * - **An earlier PR names the WORK and not the worker.** `agent/exhausted-over-a-gap-887` identifies a
- *   row; it does not identify who ran it, and four of that evening's five used the generic `agent/`
- *   prefix. Saying "attributed" of a branch name would collapse work and worker, which is this
- *   repository's most-recorded defect.
- * - **No closing PR at all** is the finding that needs a person: the work landed and nothing declared it.
+ * - `worker` -- **a PR opened after `ARM_LABELS_FROM` carries the row's `session:*` label**, so it names
+ *   the WORKER.
+ * - `work` -- **a PR opened before it names the WORK and not the worker.** `agent/exhausted-over-a-gap-887`
+ *   identifies a row; it does not identify who ran it, and four of that evening's five used the generic
+ *   `agent/` prefix. Saying "attributed" of a branch name would collapse work and worker, which is this
+ *   repository's most-recorded defect. But it is not a FINDING either: before #839 no PR carried a label,
+ *   so its absence says nothing about the process -- a gap in the record, not a bypass.
+ * - `undeclared` -- **the finding that needs a person.** No merged closing PR at all, so the work landed
+ *   and nothing declared it; OR a PR opened after #839 that carries no `session:` label, where the label's
+ *   absence DOES mean something -- `arm-pr` copies the row's label, so a PR without one closed a row that
+ *   was never claimed through `row-claim`.
+ *
+ * A `verdict`, not a boolean, and #848's first version is why: it returned `attributed: boolean`, so the
+ * middle case came back `false` and the audit counted it beside the undeclared one -- the five record gaps
+ * of 2026-09-09 would have stayed in the finding forever, which is what this function was written to stop.
  *
  * The boundary is compared against the PR's `createdAt` rather than the moment its label was applied,
  * which UNDER-attributes a PR opened before #839 and armed after it. That direction is deliberate: a
  * missed attribution is a row a person looks at, and a wrong one is a row nobody looks at again.
  *
- * @param {{ number: number, headRefName: string, merged: boolean, createdAt: string,
- *   sessionLabels: string[] } | null} pr
- * @returns {{ attributed: boolean, line: string }}
+ * @param {ClosingPr | null} pr
+ * @returns {{ verdict: "worker" | "work" | "undeclared", line: string }}
  */
 export function attributionFor(pr) {
   if (pr === null || !pr.merged) {
-    return { attributed: false, line: "no session ever claimed this row and no merged pull request "
+    return { verdict: "undeclared", line: "no session ever claimed this row and no merged pull request "
       + "declared it -- the work landed with nothing recording who did it" };
   }
-  const armed = pr.createdAt >= ARM_LABELS_FROM && pr.sessionLabels.length > 0;
-  if (armed) {
-    return { attributed: true, line: `closed by merged PR #${pr.number} `
-      + `(${pr.headRefName}), armed with ${pr.sessionLabels.join(", ")}` };
+  if (pr.createdAt < ARM_LABELS_FROM) {
+    return { verdict: "work", line: `closed by merged PR #${pr.number} (${pr.headRefName}) -- that names `
+      + `the WORK, not the worker; PRs before ${ARM_LABELS_FROM} carry no session label (#839)` };
   }
-  return { attributed: false, line: `closed by merged PR #${pr.number} (${pr.headRefName}) -- that names `
-    + `the WORK, not the worker; PRs before ${ARM_LABELS_FROM} carry no session label (#839)` };
+  if (pr.sessionLabels.length === 0) {
+    return { verdict: "undeclared", line: `closed by merged PR #${pr.number} (${pr.headRefName}), opened `
+      + `after #839 and carrying no session label -- the row was never claimed through row-claim` };
+  }
+  return { verdict: "worker", line: `closed by merged PR #${pr.number} `
+    + `(${pr.headRefName}), armed with ${pr.sessionLabels.join(", ")}` };
 }
 
 /** @typedef {{ number: number, headRefName: string, merged: boolean, createdAt: string,
@@ -320,11 +330,11 @@ export function labelEventsByIssue(events) {
 }
 
 /**
- * Parses `gh issue list --json number,title,closedAt`. A response of exactly `limit` rows THROWS: it is
+ * Parses `gh issue list --json number,title,closedAt,stateReason`. A response of exactly `limit` rows THROWS: it is
  * indistinguishable from a truncated one, and a closed row missing from this listing is silently not
  * audited rather than reported.
  * @param {string} raw @param {number} limit
- * @returns {{ number: number, title: string, closedAt: string }[]}
+ * @returns {{ number: number, title: string, closedAt: string, stateReason?: string }[]}
  */
 export function parseClosedRows(raw, limit) {
   /** @type {unknown} */
@@ -408,7 +418,9 @@ export function fetchClosedRowEvents({ run = defaultRun, openIssues } = {}) {
   let listRaw;
   try {
     listRaw = run("gh", ["issue", "list", "--repo", REPO, "--state", "closed",
-      "--limit", String(CLOSED_ROW_LIMIT), "--json", "number,title,closedAt"]);
+      // `stateReason` ASKED FOR, or `reportableUnattributable` can never see a NOT_PLANNED row (#848): the
+      // first version filtered on a field this listing never requested, and dropped it again below.
+      "--limit", String(CLOSED_ROW_LIMIT), "--json", "number,title,closedAt,stateReason"]);
   } catch (cause) {
     throw new Error(`claim-provenance: could not list closed rows from ${REPO} -- refusing to audit a `
       + `population it could not read. ${/** @type {Error} */ (cause).message}`, { cause });
@@ -436,6 +448,6 @@ export function fetchClosedRowEvents({ run = defaultRun, openIssues } = {}) {
     }
   }
 
-  return closed.map(({ number, title, closedAt }) =>
-    ({ number, title, closedAt, events: byNumber.get(number) ?? [] }));
+  return closed.map(({ number, title, closedAt, stateReason }) =>
+    ({ number, title, closedAt, stateReason, events: byNumber.get(number) ?? [] }));
 }

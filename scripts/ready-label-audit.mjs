@@ -1082,29 +1082,51 @@ function reportUnattributableClosedRows() {
   return reportProvenanceOf(gated);
 }
 
+/** What each verdict prints as. Only `undeclared` is counted: see `attributionFor`. */
+const PROVENANCE_MARK = { worker: "ATTRIBUTED", work: "WORK, NOT WORKER", undeclared: "NEEDS A PERSON" };
+
+/**
+ * Every reportable row with its verdict. PURE given `closingPrFor`, and exported so the finding count is
+ * tested without the network -- the first version counted by `!attributed`, which put the middle verdict
+ * in the finding, and nothing that ran it could see that.
+ *
+ * @param {ReturnType<typeof reportableUnattributable>} gated
+ * @param {(number: number) => ReturnType<typeof fetchClosingPullRequest>} closingPrFor
+ */
+export function provenanceVerdicts(gated, closingPrFor) {
+  return gated.map(({ number, title, closedAt }) => ({ number, title, closedAt, ...attributionFor(closingPrFor(number)) }));
+}
+
+/**
+ * The rows the provenance check returns as its FINDING: `undeclared` only. Its own function so the count the
+ * audit exits with is the one the test reads -- a test that recomputed it would pass whatever the audit did.
+ *
+ * @param {ReturnType<typeof provenanceVerdicts>} verdicts @returns {number[]}
+ */
+export function provenanceFindings(verdicts) {
+  return verdicts.filter((v) => v.verdict === "undeclared").map((v) => v.number);
+}
+
 /**
  * The three verdicts, printed apart, because collapsing them is what made ten rows read as one
  * population on 2026-09-09: five had been closed by a merged pull request that declared them, and
  * calling those UNATTRIBUTABLE put work that shipped correctly beside a row whose history cannot be
- * reconstructed at all. Only the third kind is returned as a finding.
+ * reconstructed at all. Only `undeclared` is returned as a finding.
  *
  * @param {ReturnType<typeof reportableUnattributable>} gated
  * @returns {number}
  */
 function reportProvenanceOf(gated) {
-  if (gated.length === 0) {
+  const verdicts = provenanceVerdicts(gated, fetchClosingPullRequest);
+  for (const { number, title, closedAt, verdict, line } of verdicts) {
+    process.stdout.write(`${PROVENANCE_MARK[verdict]}  #${number} "${title}" -- closed ${closedAt}, ${line}\n`);
+  }
+  const undeclared = provenanceFindings(verdicts);
+  if (undeclared.length === 0) {
     process.stdout.write(`OK  every row closed since ${PROVENANCE_REQUIRED_FROM} that was actually `
       + `worked names its claimant or the pull request that declared it\n`);
     return 0;
   }
-  const undeclared = [];
-  for (const { number, title, closedAt } of gated) {
-    const { attributed, line } = attributionFor(fetchClosingPullRequest(number));
-    const mark = attributed ? "ATTRIBUTED" : "NEEDS A CLAIM";
-    process.stdout.write(`${mark}  #${number} "${title}" -- closed ${closedAt}, ${line}\n`);
-    if (!attributed) undeclared.push(number);
-  }
-  if (undeclared.length === 0) return 0;
   process.stderr.write(`\n${undeclared.length} row(s) closed since ${PROVENANCE_REQUIRED_FROM} cannot `
     + `name their worker: ${undeclared.map((n) => `#${n}`).join(", ")}. A branch name identifies the `
     + `WORK, never the worker -- have whoever pushed it re-run \`row-claim.mjs claim\`, so the next `
