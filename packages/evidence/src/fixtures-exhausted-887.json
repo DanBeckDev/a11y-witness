@@ -1,5 +1,5 @@
 {
-  "note": "Lifted verbatim from runs/781-r1-hubspot.json. The sweep marks and the census, nothing else.",
+  "note": "Lifted verbatim from runs/781-r1-hubspot.json. The sweep marks and the census, nothing else. #951 adds runs/887-r9A-hubspot-w7.json capture-1 (the chat widget traps the link and graphic sweeps) and capture-2 (the same page, same box, minutes later, healthy), lifted the same way, with the census's `distinct` counts, which #951's rule divides by. #951 then adds seven captures from the lab's real-page corpus (snapshot corpus-2026-09-11_03-35-45, fetched 03:36Z, handed over by orchestrator for gate 1), trimmed to the same fields: the three middle-band link sweeps, the three evaluable zeros-and-ones below 0.1, and a dataset page whose census counts one distinct link. No URL is carried: the dataset page's lab address stays out of the tree.",
   "captures": [
     {
       "source": "runs/781-r1-hubspot.json/capture-1.json",
@@ -209,6 +209,785 @@
           "phrases": [
             "Chat Widget, region, Chat Widget, frame, clickable, Open live chat, button, opens dialog"
           ]
+        }
+      ]
+    },
+    {
+      "source": "runs/887-r9A-hubspot-w7.json/capture-1.json",
+      "census": {
+        "heading": 21,
+        "landmark": 7,
+        "link": 39,
+        "graphic": 33,
+        "formControl": 14,
+        "targetMatch": "matched",
+        "distinct": {
+          "landmark": 7,
+          "heading": 21,
+          "link": 33,
+          "graphic": 32,
+          "formControl": 12
+        }
+      },
+      "sweeps": [
+        {
+          "type": "heading",
+          "found": 20,
+          "prevTrips": 3,
+          "nextTrips": 43,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 0,
+          "scope": {
+            "openDialog": null
+          },
+          "phrases": [
+            "299,000 plus customers in over 135 countries grow their businesses with Hub Spot., heading, level 2",
+            "Hub Spot's Agentic Customer Platform, heading, level 2",
+            "list, clickable, with 1 item, 1 of 3, slide, A CRM that’s really smart., heading, level 3",
+            "Growing a business is hard. Hub Spot makes it easier., heading, level 2",
+            "Marketing Hub registered, heading, level 3",
+            "Sales Hub registered, heading, level 3",
+            "Service Hub registered, heading, level 3",
+            "Content Hub trademark, heading, level 3",
+            "Data Hub trademark, heading, level 3",
+            "Revenue Hub trademark, heading, level 3",
+            "Smart CRM trademark, heading, level 3",
+            "Agent Hub trademark, heading, level 3",
+            "Small Business Bundle, heading, level 3",
+            "AEO (Beta), heading, level 3",
+            "Built-in AI agents that work for you 24 slash 7., heading, level 2",
+            "list, clickable, with 1 item, 1 of 3, slide, Customer Agent, heading, level 3",
+            "Works with the tools you already use. 2,000 plus integrations., heading, level 3",
+            "Remarkable results for every size business., heading, level 2",
+            "Voted number 1 in 526 G 2 Reports, heading, level 3",
+            "Make impossible growth feel impossibly easy, with Hub Spot, heading, level 2"
+          ]
+        },
+        {
+          "type": "landmark",
+          "found": 6,
+          "prevTrips": 9,
+          "nextTrips": 13,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 3,
+          "scope": {
+            "openDialog": null
+          },
+          "phrases": [
+            "banner landmark, Primary Navigation, navigation landmark, Hub Spot, same page, link",
+            "Skip to content, same page, link",
+            "Cookie banner, region",
+            "main landmark, HUBSPOT AGENTIC CUSTOMER PLATFORM",
+            "content info landmark, navigation landmark, Popular Features, button, collapsed",
+            "Chat Widget, region, Chat Widget, frame, clickable, Open live chat, button, opens dialog"
+          ]
+        },
+        {
+          "type": "formField",
+          "found": 16,
+          "prevTrips": 25,
+          "nextTrips": 27,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 10,
+          "scope": {
+            "openDialog": null
+          },
+          "phrases": [
+            "content info landmark, list, with 5 items, Manage Cookies, button",
+            "navigation landmark, Partners, button, collapsed",
+            "Dismiss, button",
+            "Message History, region, speech balloon Chat with sales, button",
+            "rocket Get started free, button",
+            "pencil ️ Get free training, button",
+            "calendar Book a demo, button",
+            "play message audio, button",
+            "Hub Bot, banner landmark, navigation landmark, Close live chat, button",
+            "Expand widget, button",
+            "Close live chat, button",
+            "Ask me anything..., edit, required, multi line, F",
+            "microphone, button",
+            "attach a file, button, unavailable",
+            "send message, button",
+            "Resize widget height or width, resize handle"
+          ]
+        },
+        {
+          "type": "graphic",
+          "found": 2,
+          "prevTrips": 7,
+          "nextTrips": 5,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 2,
+          "scope": {
+            "openDialog": null
+          },
+          "phrases": [
+            "Message History, region, clickable, Avatar of Hub Bot, graphic",
+            "Hub Bot, banner landmark, navigation landmark, Avatar of Hub Bot; agent is available for chat, graphic"
+          ]
+        },
+        {
+          "type": "link",
+          "found": 1,
+          "prevTrips": 3,
+          "nextTrips": 5,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 0,
+          "scope": {
+            "openDialog": null
+          },
+          "phrases": [
+            "privacy policy, link"
+          ]
+        },
+        {
+          "type": "list",
+          "found": 18,
+          "prevTrips": 3,
+          "nextTrips": 39,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 0,
+          "scope": {
+            "openDialog": null
+          },
+          "phrases": [
+            "main landmark, list, with 5 items, grow, heading, level 1",
+            "list, clickable, with 3 items, 1 of 5, slide, Ebay Logo, graphic",
+            "list, clickable, with 1 item, 1 of 3, slide, Shows the products that make up the Hub Spot customer platform, starting with Smart CRM (highlighted, graphic",
+            "list, with 2 items, Attract and convert the right leads.",
+            "list, with 2 items, Generate quality leads and close deals, faster.",
+            "list, with 2 items, Streamline and scale support to serve customers faster.",
+            "list, with 2 items, Create content that clicks with your audience.",
+            "list, with 2 items, Turn scattered data into unified intelligence.",
+            "list, with 2 items, Make it easy for customers to pay you.",
+            "list, with 2 items, All your customer data in one place.",
+            "list, with 2 items, Deploy and manage AI agents across the platform.",
+            "list, with 1 item, The Starter edition of each product, at one low price.",
+            "list, with 2 items, See where your brand shows up in AI results.",
+            "list, clickable, with 1 item, 3 of 3, slide, Shows a Hub Spot user requesting Data Agent to generate a smart property., graphic",
+            "list, with 6 items, Gmail, graphic",
+            "content info landmark, navigation landmark, list, with 5 items, All Partner Programs All Partner Programs, link",
+            "list, with 7 items, Facebook, link",
+            "list, with 5 items, Legal Center, link"
+          ]
+        },
+        {
+          "type": "frame",
+          "found": 1,
+          "prevTrips": 3,
+          "nextTrips": 5,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 0,
+          "scope": {
+            "openDialog": null
+          },
+          "phrases": [
+            "Chat Widget, region, Chat Widget, frame, clickable, Open live chat, button, opens dialog"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "runs/887-r9A-hubspot-w7.json/capture-2.json",
+      "census": {
+        "heading": 21,
+        "landmark": 6,
+        "link": 39,
+        "graphic": 33,
+        "formControl": 14,
+        "targetMatch": "matched",
+        "distinct": {
+          "landmark": 6,
+          "heading": 21,
+          "link": 33,
+          "graphic": 32,
+          "formControl": 12
+        }
+      },
+      "sweeps": [
+        {
+          "type": "heading",
+          "found": 20,
+          "prevTrips": 3,
+          "nextTrips": 43,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 0,
+          "scope": {
+            "openDialog": null
+          },
+          "phrases": [
+            "299,000 plus customers in over 135 countries grow their businesses with Hub Spot., heading, level 2",
+            "Hub Spot's Agentic Customer Platform, heading, level 2",
+            "list, clickable, with 1 item, 1 of 3, slide, A CRM that’s really smart., heading, level 3",
+            "Growing a business is hard. Hub Spot makes it easier., heading, level 2",
+            "Marketing Hub registered, heading, level 3",
+            "Sales Hub registered, heading, level 3",
+            "Service Hub registered, heading, level 3",
+            "Content Hub trademark, heading, level 3",
+            "Data Hub trademark, heading, level 3",
+            "Revenue Hub trademark, heading, level 3",
+            "Smart CRM trademark, heading, level 3",
+            "Agent Hub trademark, heading, level 3",
+            "Small Business Bundle, heading, level 3",
+            "AEO (Beta), heading, level 3",
+            "Built-in AI agents that work for you 24 slash 7., heading, level 2",
+            "list, clickable, with 1 item, 1 of 3, slide, Customer Agent, heading, level 3",
+            "Works with the tools you already use. 2,000 plus integrations., heading, level 3",
+            "Remarkable results for every size business., heading, level 2",
+            "Voted number 1 in 526 G 2 Reports, heading, level 3",
+            "Make impossible growth feel impossibly easy, with Hub Spot, heading, level 2"
+          ]
+        },
+        {
+          "type": "landmark",
+          "found": 5,
+          "prevTrips": 7,
+          "nextTrips": 11,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 2,
+          "scope": {
+            "openDialog": null
+          },
+          "phrases": [
+            "banner landmark, Primary Navigation, navigation landmark, Hub Spot, same page, link",
+            "Skip to content, same page, link",
+            "main landmark, HUBSPOT AGENTIC CUSTOMER PLATFORM",
+            "content info landmark, navigation landmark, Popular Features, button, collapsed",
+            "Chat Widget, region, Chat Widget, frame, clickable, Open live chat, button, opens dialog"
+          ]
+        },
+        {
+          "type": "formField",
+          "found": 16,
+          "prevTrips": 29,
+          "nextTrips": 37,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 11,
+          "scope": {
+            "openDialog": null
+          },
+          "phrases": [
+            "content info landmark, list, with 5 items, Manage Cookies, button",
+            "navigation landmark, Partners, button, collapsed",
+            "main landmark, Small Business, tab",
+            "Mid-Sized Business, tab",
+            "Enterprise, tab, selected",
+            "Pause Carousel, button",
+            "Next slide, button",
+            "Previous slide, button",
+            "Next, button",
+            "Previous, button, unavailable",
+            "banner landmark, Primary Navigation, navigation landmark, Menu, button, collapsed",
+            "clickable, banner landmark, Primary Navigation, navigation landmark, Menu, button, collapsed",
+            "content info landmark, navigation landmark, Partners, button, expanded",
+            "Chat Widget, region, Chat Widget, frame, clickable, Open live chat, button, opens dialog",
+            "Close welcome page, button",
+            "Open live chat, button, opens dialog"
+          ]
+        },
+        {
+          "type": "graphic",
+          "found": 22,
+          "prevTrips": 41,
+          "nextTrips": 39,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 19,
+          "scope": {
+            "openDialog": null
+          },
+          "phrases": [
+            "content info landmark, Get it on Google Play, graphic, link",
+            "Download on the App Store, graphic, link",
+            "main landmark, G 2 Award Badge: Best Usability (Enterprise), graphic",
+            "G 2 Award Badge: Best Results (Mid-Market), graphic",
+            "G 2 Award Badge: Easiest Admin (Enterprise), graphic",
+            "G 2 Award Badge: Best Relationship (Small Business), graphic",
+            "G 2 Award Badge: Most Implementable, graphic",
+            "G 2 Award Badge: Grid Leader (Small Business), graphic",
+            "list, with 6 items, Slack, graphic",
+            "Google Ads, graphic",
+            "Zapier, graphic",
+            "Mailchimp, graphic",
+            "Shopify, graphic",
+            "Gmail, graphic",
+            "list, clickable, with 1 item, 3 of 3, slide, Shows a Hub Spot user requesting Data Agent to generate a smart property., graphic",
+            "list, clickable, with 1 item, 1 of 3, slide, Shows the products that make up the Hub Spot customer platform, starting with Smart CRM (highlighted in this image), then engagement products, then Hub Spot's AI., graphic",
+            "list, clickable, with 3 items, 3 of 5, slide, Reddit Logo, graphic",
+            "2 of 5, slide, Door Dash Logo, graphic",
+            "1 of 5, slide, Ebay Logo, graphic",
+            "3 of 5, slide, Reddit Logo, graphic",
+            "list, with 6 items, Gmail, graphic",
+            "Slack, graphic"
+          ]
+        },
+        {
+          "type": "link",
+          "found": 44,
+          "prevTrips": 79,
+          "nextTrips": 91,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 33,
+          "scope": {
+            "openDialog": null
+          },
+          "phrases": [
+            "Download on the App Store, graphic, link",
+            "list, with 7 items, Tiktok, link",
+            "Reddit, link",
+            "Linkedin, link",
+            "Twitter, link",
+            "Youtube, link",
+            "Instagram, link",
+            "Facebook, link",
+            "navigation landmark, list, with 5 items, Affiliate Program Affiliate Program, link",
+            "Hub Spot for Startups Hub Spot for Startups, link",
+            "Technology Partner Program Technology Partner Program, link",
+            "Solutions Partner Program Solutions Partner Program, link",
+            "All Partner Programs All Partner Programs, link",
+            "main landmark, Get started freewith Hub Spot's free tools, link",
+            "Get a demoof Hub Spot's premium software, link",
+            "Enterprise, property page, Read full case studyabout Unipart, link",
+            "See all case studiesa 11y text suffix, link",
+            "See all app integrations, link",
+            "list, clickable, with 1 item, 2 of 3, slide, Learn moreabout prospecting agent, link",
+            "Explore Agent Hub, link",
+            "Learn moreabout AEO, link",
+            "Learn moreabout the Hub Spot Small Business Bundle of tools, link",
+            "Learn moreabout Hub Spot's AI agents, link",
+            "Learn moreabout Hub Spot's Smart CRM, link",
+            "Learn moreabout Revenue Hub, link",
+            "Learn moreabout Data Hub software, link",
+            "Learn moreabout Content Hub software, link",
+            "Learn moreabout Service Hub software, link",
+            "Learn moreabout Sales Hub software, link",
+            "Learn moreabout Marketing Hub software, link",
+            "Get a demoof Hub Spot's software, link",
+            "Hub Spot, same page, link",
+            "Skip to content, same page, link",
+            "list, clickable, with 1 item, 3 of 3, slide, Learn moreabout content agent, link",
+            "Read full case studyabout Unipart, link",
+            "content info landmark, navigation landmark, list, with 5 items, All Partner Programs All Partner Programs, link",
+            "Affiliate Program Affiliate Program, link",
+            "list, with 7 items, Facebook, link",
+            "Tiktok, link",
+            "Get it on Google Play, graphic, link",
+            "list, with 5 items, Legal Center, link",
+            "Privacy Policy, link",
+            "Security, link",
+            "Website Accessibility, link"
+          ]
+        },
+        {
+          "type": "list",
+          "found": 18,
+          "prevTrips": 3,
+          "nextTrips": 39,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 0,
+          "scope": {
+            "openDialog": null
+          },
+          "phrases": [
+            "main landmark, list, with 5 items, grow, heading, level 1",
+            "list, clickable, with 3 items, 1 of 5, slide, Ebay Logo, graphic",
+            "list, clickable, with 1 item, 1 of 3, slide, Shows the products that make up the Hub Spot customer platform, starting with Smart CRM (highlighted, graphic",
+            "list, with 2 items, Attract and convert the right leads.",
+            "list, with 2 items, Generate quality leads and close deals, faster.",
+            "list, with 2 items, Streamline and scale support to serve customers faster.",
+            "list, with 2 items, Create content that clicks with your audience.",
+            "list, with 2 items, Turn scattered data into unified intelligence.",
+            "list, with 2 items, Make it easy for customers to pay you.",
+            "list, with 2 items, All your customer data in one place.",
+            "list, with 2 items, Deploy and manage AI agents across the platform.",
+            "list, with 1 item, The Starter edition of each product, at one low price.",
+            "list, with 2 items, See where your brand shows up in AI results.",
+            "list, clickable, with 1 item, 1 of 3, slide, Shows Hub Spot's customer agent asking a Hub Spot user how it can help today., graphic",
+            "list, with 6 items, Gmail, graphic",
+            "content info landmark, navigation landmark, list, with 5 items, All Partner Programs All Partner Programs, link",
+            "list, with 7 items, Facebook, link",
+            "list, with 5 items, Legal Center, link"
+          ]
+        },
+        {
+          "type": "frame",
+          "found": 1,
+          "prevTrips": 3,
+          "nextTrips": 5,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 0,
+          "scope": {
+            "openDialog": null
+          },
+          "phrases": [
+            "Chat Widget, region, Chat Widget, frame, clickable, Open live chat, button, opens dialog"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "lab corpus-2026-09-11_03-35-45: nrscotland.gov.uk/publications",
+      "census": {
+        "heading": 32,
+        "landmark": 21,
+        "link": 62,
+        "graphic": 4,
+        "formControl": 21,
+        "targetMatch": "matched",
+        "distinct": {
+          "landmark": 21,
+          "heading": 32,
+          "link": 50,
+          "graphic": 4,
+          "formControl": 20
+        }
+      },
+      "sweeps": [
+        {
+          "type": "graphic",
+          "found": 0,
+          "prevTrips": 3,
+          "nextTrips": 3,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 0,
+          "phrases": []
+        },
+        {
+          "type": "link",
+          "found": 23,
+          "prevTrips": 31,
+          "nextTrips": 37,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 14,
+          "phrases": [
+            "list, with 2 items, You Tube : 2, region, list, with 2 items, Description of Secure-YEC set by You Tube, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (policies dot google dot com), link, Open policy for You Tube in new window",
+            "Description of YSC set by You Tube, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (policies dot google dot com), link, Open policy for You Tube in new window",
+            "Google Analytics : 7, region, list, with 7 items, Description of ga star set by Google Analytics, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (business dot safety dot google), link, Open policy for Google Analytics in new window",
+            "Description of ga star set by Google Analytics, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (business dot safety dot google), link, Open policy for Google Analytics in new window",
+            "Description of ga set by Google Analytics, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (business dot safety dot google), link, Open policy for Google Analytics in new window",
+            "Description of gat set by Google Analytics, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (business dot safety dot google), link, Open policy for Google Analytics in new window",
+            "Description of gat dot star set by Google Analytics, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (business dot safety dot google), link, Open policy for Google Analytics in new window",
+            "Description of gid set by Google Analytics, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (business dot safety dot google), link, Open policy for Google Analytics in new window",
+            "Description of ga dot star set by Google Analytics, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (business dot safety dot google), link, Open policy for Google Analytics in new window",
+            "list, with 6 items, You Tube : 1, region, list, with 1 item, Description of VISITOR PRIVACY METADATA set by You Tube, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (policies dot google dot com), link, Open policy for You Tube in new window",
+            "Google re CAPTCHA : 1, region, list, with 1 item, Description of GRECAPTCHA set by Google re CAPTCHA, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (business dot safety dot google), link, Open policy for Google re CAPTCHA in new window",
+            "Cookie Tractor : 1, region, list, with 1 item, Description of cc cookie Consent set by Cookie Tractor, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (cookietractor dot com), link, Open policy for Cookie Tractor in new window",
+            "Cloudflare : 1, region, list, with 1 item, Description of cf bm set by Cloudflare, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (cloudflare dot com), link, Open policy for Cloudflare in new window",
+            "cookies page, visited, link",
+            "Read more about our cookies, region, list, with 3 items, list, with 6 items, Cloudflare : 1, region, list, with 1 item, Description of cf bm set by Cloudflare, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (cloudflare dot com), link, Open policy for Cloudflare in new window",
+            "You Tube : 1, region, list, with 1 item, Description of VISITOR PRIVACY METADATA set by You Tube, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (policies dot google dot com), link, Open policy for You Tube in new window",
+            "list, with 2 items, Google Analytics : 7, region, list, with 7 items, Description of ga dot star set by Google Analytics, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (business dot safety dot google), link, Open policy for Google Analytics in new window",
+            "You Tube : 2, region, list, with 2 items, Description of YSC set by You Tube, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (policies dot google dot com), link, Open policy for You Tube in new window",
+            "Description of Secure-YEC set by You Tube, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (policies dot google dot com), link, Open policy for You Tube in new window",
+            "list, with 1 item, You Tube : 3, region, list, with 3 items, Description of Secure-YNID set by You Tube, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (policies dot google dot com), link, Open policy for You Tube in new window",
+            "Description of Secure-ROLLOUT TOKEN set by You Tube, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (policies dot google dot com), link, Open policy for You Tube in new window",
+            "Description of VISITOR INFO 1 LIVE set by You Tube, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (policies dot google dot com), link, Open policy for You Tube in new window",
+            "Powered by Cookie Tractor, link, Read more about Cookie Tractor (opens in new window)"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "lab corpus-2026-09-11_03-35-45: nrscotland.gov.uk/statistics-and-data",
+      "census": {
+        "heading": 15,
+        "landmark": 18,
+        "link": 48,
+        "graphic": 4,
+        "formControl": 20,
+        "targetMatch": "matched",
+        "distinct": {
+          "landmark": 17,
+          "heading": 15,
+          "link": 36,
+          "graphic": 4,
+          "formControl": 19
+        }
+      },
+      "sweeps": [
+        {
+          "type": "graphic",
+          "found": 0,
+          "prevTrips": 3,
+          "nextTrips": 3,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 0,
+          "phrases": []
+        },
+        {
+          "type": "link",
+          "found": 23,
+          "prevTrips": 31,
+          "nextTrips": 37,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 14,
+          "phrases": [
+            "list, with 2 items, You Tube : 2, region, list, with 2 items, Description of Secure-YEC set by You Tube, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (policies dot google dot com), link, Open policy for You Tube in new window",
+            "Description of YSC set by You Tube, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (policies dot google dot com), link, Open policy for You Tube in new window",
+            "Google Analytics : 7, region, list, with 7 items, Description of ga star set by Google Analytics, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (business dot safety dot google), link, Open policy for Google Analytics in new window",
+            "Description of ga star set by Google Analytics, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (business dot safety dot google), link, Open policy for Google Analytics in new window",
+            "Description of ga set by Google Analytics, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (business dot safety dot google), link, Open policy for Google Analytics in new window",
+            "Description of gat set by Google Analytics, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (business dot safety dot google), link, Open policy for Google Analytics in new window",
+            "Description of gat dot star set by Google Analytics, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (business dot safety dot google), link, Open policy for Google Analytics in new window",
+            "Description of gid set by Google Analytics, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (business dot safety dot google), link, Open policy for Google Analytics in new window",
+            "Description of ga dot star set by Google Analytics, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (business dot safety dot google), link, Open policy for Google Analytics in new window",
+            "list, with 6 items, You Tube : 1, region, list, with 1 item, Description of VISITOR PRIVACY METADATA set by You Tube, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (policies dot google dot com), link, Open policy for You Tube in new window",
+            "Google re CAPTCHA : 1, region, list, with 1 item, Description of GRECAPTCHA set by Google re CAPTCHA, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (business dot safety dot google), link, Open policy for Google re CAPTCHA in new window",
+            "Cookie Tractor : 1, region, list, with 1 item, Description of cc cookie Consent set by Cookie Tractor, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (cookietractor dot com), link, Open policy for Cookie Tractor in new window",
+            "Cloudflare : 1, region, list, with 1 item, Description of cf bm set by Cloudflare, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (cloudflare dot com), link, Open policy for Cloudflare in new window",
+            "cookies page, visited, link",
+            "Read more about our cookies, region, list, with 3 items, list, with 6 items, Cloudflare : 1, region, list, with 1 item, Description of cf bm set by Cloudflare, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (cloudflare dot com), link, Open policy for Cloudflare in new window",
+            "You Tube : 1, region, list, with 1 item, Description of VISITOR PRIVACY METADATA set by You Tube, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (policies dot google dot com), link, Open policy for You Tube in new window",
+            "list, with 2 items, Google Analytics : 7, region, list, with 7 items, Description of ga dot star set by Google Analytics, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (business dot safety dot google), link, Open policy for Google Analytics in new window",
+            "You Tube : 2, region, list, with 2 items, Description of YSC set by You Tube, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (policies dot google dot com), link, Open policy for You Tube in new window",
+            "Description of Secure-YEC set by You Tube, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (policies dot google dot com), link, Open policy for You Tube in new window",
+            "list, with 1 item, You Tube : 3, region, list, with 3 items, Description of Secure-YNID set by You Tube, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (policies dot google dot com), link, Open policy for You Tube in new window",
+            "Description of Secure-ROLLOUT TOKEN set by You Tube, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (policies dot google dot com), link, Open policy for You Tube in new window",
+            "Description of VISITOR INFO 1 LIVE set by You Tube, table, with 5 rows and 2 columns, Policy:, row 3, column 2, Link to policy (policies dot google dot com), link, Open policy for You Tube in new window",
+            "Powered by Cookie Tractor, link, Read more about Cookie Tractor (opens in new window)"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "lab corpus-2026-09-11_03-35-45: sepa.org.uk/environment/water/bathing-waters",
+      "census": {
+        "heading": 17,
+        "landmark": 8,
+        "link": 67,
+        "graphic": 28
+      },
+      "sweeps": [
+        {
+          "type": "graphic",
+          "found": 0,
+          "prevTrips": 3,
+          "nextTrips": 3,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 0,
+          "phrases": []
+        },
+        {
+          "type": "link",
+          "found": 31,
+          "prevTrips": 23,
+          "nextTrips": 61,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 10,
+          "phrases": [
+            "navigation landmark, list, with 8 items, FA Qs, link",
+            "Classifications, link",
+            "Designation, link",
+            "Profiles, link",
+            "Monitoring, link",
+            "Predictions, link",
+            "Locations and results, link",
+            "Home, same page, link, current page",
+            "banner landmark, Return to the homepage, same page, link",
+            "Skip to main content, same page, link",
+            "navigation landmark, list, with 8 items, Home, same page, link, current page",
+            "FA Qs, link",
+            "main landmark, Water Safety Scotland, link, www dot watersafetyscotland dot org dot uk",
+            "Nairn (East), link, bathingwaters dot sepa dot org dot uk",
+            "https: slash slash beta dot sepa dot scot slash news slash 2026 slash sepa-and-scottish-water-warn-beach-users-of-pollution-affecting-the-kinghorn-burn slash, link",
+            "daily bathing water quality predictions, link",
+            "profiles, link",
+            "designation, link",
+            "Water Safety Scotland, link",
+            "Wild swimming: how to swim safely in Scotland's outdoor water, link",
+            "contact us, link",
+            "content info landmark, list, with 4 items, X Twitter, link",
+            "Facebook, link",
+            "You Tube, link",
+            "Linked In, link",
+            "list, with 5 items, Home, same page, link",
+            "Privacy Policy, link",
+            "Cookie Policy, link",
+            "Accessibility, link",
+            "Access to Information, link",
+            "Return to the main SEPA website, same page, link, Return to the homepage"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "lab corpus-2026-09-11_03-35-45: gov.scot/publications",
+      "census": {
+        "heading": 20,
+        "landmark": 9,
+        "link": 46,
+        "graphic": 5,
+        "formControl": 99,
+        "targetMatch": "matched",
+        "distinct": {
+          "landmark": 9,
+          "heading": 20,
+          "link": 45,
+          "graphic": 5,
+          "formControl": 95
+        }
+      },
+      "sweeps": [
+        {
+          "type": "graphic",
+          "found": 0,
+          "prevTrips": 3,
+          "nextTrips": 3,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 0,
+          "phrases": []
+        },
+        {
+          "type": "link",
+          "found": 0,
+          "prevTrips": 3,
+          "nextTrips": 3,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 0,
+          "phrases": []
+        }
+      ]
+    },
+    {
+      "source": "lab corpus-2026-09-11_03-35-45: nidirect.gov.uk/information-and-services/motoring/mot-and-vehicle-testing",
+      "census": {
+        "heading": 9,
+        "landmark": 8,
+        "link": 166,
+        "graphic": 4,
+        "formControl": 6,
+        "targetMatch": "matched",
+        "distinct": {
+          "landmark": 8,
+          "heading": 9,
+          "link": 164,
+          "graphic": 4,
+          "formControl": 6
+        }
+      },
+      "sweeps": [
+        {
+          "type": "graphic",
+          "found": 0,
+          "prevTrips": 3,
+          "nextTrips": 3,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 0,
+          "phrases": []
+        },
+        {
+          "type": "link",
+          "found": 0,
+          "prevTrips": 3,
+          "nextTrips": 3,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 0,
+          "phrases": []
+        }
+      ]
+    },
+    {
+      "source": "lab corpus-2026-09-11_03-35-45: leeds.ac.uk/undergraduate",
+      "census": {
+        "heading": 33,
+        "landmark": 18,
+        "link": 78,
+        "graphic": 23,
+        "formControl": 19,
+        "targetMatch": "matched",
+        "distinct": {
+          "landmark": 18,
+          "heading": 32,
+          "link": 75,
+          "graphic": 23,
+          "formControl": 19
+        }
+      },
+      "sweeps": [
+        {
+          "type": "graphic",
+          "found": 0,
+          "prevTrips": 3,
+          "nextTrips": 3,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 0,
+          "phrases": []
+        },
+        {
+          "type": "link",
+          "found": 1,
+          "prevTrips": 5,
+          "nextTrips": 3,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 1,
+          "phrases": [
+            "cookies to collect information, link"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "lab corpus-2026-09-11_03-35-45: focus-panel-undismissable-help/good.html (dataset page)",
+      "census": {
+        "heading": 1,
+        "landmark": 2,
+        "link": 1,
+        "graphic": 0,
+        "formControl": 3,
+        "targetMatch": "matched",
+        "distinct": {
+          "landmark": 2,
+          "heading": 1,
+          "link": 1,
+          "graphic": 0,
+          "formControl": 3
+        }
+      },
+      "sweeps": [
+        {
+          "type": "graphic",
+          "found": 0,
+          "prevTrips": 3,
+          "nextTrips": 3,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 0,
+          "phrases": []
+        },
+        {
+          "type": "link",
+          "found": 0,
+          "prevTrips": 3,
+          "nextTrips": 3,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 0,
+          "phrases": []
         }
       ]
     }
