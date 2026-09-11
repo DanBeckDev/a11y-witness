@@ -597,6 +597,39 @@ export function sweepObservation(prev, next) {
 }
 
 /**
+ * WHERE FOCUS SAT WHEN A SWEEP STARTED, as that sweep's own `observed` record carries it -- #953.
+ *
+ * The instrument #951's remedy waits on, and nothing else: it changes no behaviour. `scopeAt` is the DOM
+ * census `collectByType` already reads at the sweep's start (one read per sweep, no second round trip), and
+ * its `focusFrame` names the frame holding focus, or is `null` in the top document.
+ *
+ * FOUR ANSWERS, and collapsing any two is the defect this project pays for most:
+ *   `{ focusInFrame: "<frame>" }`         focus sat inside that frame
+ *   `{ focusInFrame: null }`              the page was read, and focus sat in the top document
+ *   `{ focusInFrameUnknown: "<why>" }`    the page was read and could not say -- a closed shadow root hides
+ *                                         where focus is (worker-judge's review of #963), or the read threw
+ *   `{}`                                  nobody could say: the census failed, a worker predating the field,
+ *                                         or an answer of no known shape
+ *
+ * Only an EXPLICIT `null` is "top document": `null` is a claim, and a malformed answer is not evidence for it.
+ *
+ * NESTED under the sweep's record, never a top-level field: readers that take "every numeric field except
+ * these" turn a new top-level number into an element type. And never a number, whatever the page returned --
+ * so no reader of any shape can count it.
+ *
+ * @param {{ focusFrame?: unknown } | null | undefined} scopeAt the census read at the sweep's start
+ * @returns {{ focusInFrame?: string | null, focusInFrameUnknown?: string }}
+ */
+export function focusInFrameOf(scopeAt) {
+  if (!scopeAt || typeof scopeAt !== "object" || !("focusFrame" in scopeAt)) return {};
+  const frame = scopeAt.focusFrame;
+  if (frame === null) return { focusInFrame: null };
+  if (typeof frame === "string" && frame.length > 0) return { focusInFrame: frame };
+  const why = frame && typeof frame === "object" ? /** @type {{ cannotSay?: unknown }} */ (frame).cannotSay : undefined;
+  return typeof why === "string" && why.length > 0 ? { focusInFrameUnknown: why } : {};
+}
+
+/**
  * A channel nobody asked about. Distinct from `{asked: true}` with nothing found, and that is the point.
  *
  * `why` is required rather than defaulted: "the probe is opt-in and this case did not request it" and "the
