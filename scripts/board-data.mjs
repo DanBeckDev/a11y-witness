@@ -239,6 +239,49 @@ function readEntries(kind) {
     .map((e) => e.body);
 }
 
+/**
+ * PURE. #429: is this entry the KIND of gate the appendix's "Most recent conformance check result" row
+ * actually means -- a conformance run on real pages, whose PASS/FAIL is a claim about the PRODUCT's own
+ * accessibility conformance. Every other recorded kind answers a DIFFERENT question with its own
+ * PASS/FAIL or none at all: `-e job=promote` decides which TRAINED MODEL ships (a corpus/promotion
+ * decision, not a conformance one); `-e job=capture-only`/`fleet-hours` measures throughput and prints no
+ * verdict line at all; an ad-hoc operational diagnostic (a fleet-access postmortem, a PDF-render refusal,
+ * a runway-window measurement) is not a gate run in this sense either. #429's own demonstration is
+ * exactly a `promote` PASS recorded an hour after a `rules-real-pages` FAIL displacing it on the appendix
+ * -- BOTH carry a verdict, so "does it carry a verdict" alone is necessary but not sufficient, which is
+ * why this exists as its own, narrower question rather than folding into `worstVerdict`.
+ *
+ * `job=rules-real-pages` NAMED DIRECTLY rather than inferred, because inferring "conformance" from
+ * anything else recorded on an entry (its note, its output's wording) risks being the exact wrong-taxonomy
+ * mistake this row's own "What this row is NOT" warns against. The job name is this project's own stable
+ * identifier for the one check that scores real pages against the shipped rules -- `ansible/lab-job.yml`'s
+ * own catalogue -- and is a fact about WHICH CHECK RAN, not an interpretation of what it said.
+ *
+ * @param {any} gate
+ * @returns {boolean}
+ */
+export function isConformanceGate(gate) {
+  return /(?:^|\s)-e\s+job=rules-real-pages\b/.test(String(gate?.command ?? ""));
+}
+
+/**
+ * PURE. #429: the newest CONFORMANCE gate that actually carries a verdict a reader can be told about --
+ * never the newest entry of ANY kind. Picking "newest by `at`" across every recorded kind is exactly how
+ * a promotion recorded an hour after a conformance run silently replaced its verdict on the page the
+ * board reads (demonstrated on this row's own issue): adding one newer entry of a DIFFERENT KIND flipped
+ * the appendix from FAIL to PASS with nothing wrong in either entry. See `isConformanceGate`'s own header
+ * for what a gate IS here and why `promote`/throughput/diagnostic entries never compete for this slot.
+ *
+ * @param {any[]} gates
+ * @returns {any | null}
+ */
+export function latestVerdictGate(gates) {
+  const candidates = gates.filter(
+    (/** @type {any} */ g) => isConformanceGate(g) && worstVerdict(g.output) !== null);
+  return candidates.sort((/** @type {any} */ a, /** @type {any} */ b) => Date.parse(b.at) - Date.parse(a.at))[0]
+    ?? null;
+}
+
 export function reported() {
   const metaPath = path.join(ROOT, REPORTED_DIR, "meta.json");
   // DERIVED FROM `REPORTED_KINDS`, not repeated. This line read `gates: readEntries("gates"),
@@ -251,7 +294,8 @@ export function reported() {
   /** @param {any} entry */
   const fresh = (entry) => Date.now() - Date.parse(entry.at) < staleMs;
   const gates = (raw.gates ?? []).filter((/** @type {any} */ g) => g.at && Number.isFinite(Date.parse(g.at)));
-  const latest = gates.sort((/** @type {any} */ a, /** @type {any} */ b) => Date.parse(b.at) - Date.parse(a.at))[0] ?? null;
+  // #429: THE VERDICT SLOT, not the newest of any kind -- see `latestVerdictGate`'s own header.
+  const latest = latestVerdictGate(gates);
   // EVERY GATE, not just the newest. Section five recommended "buying nothing yet" while the record held
   // the measurement that answered it, because the document could not SEE any gate but the latest -- so
   // the prose was hand-written and went stale the moment the re-run landed. A section that states a
