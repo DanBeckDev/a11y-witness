@@ -546,9 +546,11 @@ function compareStates(states: Record<string, Record<string, number>>):
  *
  * ## `elsewhere` is a verdict -- #951
  *
- * The sweep ran out of a CONTAINER, not of the page: its `exhausted` is true about wherever the caret was
- * confined. It can say nothing about the page's absences, and what it did hear belongs to the container.
- * See `sweptElsewhere`, the one place that decides it.
+ * The sweep said it reached the end -- `exhausted` both ways -- having found FAR LESS than the page's census.
+ * Something held it: a chat widget, a consent overlay, or a cause nobody has read. Its `exhausted` is true
+ * about wherever the caret was held, so it says nothing about the page's absences; what it did hear is still
+ * on the page. It is a coverage verdict, not a widget detector. See `sweptElsewhere`, the one place that
+ * decides it.
  *
  * ## `unknown` is a verdict
  *
@@ -716,13 +718,17 @@ function tableCompleteness(capture: CapturedAnnouncements): Completeness {
 }
 
 /**
- * THE SWEEP THAT RAN OUT OF A CONTAINER, NOT OF THE PAGE -- #951, the cause of #887.
+ * A SWEEP THAT SAID IT REACHED THE END, HAVING FOUND FAR LESS THAN THE CENSUS -- #951, the cause of #887.
  *
  * `exhausted` is NVDA's own "no next link", and it is true about wherever the caret's quick navigation is
- * confined. Measured on `runs/887-r9A-hubspot-w7.json`: on capture-1 HubSpot's chat widget had opened by
- * itself, and the link and graphic sweeps that followed found the widget's 1 link and 2 graphics, both
- * directions `exhausted`, with no modal open -- so #897's dialog check correctly cannot see it. On
- * capture-2, the same box minutes later, the same sweeps found 44 and 22.
+ * held. Measured on `runs/887-r9A-hubspot-w7.json`: on capture-1 HubSpot's chat widget had opened by itself,
+ * and the link and graphic sweeps that followed found the widget's 1 link and 2 graphics, both directions
+ * `exhausted`, with no modal open -- so #897's dialog check correctly cannot see it. On capture-2, the same
+ * box minutes later, the same sweeps found 44 and 22.
+ *
+ * WHATEVER HELD IT. The claim is coverage -- found far less than the census -- and not a cause. On the lab's
+ * corpus the sweeps it catches are consent overlays and two zeros nobody has read; the chat widget is only in
+ * this Mac's `runs/`. So nothing here says "widget", and `container` is a hint, never proof.
  *
  * ## Why not the phrases
  *
@@ -730,28 +736,50 @@ function tableCompleteness(capture: CapturedAnnouncements): Completeness {
  * own fixture: the trapped graphic sweep's two items announce two different containers, and the trapped
  * link announces none. No rule reading only phrases can flag that link without flagging a one-link page.
  *
- * ## What separates them, measured
+ * ## Where it sits, measured in two populations, on the rule's own denominator
  *
- * Found ÷ `census.distinct.link` for every link sweep that exhausted in both directions, on the local
- * `runs/` copy on 2026-09-11 -- a pre-check; the lab's authoritative corpus confirms it before this merges:
+ * Found ÷ `census.distinct.link` for link sweeps `exhausted` in both directions, with at least
+ * `LINK_CENSUS_FLOOR` distinct links:
  *
- *     trapped   at most 0.066    18 sweeps: hubspot, theregister (0 of 618), calendly (5 of 76), a modal fixture
- *     between   none             0 sweeps in 0.1-0.5, and 2 in 0.5-0.9
- *     the page  at least 0.603   120 sweeps
+ *                     doubtful                             healthy
+ *     local runs/     17 at most 0.066                     77 at least 0.603     this Mac, recounted 2026-09-11;
+ *                                                                               a pre-check
+ *     lab corpus      4: three zeros-and-ones below 0.1,   80 at least 0.639     corpus-2026-09-11_03-35-45,
+ *                     and nrscotland at 0.460                                    orchestrator's gate 1 on #951
  *
- * The threshold sits in that gap, so it is measured rather than picked. GRAPHICS HAVE NO GAP TO USE --
- * trapped at most 0.074, a page's own sweep from 0.131 -- but the collapse is the CAPTURE's, not the
- * channel's: all 17 trapped-link captures with a graphic census collapse on graphics too, and none collapses
- * on graphics without a trapped link. So a graphic sweep follows its capture's link verdict.
+ * The local copy has nothing between 0.066 and 0.603. The lab has one sweep at 0.460, a consent overlay that
+ * held PART of the sweep -- so what holds a sweep does not always hold all of it, and a threshold at 0.1
+ * would have missed it. product-manager's placement, on #951: above the highest doubtful sweep in EITHER
+ * population (0.460) and below the lowest healthy in either (0.603). It marks no healthy sweep in either.
+ *
+ * Two lab sweeps the placement was first argued from are not in that table, and the fixture says why.
+ * `nrscotland/statistics-and-data` is 0.479 on the RAW census but 0.639 on `distinct`, so it is healthy by the
+ * rule's own measure. `sepa/bathing-waters` has no `distinct` census at all, so the rule cannot judge it.
+ *
+ * ## The floor
+ *
+ * Below `LINK_CENSUS_FLOOR` distinct links the rule does not judge. One link found or not found is not
+ * evidence that anything held the sweep: `focus-panel-undismissable-help`, a known-good dataset page, counts
+ * one distinct link and its sweep finds none, which is below every threshold. The lab's gate-1 population
+ * already had the floor. Under it, the census comparison answers exactly as before #951 -- so
+ * `keyboard-trap-modal-escape.bad` (0 of 6) reads `truncated`, its absence still withheld.
+ *
+ * GRAPHICS HAVE NO GAP TO USE -- locally, trapped at most 0.074 and a page's own sweep from 0.131 -- but the
+ * collapse is the CAPTURE's, not the channel's: all 17 local trapped-link captures with a graphic census
+ * collapse on graphics too, and none collapses on graphics without a trapped link. So a graphic sweep
+ * follows its capture's link verdict.
  *
  * ## The direction of error
  *
  * `elsewhere` WITHHOLDS: it never asserts the page has more links than were found. A page the census
  * over-counts is withheld from, never accused -- #894's principle, "withholding needs doubt".
  */
-export const LINK_SWEEP_OF_THE_PAGE_FROM = 0.3;
+export const LINK_SWEEP_OF_THE_PAGE_FROM = 0.54;
 
-/** A sweep that examined something other than the page, and the first container it named -- `null` for none. */
+/** Below this many distinct links the rule does not judge -- see "The floor" above. */
+export const LINK_CENSUS_FLOOR = 10;
+
+/** A sweep that found far less than the census, and the first container it named -- `null` for none. */
 export interface SweptElsewhere { type: "link" | "graphic"; container: string | null; found: number }
 
 /** A sweep of `type` whose BOTH directions exhausted -- the one claim this verdict can contradict. */
@@ -774,19 +802,19 @@ function firstAnnouncedContainer(phrases: readonly unknown[]): string | null {
 }
 
 /**
- * Which of this capture's sweeps examined a container rather than the page -- `[]` when the page was swept,
- * and `[]` when the capture cannot say (no `distinct` census, or no exhausted link sweep). THE ONE VERDICT:
- * `sweepCompleteness`, `captureSupports`, the silent-sweep check, `capture:explain`, the ambiguity audit and
- * the lab's sweep verdict all read it, so none of them can call the trapped sweep complete while another
+ * Which of this capture's sweeps said they reached the end having found far less than the page's census --
+ * `[]` when the page was swept, and `[]` when the rule does not judge (no `distinct` census, fewer than
+ * `LINK_CENSUS_FLOOR` distinct links, or no exhausted link sweep). THE ONE VERDICT: `sweepCompleteness`, `captureSupports`, `capture:explain`, the ambiguity audit
+ * and the lab's sweep verdict all read it, so none of them can call the held sweep complete while another
  * calls it elsewhere (#951: a fix at one call site, when the behaviour reaches several, is this repo's most
- * expensive recurring shape).
+ * expensive recurring shape). NOT the silent-sweep check, which decides evidence -- see its comment.
  */
 export function sweptElsewhere(capture: CapturedAnnouncements): SweptElsewhere[] {
   const marks = Array.isArray(capture.diagnostics) ? capture.diagnostics : [];
   const census = marks.find((m) => typeof m === "object" && m !== null
     && (m as { event?: unknown }).event === "structureCensus") as { distinct?: Record<string, number> } | undefined;
   const links = census?.distinct?.link;
-  if (typeof links !== "number" || links <= 0) return [];
+  if (typeof links !== "number" || links < LINK_CENSUS_FLOOR) return [];
   const link = exhaustedSweep(marks, "link");
   if (!link || link.found / links >= LINK_SWEEP_OF_THE_PAGE_FROM) return [];
   const graphic = exhaustedSweep(marks, "graphic");
@@ -794,6 +822,19 @@ export function sweptElsewhere(capture: CapturedAnnouncements): SweptElsewhere[]
     { type: "link" as const, container: firstAnnouncedContainer(link.phrases), found: link.found },
     ...(graphic ? [{ type: "graphic" as const, container: firstAnnouncedContainer(graphic.phrases), found: graphic.found }] : []),
   ];
+}
+
+/**
+ * What held the sweep, in the words every reader prints -- one spelling, so `captureSupports` and
+ * `capture:explain` cannot describe the same sweep two ways. The container is the first one the sweep's own
+ * announcements named: a hint about what held it, never proof, and naming none is a first-class answer.
+ *
+ * @param held the verdict's entry for one sweep
+ * @returns a predicate for "the sweep ...", e.g. `said it reached the end having found far less than ...`
+ */
+export function whatHeldTheSweep(held: Pick<SweptElsewhere, "container">): string {
+  const named = held.container ? `it named "${held.container}" first` : "it named no container";
+  return `said it reached the end having found far less than the page's census, so something held it (${named})`;
 }
 
 /**
@@ -888,15 +929,15 @@ const REACHED_THE_END = new Set(["exhausted", "repeatBottom", "wrap"]);
 
 /**
  * What one type's completeness verdict supports about the page having none, and why -- in words a reader
- * can check. `elsewhere` names the container, because "the sweep ran out inside a chat widget" is what a
+ * can check. `elsewhere` says what held the sweep, as far as the sweep itself said, because that is what a
  * reader needs in order to go and look (#951).
  */
 function absenceSupport(verdict: Completeness, elsewhere: SweptElsewhere | undefined): Support {
   if (verdict === "exact") return { ok: true, why: "the sweep announced exactly what the tree exposes" };
   if (verdict === "unknown") return { ok: false, why: "this capture cannot say whether the sweep was complete" };
   if (verdict === "elsewhere") {
-    const where = elsewhere?.container ? `"${elsewhere.container}"` : "a container it did not name";
-    return { ok: false, why: `the sweep ran out inside ${where}, not the page (#951)` };
+    return { ok: false, why: `the sweep ${whatHeldTheSweep(elsewhere ?? { container: null })}, so it cannot `
+      + "speak for the page (#951)" };
   }
   return { ok: false, why: `the sweep is ${verdict} against the tree` };
 }

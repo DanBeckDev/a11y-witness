@@ -108,12 +108,12 @@ test("PHANTOM REFUSES EITHER CLAIM; TRUNCATED refuses only ABSENCE", () => {
 });
 
 test("#951: ELSEWHERE refuses ABSENCE, exactly like truncated -- never the fall-through that allows it", () => {
-  // A sweep that ran out of a container (a chat widget, a modal) heard what is IN it -- which is on the page --
-  // and says nothing about the rest. An unrecognised verdict falls through to `true` at the bottom of
-  // `assertableSweep`, which would let a sweep of a chat widget support "the page has no links".
+  // A sweep something held (a chat widget, an overlay, a modal) heard what is IN it -- which is on the page --
+  // and says nothing about the rest. Before `EXAMINED_IN_FULL`, an unrecognised verdict fell through to `true`
+  // at the bottom of `assertableSweep`, which would have let a sweep of a chat widget support "no links".
   const at = (claim: "presence" | "absence") =>
     assertableSweep({ completeness: { link: "elsewhere" } } as unknown as RuleInput, "link", claim);
-  assert.equal(at("absence"), false, "a sweep of a container cannot say the PAGE has none");
+  assert.equal(at("absence"), false, "a held sweep cannot say the PAGE has none");
   assert.equal(at("presence"), true, "what it heard is on the page");
 });
 
@@ -132,7 +132,7 @@ test("#951: an ELSEWHERE sweep withdraws the pass -- it never examined the page"
   // this criterion then said "examined in full" about a sweep of a chat widget.
   const outcome = linkOutcome("elsewhere");
   assert.equal(outcome?.outcome, "cantTell");
-  assert.match(outcome?.reason ?? "", /link sweep ran out inside a container on the page rather than covering/);
+  assert.match(outcome?.reason ?? "", /link sweep said it reached the end having found far less than the page's census/);
   assert.doesNotMatch(outcome?.reason ?? "", /different number of elements/, "it did not miscount; it examined something else");
   assert.equal(linkOutcome("exact")?.outcome, "passed", "the control: an exact sweep still passes");
 });

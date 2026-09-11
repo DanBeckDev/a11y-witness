@@ -212,13 +212,13 @@ function incompleteFeeds(criterion: string, completeness: Readonly<Record<string
 const WHY_PARTIAL: Readonly<Record<string, string>> = {
   truncated: "announced a different number of elements than the browser exposes",
   phantom: "announced a different number of elements than the browser exposes",
-  elsewhere: "ran out inside a container on the page rather than covering the page",
+  elsewhere: "said it reached the end having found far less than the page's census, so something held it",
 };
 
 /**
- * The `cantTell` reason for sweeps that examined less than the page, grouped by WHY -- a sweep of a chat
- * widget did not "announce a different number of elements", it examined a different thing (#951), and a
- * reader told the wrong reason goes looking for the wrong defect. A verdict with no entry is named as it is.
+ * The `cantTell` reason for sweeps that examined less than the page, grouped by WHY -- a sweep something held
+ * did not "announce a different number of elements", it never covered the page (#951), and a reader told the
+ * wrong reason goes looking for the wrong defect. A verdict with no entry is named as it is.
  */
 function partialExaminationReason(short: string[], completeness: Readonly<Record<string, string>>): string {
   const byWhy = new Map<string, string[]>();
