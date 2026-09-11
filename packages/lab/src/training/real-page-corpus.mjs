@@ -873,6 +873,30 @@ export function servedByThePageServer(url) {
 }
 
 /**
+ * IS THIS DECLARATION ONE OF OUR FIXTURES -- decided by what the page IS, never only by where it is served
+ * today (#940).
+ *
+ * `role: "fixture"` is a fact about the page. Its host is `FIXTURE_BASE`, which `DATASET_BASE_URL` overrides --
+ * a documented override, for a network where the computed page-server address is wrong -- so a host test
+ * alone made "may this capture be deleted" depend on an environment variable nobody is told controls it.
+ * With it set to any non-loopback address, `corpus-prune-orphans --apply` deleted all ten fixture captures as
+ * RETIRED: the only real-page grounding 2.4.1, 2.4.2, 2.4.3, 2.1.1 and 1.4.13 have, reported as routine
+ * housekeeping. The machine most likely to set the variable is the lab, which is also the one that runs
+ * `--apply`.
+ *
+ * The host stays as a SECOND signal, never the only one: either makes a declaration a fixture, because
+ * wrongly keeping a capture costs a line in a report and wrongly deleting one cannot be undone.
+ *
+ * ONE PREDICATE for all three readers -- `realPageFor`'s reconciliation, the gate's RELOCATED heading and
+ * the prune tool's -- so the gate and the prune can never disagree about which captures are fixtures.
+ *
+ * @param {{ url: string, role?: string }} page
+ */
+export function isFixture(page) {
+  return page.role === "fixture" || servedByThePageServer(page.url);
+}
+
+/**
  * A url with its origin removed, normalised -- what a relocated capture still has in common with its
  * declaration. Moved here from `corpus-prune-orphans.mjs` with `servedByThePageServer`, unchanged.
  *
@@ -900,8 +924,8 @@ export function pathOf(url) {
  * one, and everything the rewrite leaves alone -- scheme, port, path, query -- must then match as written.
  * Two conditions keep a real publisher's page matching only itself:
  *
- *   - only a declaration SERVED BY THE PAGE SERVER can be reached this way, so no real page gains a second
- *     address; and
+ *   - only a FIXTURE declaration (`isFixture`: its role, or a page-server host) can be reached this way, so
+ *     no real page gains a second address; and
  *   - the captured host must be what the rewrite can produce, an IPv4 literal. A named host serving the same
  *     path on the same port is still a different page.
  *
@@ -916,7 +940,7 @@ function relocatedFixtureFor(url) {
   const captured = new URL(String(url));
   if (ipv4ToInt(captured.hostname) === null) return undefined;
   return REAL_PAGES.find((page) => {
-    if (!servedByThePageServer(page.url)) return false;
+    if (!isFixture(page)) return false;
     const restored = new URL(captured.href);
     restored.hostname = new URL(page.url).hostname;
     return normaliseUrl(restored.href) === normaliseUrl(page.url);
@@ -930,12 +954,20 @@ function relocatedFixtureFor(url) {
  * opposite fixes, and the fix for an undeclared page is to delete it. `corpus-prune-orphans.mjs` calls the
  * same set RELOCATED and refuses to delete it.
  *
+ * ANY fixture at the path, whatever else is declared there -- and the prune tool asks through THIS function
+ * too, not a lookup of its own. Its first #940 version built `path -> page` in a Map, where the LAST
+ * declaration at a path wins: a fixture and a published page sharing a path came back RETIRED to the prune
+ * and RELOCATED to the gate, and the prune is the side that deletes (worker-capture's review of #943). Four
+ * of today's 93 paths are shared, by published pages only -- latent, and settled in the delete direction.
+ *
+ * @template {{ url: string, role?: string }} Page
  * @param {unknown} url
- * @returns {RealPage | undefined}
+ * @param {readonly Page[]} [pages] the declarations to search -- `REAL_PAGES`, or a test's own
+ * @returns {Page | undefined}
  */
-export function pageServerFixtureAtPath(url) {
+export function pageServerFixtureAtPath(url, pages = /** @type {readonly any[]} */ (REAL_PAGES)) {
   const path = pathOf(url);
-  return REAL_PAGES.find((page) => servedByThePageServer(page.url) && pathOf(page.url) === path);
+  return pages.find((page) => isFixture(page) && pathOf(page.url) === path);
 }
 
 /**
