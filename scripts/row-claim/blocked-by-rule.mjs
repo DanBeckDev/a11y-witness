@@ -105,8 +105,14 @@ export function resolveBlockedByOverride(ownPr, blockedByFlagValue, { run }) {
       reason: `--blocked-by=${blockedByFlagValue} is not a valid issue reference -- use --blocked-by=#N` };
   }
   if (ownPr === null) {
+    // #989: THE ONLY REFUSAL B2 STILL MAKES IS A ROW IN BUILD, WHICH HAS NO PR BY DEFINITION -- that is
+    // what "in build" means. So this branch is now the common case rather than an edge, and naming the
+    // missing PR alone would be a refusal nobody can follow: there is no PR to write the comment on, and
+    // none is coming. It names the door that exists instead, which is the same one B2's own refusal names.
     return { ok: false,
-      reason: "no open PR of this session's own was found to attach a measurement comment to" };
+      reason: "there is no PR of this session's own to attach a measurement comment to -- a row IN BUILD "
+        + "has none, which is what puts it in build. `--blocked-by` cannot excuse it: finish that row, or "
+        + "`row-claim.mjs decline <n> --session=<name>` to give it back, then claim" };
   }
   const comments = lookupOwnPrComments(ownPr.number, { run });
   if (comments === null) {
