@@ -1,5 +1,5 @@
 {
-  "note": "Lifted verbatim from runs/781-r1-hubspot.json. The sweep marks and the census, nothing else.",
+  "note": "Lifted verbatim from runs/781-r1-hubspot.json. The sweep marks and the census, nothing else. #951 adds runs/887-r9A-hubspot-w7.json capture-1 (the chat widget traps the link and graphic sweeps) and capture-2 (the same page, same box, minutes later, healthy), lifted the same way, with the census's `distinct` counts, which #951's rule divides by.",
   "captures": [
     {
       "source": "runs/781-r1-hubspot.json/capture-1.json",
@@ -206,6 +206,432 @@
           "nextTrips": 5,
           "prevStop": "exhausted",
           "nextStop": "exhausted",
+          "phrases": [
+            "Chat Widget, region, Chat Widget, frame, clickable, Open live chat, button, opens dialog"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "runs/887-r9A-hubspot-w7.json/capture-1.json",
+      "census": {
+        "heading": 21,
+        "landmark": 7,
+        "link": 39,
+        "graphic": 33,
+        "formControl": 14,
+        "targetMatch": "matched",
+        "distinct": {
+          "landmark": 7,
+          "heading": 21,
+          "link": 33,
+          "graphic": 32,
+          "formControl": 12
+        }
+      },
+      "sweeps": [
+        {
+          "type": "heading",
+          "found": 20,
+          "prevTrips": 3,
+          "nextTrips": 43,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 0,
+          "scope": {
+            "openDialog": null
+          },
+          "phrases": [
+            "299,000 plus customers in over 135 countries grow their businesses with Hub Spot., heading, level 2",
+            "Hub Spot's Agentic Customer Platform, heading, level 2",
+            "list, clickable, with 1 item, 1 of 3, slide, A CRM that’s really smart., heading, level 3",
+            "Growing a business is hard. Hub Spot makes it easier., heading, level 2",
+            "Marketing Hub registered, heading, level 3",
+            "Sales Hub registered, heading, level 3",
+            "Service Hub registered, heading, level 3",
+            "Content Hub trademark, heading, level 3",
+            "Data Hub trademark, heading, level 3",
+            "Revenue Hub trademark, heading, level 3",
+            "Smart CRM trademark, heading, level 3",
+            "Agent Hub trademark, heading, level 3",
+            "Small Business Bundle, heading, level 3",
+            "AEO (Beta), heading, level 3",
+            "Built-in AI agents that work for you 24 slash 7., heading, level 2",
+            "list, clickable, with 1 item, 1 of 3, slide, Customer Agent, heading, level 3",
+            "Works with the tools you already use. 2,000 plus integrations., heading, level 3",
+            "Remarkable results for every size business., heading, level 2",
+            "Voted number 1 in 526 G 2 Reports, heading, level 3",
+            "Make impossible growth feel impossibly easy, with Hub Spot, heading, level 2"
+          ]
+        },
+        {
+          "type": "landmark",
+          "found": 6,
+          "prevTrips": 9,
+          "nextTrips": 13,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 3,
+          "scope": {
+            "openDialog": null
+          },
+          "phrases": [
+            "banner landmark, Primary Navigation, navigation landmark, Hub Spot, same page, link",
+            "Skip to content, same page, link",
+            "Cookie banner, region",
+            "main landmark, HUBSPOT AGENTIC CUSTOMER PLATFORM",
+            "content info landmark, navigation landmark, Popular Features, button, collapsed",
+            "Chat Widget, region, Chat Widget, frame, clickable, Open live chat, button, opens dialog"
+          ]
+        },
+        {
+          "type": "formField",
+          "found": 16,
+          "prevTrips": 25,
+          "nextTrips": 27,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 10,
+          "scope": {
+            "openDialog": null
+          },
+          "phrases": [
+            "content info landmark, list, with 5 items, Manage Cookies, button",
+            "navigation landmark, Partners, button, collapsed",
+            "Dismiss, button",
+            "Message History, region, speech balloon Chat with sales, button",
+            "rocket Get started free, button",
+            "pencil ️ Get free training, button",
+            "calendar Book a demo, button",
+            "play message audio, button",
+            "Hub Bot, banner landmark, navigation landmark, Close live chat, button",
+            "Expand widget, button",
+            "Close live chat, button",
+            "Ask me anything..., edit, required, multi line, F",
+            "microphone, button",
+            "attach a file, button, unavailable",
+            "send message, button",
+            "Resize widget height or width, resize handle"
+          ]
+        },
+        {
+          "type": "graphic",
+          "found": 2,
+          "prevTrips": 7,
+          "nextTrips": 5,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 2,
+          "scope": {
+            "openDialog": null
+          },
+          "phrases": [
+            "Message History, region, clickable, Avatar of Hub Bot, graphic",
+            "Hub Bot, banner landmark, navigation landmark, Avatar of Hub Bot; agent is available for chat, graphic"
+          ]
+        },
+        {
+          "type": "link",
+          "found": 1,
+          "prevTrips": 3,
+          "nextTrips": 5,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 0,
+          "scope": {
+            "openDialog": null
+          },
+          "phrases": [
+            "privacy policy, link"
+          ]
+        },
+        {
+          "type": "list",
+          "found": 18,
+          "prevTrips": 3,
+          "nextTrips": 39,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 0,
+          "scope": {
+            "openDialog": null
+          },
+          "phrases": [
+            "main landmark, list, with 5 items, grow, heading, level 1",
+            "list, clickable, with 3 items, 1 of 5, slide, Ebay Logo, graphic",
+            "list, clickable, with 1 item, 1 of 3, slide, Shows the products that make up the Hub Spot customer platform, starting with Smart CRM (highlighted, graphic",
+            "list, with 2 items, Attract and convert the right leads.",
+            "list, with 2 items, Generate quality leads and close deals, faster.",
+            "list, with 2 items, Streamline and scale support to serve customers faster.",
+            "list, with 2 items, Create content that clicks with your audience.",
+            "list, with 2 items, Turn scattered data into unified intelligence.",
+            "list, with 2 items, Make it easy for customers to pay you.",
+            "list, with 2 items, All your customer data in one place.",
+            "list, with 2 items, Deploy and manage AI agents across the platform.",
+            "list, with 1 item, The Starter edition of each product, at one low price.",
+            "list, with 2 items, See where your brand shows up in AI results.",
+            "list, clickable, with 1 item, 3 of 3, slide, Shows a Hub Spot user requesting Data Agent to generate a smart property., graphic",
+            "list, with 6 items, Gmail, graphic",
+            "content info landmark, navigation landmark, list, with 5 items, All Partner Programs All Partner Programs, link",
+            "list, with 7 items, Facebook, link",
+            "list, with 5 items, Legal Center, link"
+          ]
+        },
+        {
+          "type": "frame",
+          "found": 1,
+          "prevTrips": 3,
+          "nextTrips": 5,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 0,
+          "scope": {
+            "openDialog": null
+          },
+          "phrases": [
+            "Chat Widget, region, Chat Widget, frame, clickable, Open live chat, button, opens dialog"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "runs/887-r9A-hubspot-w7.json/capture-2.json",
+      "census": {
+        "heading": 21,
+        "landmark": 6,
+        "link": 39,
+        "graphic": 33,
+        "formControl": 14,
+        "targetMatch": "matched",
+        "distinct": {
+          "landmark": 6,
+          "heading": 21,
+          "link": 33,
+          "graphic": 32,
+          "formControl": 12
+        }
+      },
+      "sweeps": [
+        {
+          "type": "heading",
+          "found": 20,
+          "prevTrips": 3,
+          "nextTrips": 43,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 0,
+          "scope": {
+            "openDialog": null
+          },
+          "phrases": [
+            "299,000 plus customers in over 135 countries grow their businesses with Hub Spot., heading, level 2",
+            "Hub Spot's Agentic Customer Platform, heading, level 2",
+            "list, clickable, with 1 item, 1 of 3, slide, A CRM that’s really smart., heading, level 3",
+            "Growing a business is hard. Hub Spot makes it easier., heading, level 2",
+            "Marketing Hub registered, heading, level 3",
+            "Sales Hub registered, heading, level 3",
+            "Service Hub registered, heading, level 3",
+            "Content Hub trademark, heading, level 3",
+            "Data Hub trademark, heading, level 3",
+            "Revenue Hub trademark, heading, level 3",
+            "Smart CRM trademark, heading, level 3",
+            "Agent Hub trademark, heading, level 3",
+            "Small Business Bundle, heading, level 3",
+            "AEO (Beta), heading, level 3",
+            "Built-in AI agents that work for you 24 slash 7., heading, level 2",
+            "list, clickable, with 1 item, 1 of 3, slide, Customer Agent, heading, level 3",
+            "Works with the tools you already use. 2,000 plus integrations., heading, level 3",
+            "Remarkable results for every size business., heading, level 2",
+            "Voted number 1 in 526 G 2 Reports, heading, level 3",
+            "Make impossible growth feel impossibly easy, with Hub Spot, heading, level 2"
+          ]
+        },
+        {
+          "type": "landmark",
+          "found": 5,
+          "prevTrips": 7,
+          "nextTrips": 11,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 2,
+          "scope": {
+            "openDialog": null
+          },
+          "phrases": [
+            "banner landmark, Primary Navigation, navigation landmark, Hub Spot, same page, link",
+            "Skip to content, same page, link",
+            "main landmark, HUBSPOT AGENTIC CUSTOMER PLATFORM",
+            "content info landmark, navigation landmark, Popular Features, button, collapsed",
+            "Chat Widget, region, Chat Widget, frame, clickable, Open live chat, button, opens dialog"
+          ]
+        },
+        {
+          "type": "formField",
+          "found": 16,
+          "prevTrips": 29,
+          "nextTrips": 37,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 11,
+          "scope": {
+            "openDialog": null
+          },
+          "phrases": [
+            "content info landmark, list, with 5 items, Manage Cookies, button",
+            "navigation landmark, Partners, button, collapsed",
+            "main landmark, Small Business, tab",
+            "Mid-Sized Business, tab",
+            "Enterprise, tab, selected",
+            "Pause Carousel, button",
+            "Next slide, button",
+            "Previous slide, button",
+            "Next, button",
+            "Previous, button, unavailable",
+            "banner landmark, Primary Navigation, navigation landmark, Menu, button, collapsed",
+            "clickable, banner landmark, Primary Navigation, navigation landmark, Menu, button, collapsed",
+            "content info landmark, navigation landmark, Partners, button, expanded",
+            "Chat Widget, region, Chat Widget, frame, clickable, Open live chat, button, opens dialog",
+            "Close welcome page, button",
+            "Open live chat, button, opens dialog"
+          ]
+        },
+        {
+          "type": "graphic",
+          "found": 22,
+          "prevTrips": 41,
+          "nextTrips": 39,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 19,
+          "scope": {
+            "openDialog": null
+          },
+          "phrases": [
+            "content info landmark, Get it on Google Play, graphic, link",
+            "Download on the App Store, graphic, link",
+            "main landmark, G 2 Award Badge: Best Usability (Enterprise), graphic",
+            "G 2 Award Badge: Best Results (Mid-Market), graphic",
+            "G 2 Award Badge: Easiest Admin (Enterprise), graphic",
+            "G 2 Award Badge: Best Relationship (Small Business), graphic",
+            "G 2 Award Badge: Most Implementable, graphic",
+            "G 2 Award Badge: Grid Leader (Small Business), graphic",
+            "list, with 6 items, Slack, graphic",
+            "Google Ads, graphic",
+            "Zapier, graphic",
+            "Mailchimp, graphic",
+            "Shopify, graphic",
+            "Gmail, graphic",
+            "list, clickable, with 1 item, 3 of 3, slide, Shows a Hub Spot user requesting Data Agent to generate a smart property., graphic",
+            "list, clickable, with 1 item, 1 of 3, slide, Shows the products that make up the Hub Spot customer platform, starting with Smart CRM (highlighted in this image), then engagement products, then Hub Spot's AI., graphic",
+            "list, clickable, with 3 items, 3 of 5, slide, Reddit Logo, graphic",
+            "2 of 5, slide, Door Dash Logo, graphic",
+            "1 of 5, slide, Ebay Logo, graphic",
+            "3 of 5, slide, Reddit Logo, graphic",
+            "list, with 6 items, Gmail, graphic",
+            "Slack, graphic"
+          ]
+        },
+        {
+          "type": "link",
+          "found": 44,
+          "prevTrips": 79,
+          "nextTrips": 91,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 33,
+          "scope": {
+            "openDialog": null
+          },
+          "phrases": [
+            "Download on the App Store, graphic, link",
+            "list, with 7 items, Tiktok, link",
+            "Reddit, link",
+            "Linkedin, link",
+            "Twitter, link",
+            "Youtube, link",
+            "Instagram, link",
+            "Facebook, link",
+            "navigation landmark, list, with 5 items, Affiliate Program Affiliate Program, link",
+            "Hub Spot for Startups Hub Spot for Startups, link",
+            "Technology Partner Program Technology Partner Program, link",
+            "Solutions Partner Program Solutions Partner Program, link",
+            "All Partner Programs All Partner Programs, link",
+            "main landmark, Get started freewith Hub Spot's free tools, link",
+            "Get a demoof Hub Spot's premium software, link",
+            "Enterprise, property page, Read full case studyabout Unipart, link",
+            "See all case studiesa 11y text suffix, link",
+            "See all app integrations, link",
+            "list, clickable, with 1 item, 2 of 3, slide, Learn moreabout prospecting agent, link",
+            "Explore Agent Hub, link",
+            "Learn moreabout AEO, link",
+            "Learn moreabout the Hub Spot Small Business Bundle of tools, link",
+            "Learn moreabout Hub Spot's AI agents, link",
+            "Learn moreabout Hub Spot's Smart CRM, link",
+            "Learn moreabout Revenue Hub, link",
+            "Learn moreabout Data Hub software, link",
+            "Learn moreabout Content Hub software, link",
+            "Learn moreabout Service Hub software, link",
+            "Learn moreabout Sales Hub software, link",
+            "Learn moreabout Marketing Hub software, link",
+            "Get a demoof Hub Spot's software, link",
+            "Hub Spot, same page, link",
+            "Skip to content, same page, link",
+            "list, clickable, with 1 item, 3 of 3, slide, Learn moreabout content agent, link",
+            "Read full case studyabout Unipart, link",
+            "content info landmark, navigation landmark, list, with 5 items, All Partner Programs All Partner Programs, link",
+            "Affiliate Program Affiliate Program, link",
+            "list, with 7 items, Facebook, link",
+            "Tiktok, link",
+            "Get it on Google Play, graphic, link",
+            "list, with 5 items, Legal Center, link",
+            "Privacy Policy, link",
+            "Security, link",
+            "Website Accessibility, link"
+          ]
+        },
+        {
+          "type": "list",
+          "found": 18,
+          "prevTrips": 3,
+          "nextTrips": 39,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 0,
+          "scope": {
+            "openDialog": null
+          },
+          "phrases": [
+            "main landmark, list, with 5 items, grow, heading, level 1",
+            "list, clickable, with 3 items, 1 of 5, slide, Ebay Logo, graphic",
+            "list, clickable, with 1 item, 1 of 3, slide, Shows the products that make up the Hub Spot customer platform, starting with Smart CRM (highlighted, graphic",
+            "list, with 2 items, Attract and convert the right leads.",
+            "list, with 2 items, Generate quality leads and close deals, faster.",
+            "list, with 2 items, Streamline and scale support to serve customers faster.",
+            "list, with 2 items, Create content that clicks with your audience.",
+            "list, with 2 items, Turn scattered data into unified intelligence.",
+            "list, with 2 items, Make it easy for customers to pay you.",
+            "list, with 2 items, All your customer data in one place.",
+            "list, with 2 items, Deploy and manage AI agents across the platform.",
+            "list, with 1 item, The Starter edition of each product, at one low price.",
+            "list, with 2 items, See where your brand shows up in AI results.",
+            "list, clickable, with 1 item, 1 of 3, slide, Shows Hub Spot's customer agent asking a Hub Spot user how it can help today., graphic",
+            "list, with 6 items, Gmail, graphic",
+            "content info landmark, navigation landmark, list, with 5 items, All Partner Programs All Partner Programs, link",
+            "list, with 7 items, Facebook, link",
+            "list, with 5 items, Legal Center, link"
+          ]
+        },
+        {
+          "type": "frame",
+          "found": 1,
+          "prevTrips": 3,
+          "nextTrips": 5,
+          "prevStop": "exhausted",
+          "nextStop": "exhausted",
+          "prevCount": 0,
+          "scope": {
+            "openDialog": null
+          },
           "phrases": [
             "Chat Widget, region, Chat Widget, frame, clickable, Open live chat, button, opens dialog"
           ]
