@@ -20,6 +20,7 @@ import { resolve } from "node:path";
 
 import { assertableSweep, unverifiedSweeps, namesExcluded, comparableNamesForTest,
   ruleFindings, type RuleInput } from "./rules.js";
+import { criterionOutcomes } from "./outcomes.js";
 
 /**
  * EVERY file that can construct a finding from a sweep — not just `rules.ts`.
@@ -114,6 +115,46 @@ test("#951: ELSEWHERE refuses ABSENCE, exactly like truncated -- never the fall-
     assertableSweep({ completeness: { link: "elsewhere" } } as unknown as RuleInput, "link", claim);
   assert.equal(at("absence"), false, "a sweep of a container cannot say the PAGE has none");
   assert.equal(at("presence"), true, "what it heard is on the page");
+});
+
+/** A capture with one link, enough for 2.4.4 to apply, so only the completeness verdict decides its outcome. */
+const LINKED = {
+  transcript: ["Home, document", "Welcome, heading, level 1"],
+  structure: { headings: ["Welcome, heading, level 1"], landmarks: [], links: ["About, link"] },
+  interaction: {},
+} as never;
+const linkOutcome = (verdict: string) => criterionOutcomes({
+  capture: LINKED, findings: [], truncatedSweeps: [], completeness: { link: verdict },
+}).find((o) => o.criterion === "2.4.4");
+
+test("#951: an ELSEWHERE sweep withdraws the pass -- it never examined the page", () => {
+  // worker-judge's mutation on #956: dropping `elsewhere` from `incompleteFeeds` left 742 tests green, and
+  // this criterion then said "examined in full" about a sweep of a chat widget.
+  const outcome = linkOutcome("elsewhere");
+  assert.equal(outcome?.outcome, "cantTell");
+  assert.match(outcome?.reason ?? "", /link sweep ran out inside a container on the page rather than covering/);
+  assert.doesNotMatch(outcome?.reason ?? "", /different number of elements/, "it did not miscount; it examined something else");
+  assert.equal(linkOutcome("exact")?.outcome, "passed", "the control: an exact sweep still passes");
+});
+
+test("A VERDICT NEITHER READER RECOGNISES FAILS CLOSED -- the class #951 fell through twice", () => {
+  // Both readers listed the BAD verdicts and let anything else through, so each new verdict had to be added
+  // to each reader or it silently read as complete. They now ask EXAMINED_IN_FULL instead. A verdict added
+  // after this test was written must refuse absence and withdraw the pass without anyone naming it.
+  const later = "a-verdict-added-later";
+  const at = (claim: "presence" | "absence") =>
+    assertableSweep({ completeness: { link: later } } as unknown as RuleInput, "link", claim);
+  assert.equal(at("absence"), false, "an unrecognised verdict cannot support 'the page has none'");
+  assert.equal(at("presence"), true, "what was heard was still heard");
+  const outcome = linkOutcome(later);
+  assert.equal(outcome?.outcome, "cantTell");
+  assert.match(outcome?.reason ?? "", /returned "a-verdict-added-later"/, "named as it is, never as a miscount");
+  // `unknown` and no verdict at all stay allowed: every capture predating the counter reports one of them.
+  for (const allowed of ["unknown", undefined]) {
+    assert.equal(assertableSweep({ completeness: allowed ? { link: allowed } : {} } as unknown as RuleInput,
+      "link", "absence"), true, `${allowed} is deliberately allowed`);
+  }
+  assert.equal(linkOutcome("unknown")?.outcome, "passed", "unknown still passes, as it did before #951");
 });
 
 test("A TRUNCATED SWEEP STILL REPORTS THE UNNAMED CONTROL IT HEARD", () => {
