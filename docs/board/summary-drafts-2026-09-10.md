@@ -343,12 +343,16 @@ tonight. Every figure below is read from the row it is recorded on, not relayed.
 
 - **#143 closed on the authoritative `rules-real-pages` run** — 14 orphan captures, filed 2026-09-06. Three
   of its four acceptance clauses had already shipped and nobody had closed the row.
-- **#881 was filed from that same run**, and it is the more interesting half: **ten synthetic dataset
-  captures are sitting in the real-page corpus** — five cases, `bad` and `good` each, recorded against the
-  lab's own page-server address (`http://<lab>:5050/...` — the real address is on #881 and is deliberately
-  not repeated here; `internal-lan-addresses.test.ts` refuses a tracked file that carries one). Sixteen
-  captures no declared page claims;
-  ten of them are not real pages at all.
+- **An earlier draft said "ten synthetic dataset captures are sitting in the real-page corpus". That is
+  withdrawn and must not be printed.** The ten are **declared fixtures** — real entries in the page list,
+  five marked inaccessible and five conformant — and they are **the only real-page grounding for five WCAG
+  criteria**. The gate misread them as undeclared because the capture records the lab's page-server address
+  while the declaration says `localhost`, and the matcher compares the two literally (#146, never fixed).
+  **So the corrected split of #143's sixteen orphans is 10 relocated fixtures and 6 genuinely undeclared
+  pages.** The row filed to remove the ten (#881) would have deleted that grounding; **it was caught by the
+  engineer about to build it, reading the code first, and nothing was deleted.** It is now rewritten to fix
+  the matcher instead. **For the board, the sentence is: a cleanup nearly removed evidence it had mistaken
+  for contamination, and was stopped by reading before building.**
 - **#311 is measured, and the promise made to an outside reader does not survive it.**
 
 **The #311 correction is a good example of a measurement being worth more than its number**, and the summary
