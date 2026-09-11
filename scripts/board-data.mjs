@@ -25,6 +25,7 @@
 // generating and the publishing are separate acts and a bad report can be seen before it is posted.
 import { execFileSync } from "node:child_process";
 import { sandboxGitEnv } from "./git-env.mjs";
+import { changedFiles } from "./changed-files.mjs";
 import { readFileSync, existsSync, readdirSync} from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -567,7 +568,10 @@ export function conflictMetrics(since) {
  */
 export function readSetIsNotMain() {
   const uncommitted = git(["status", "--porcelain", "--", ...READ_SET]);
-  const offMain = git(["diff", "--name-only", "main", "--", ...READ_SET]);
+  // #939, two defects on one line. `--no-renames` (through `changedFiles`), so a read-set file MOVED is
+  // seen; and `origin/main`, not local `main`, which in a shared checkout has been measured over a thousand
+  // commits stale -- this refusal exists to say the read set is not main's, and it was asking the wrong main.
+  const offMain = changedFiles(["origin/main"], { repoRoot: ROOT, pathspec: [...READ_SET] }).join("\n");
   if (!uncommitted && !offMain) return null;
   const lines = [];
   if (uncommitted) lines.push(`uncommitted changes:\n${uncommitted}`);

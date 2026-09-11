@@ -17,6 +17,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/board-summary-check.mjs` — check on the morning of an edition whether that day's hand-written board summary exists
 - `node scripts/build-packages.mjs` — run tsc --build across every package under packages/ in dependency order
 - `node scripts/carry-branch.mjs` — carry a stalled agent/* branch from a DETACHED checkout -- merge origin/main in and push,
+- `node scripts/changed-files.mjs` — list the paths a range changed, BOTH SIDES OF A RENAME
 - `node scripts/changed-packages.mjs` — list which packages/<name> directories a branch touched against origin/main
 - `node scripts/changeset-precise.mjs` — say whether this diff touches a file npm pack actually ships for a published package
 - `node scripts/check-retired-heads.mjs` — refuse a candidate whose scorer head set shrank without declaring what it retired

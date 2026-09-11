@@ -28,6 +28,7 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
 import { sandboxGitEnv } from "./git-env.mjs";
+import { changedFiles } from "./changed-files.mjs";
 // RELATIVE, NOT `@a11ign/worker-fleet/cli-flags`, for the reason `ci-changed.mjs` already records
 // above its own copy of this import: `ci.yml`'s `changed` job runs `checkout` and `setup-node` and NO
 // `npm ci`, because its whole job is to decide whether anything else installs or builds at all. This file
@@ -72,9 +73,8 @@ export function filesChangedAgainstOrigin() {
   try {
     const base = execFileSync("git", ["merge-base", "HEAD", "origin/main"],
       { cwd: REPO, env: sandboxGitEnv(), encoding: "utf8" }).trim();
-    const diff = execFileSync("git", ["diff", "--name-only", base, "HEAD"],
-      { cwd: REPO, env: sandboxGitEnv(), encoding: "utf8" });
-    return diff.split("\n").filter(Boolean);
+    // #939: `changedFiles` adds `--no-renames`, so a package a file moved OUT of is implicated too.
+    return changedFiles([base, "HEAD"], { repoRoot: REPO });
   } catch {
     return [];
   }
