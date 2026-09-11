@@ -21,6 +21,7 @@ import { resolve } from "node:path";
 import { assertableSweep, unverifiedSweeps, namesExcluded, comparableNamesForTest,
   ruleFindings, type RuleInput } from "./rules.js";
 import { criterionOutcomes } from "./outcomes.js";
+import { sweepCompleteness } from "@a11ign/evidence/verify";
 
 /**
  * EVERY file that can construct a finding from a sweep — not just `rules.ts`.
@@ -149,7 +150,8 @@ test("A VERDICT NEITHER READER RECOGNISES FAILS CLOSED -- the class #951 fell th
   const outcome = linkOutcome(later);
   assert.equal(outcome?.outcome, "cantTell");
   assert.match(outcome?.reason ?? "", /returned "a-verdict-added-later"/, "named as it is, never as a miscount");
-  // `unknown` and no verdict at all stay allowed: every capture predating the counter reports one of them.
+  // `unknown` and no verdict at all stay allowed -- the missing-census `unknown` reaches no scored capture,
+  // measured 2026-09-11 (#961), and is kept on that number; see `EXAMINED_IN_FULL`.
   for (const allowed of ["unknown", undefined]) {
     assert.equal(assertableSweep({ completeness: allowed ? { link: allowed } : {} } as unknown as RuleInput,
       "link", "absence"), true, `${allowed} is deliberately allowed`);
@@ -309,5 +311,78 @@ test("EVERY file that can construct a finding is covered, not just rules.ts", ()
       `${path.split("/").pop()} constructs findings AND reads a sweep, and never consults sweep `
       + "completeness. A sweep that gave up looks identical to a page with nothing on it — classify it "
       + "in SAFE_WITHOUT_A_GATE with a reason, or gate it.");
+  }
+});
+
+/**
+ * #962: THE TWO ROUTES BY WHICH `unknown` STILL REACHES A GATE, found by `orchestrator` on #961 once the
+ * missing-census route measured zero scored captures.
+ */
+const FOCUS_PANEL_LANDMARKS = ["section, Contact name"];
+
+/** A capture as `sweepCompleteness` reads it: a landmark census and the landmark sweep's announcements. */
+const landmarkCapture = (landmarks: string[], census?: number) => ({
+  transcript: [], structure: { headings: [], landmarks, formFields: [], links: [], graphics: [], tableCells: [] },
+  diagnostics: census === undefined ? [] : [{ event: "structureCensus", distinct: { landmark: census } }],
+}) as never;
+
+test("#962: a landmark sweep that NAMES nothing but stopped fewer times than there are landmarks is TRUNCATED", () => {
+  // Verbatim from the lab snapshot fetched 2026-09-11 05:14:05Z (`orchestrator`), good.html and bad.html
+  // alike: Edge 152 announces the page's named <form> as "section", which the grammar does not read as a
+  // landmark container, so the sweep parsed to no names -- and read `unknown`, which both judge readers
+  // count as examined in full.
+  assert.equal(sweepCompleteness(landmarkCapture(FOCUS_PANEL_LANDMARKS, 2)).landmark, "truncated");
+  // AS MANY STOPS AS LANDMARKS, OR MORE, PROVES NOTHING: a nameless stop may not be a landmark at all (35 of
+  // 267 real landmark-sweep entries are not -- `verify.test.ts`), so it stays `unknown`, never a claimed
+  // `exact` or `phantom`. Both judge readers already treat `unknown` as examined in full, so a nameless
+  // sweep that did reach every landmark loses nothing by it.
+  assert.equal(sweepCompleteness(landmarkCapture(["section, Contact name", "section, Billing"], 2)).landmark, "unknown");
+  assert.equal(sweepCompleteness(landmarkCapture(["section, A", "section, B", "section, C"], 2)).landmark, "unknown");
+  // No landmark census still cannot say.
+  assert.equal(sweepCompleteness(landmarkCapture(FOCUS_PANEL_LANDMARKS)).landmark, "unknown");
+  // A landmark the grammar DOES read is still judged by its name, as before.
+  assert.equal(sweepCompleteness(landmarkCapture(["main landmark"], 2)).landmark, "truncated");
+  // And the verdict now withdraws 1.3.1's pass, which `unknown` let stand.
+  const capture = landmarkCapture(FOCUS_PANEL_LANDMARKS, 2);
+  const outcome = criterionOutcomes({ capture, findings: [], truncatedSweeps: [],
+    completeness: sweepCompleteness(capture) }).find((o) => o.criterion === "1.3.1");
+  assert.equal(outcome?.outcome, "cantTell", "the landmark sweep examined one of two landmarks");
+});
+
+/** Every sweep type a rule gates on, read off the rules' own calls -- never a list typed here. */
+function sweepTypesGated(): Set<string> {
+  const types = new Set<string>();
+  for (const path of RULE_SOURCES) {
+    const source = readFileSync(path, "utf8");
+    for (const m of source.matchAll(/assertableSweep\(\s*\w+\s*,\s*"([^"]+)"/g)) types.add(m[1]);
+    for (const m of source.matchAll(/unverifiedSweeps\(\s*\w+\s*,\s*\[([^\]]*)\]/g)) {
+      for (const t of m[1].matchAll(/"([^"]+)"/g)) types.add(t[1]);
+    }
+  }
+  return types;
+}
+
+test("#962: `tableCells` -- NO rule or outcome rests on its verdict, so its `unknown` supports nothing", () => {
+  // The answer to #962's question, measured on the tree: `tableCells` has no census, so its completeness is
+  // `unknown` whenever no table announced its size -- and nothing consults it. Pinned in both directions,
+  // so a rule that starts resting an absence claim on `tableCells` fails here and has to decide what
+  // `unknown` means for it, rather than inheriting "examined in full" by default.
+  const gated = sweepTypesGated();
+  assert.ok(gated.has("formControl") && gated.has("link"), "the scan must find the gates that exist");
+  assert.ok(!gated.has("tableCells") && !gated.has("table"), `a rule now gates on tableCells: ${[...gated]}`);
+  // Behaviourally too: every verdict for tableCells yields the same findings and the same outcomes.
+  const input = (verdict: string) => ({
+    transcript: ["Results, table, with 3 rows and 2 columns", "Name, column header"], diagnostics: [],
+    structure: { headings: [], links: [], graphics: [], formFields: [], frames: [] },
+    completeness: { tableCells: verdict },
+  }) as unknown as RuleInput;
+  const baseline = JSON.stringify(ruleFindings(input("exact")));
+  const outcomesOf = (verdict: string) => JSON.stringify(criterionOutcomes({
+    capture: { transcript: [], structure: { headings: [], links: [], landmarks: [], tableCells: ["Name"] } } as never,
+    findings: [], truncatedSweeps: [], completeness: { tableCells: verdict },
+  }));
+  for (const verdict of ["unknown", "truncated", "phantom", "elsewhere"]) {
+    assert.equal(JSON.stringify(ruleFindings(input(verdict))), baseline, `tableCells=${verdict} changed a finding`);
+    assert.equal(outcomesOf(verdict), outcomesOf("exact"), `tableCells=${verdict} changed an outcome`);
   }
 });
