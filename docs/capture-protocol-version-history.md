@@ -255,3 +255,10 @@ fired. A corpus half on one shape and half on another is the mixed-dataset rule 
 
 The recapture is paid in orchestrator's fleet window, alongside #953's half 2. Deploy uses
 `--allow-protocol-change` there and nowhere else.
+
+**#972 rides the same 17**, by `ceo`'s ruling: the 17 deploy was held until 09:00Z for it, so that one
+recapture covers both changes. It changes what a capture *does*. #953 measured focus already inside the
+chat widget's frame before the first probe on 6 of 6 collapsed captures of #951's page. So before the sweeps,
+focus is now returned to the top document when it sits inside a frame nothing of ours put it there
+(`focusRestore` mark, `observed.headings.focusRestored`). A sweep that still starts inside a frame is marked
+incomplete (`heldBy`). Had #972 missed the window it would have been 18.
