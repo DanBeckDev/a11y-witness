@@ -433,6 +433,14 @@ elements."* It is an affirmative statement that the tool reached the end of the 
 entitled to rely on it. **A share of captures lose that claim** — the size of the share is the lab's to
 say.
 
+**THE LAB'S FIGURE HAS LANDED (added 2026-09-11T03:31Z), so under `ceo`'s ruling it goes in, and ONLY with its
+breakdown.** `lab:job -e job=full-page-claims` on the lab's own corpus, 2026-09-10T23:57Z (`orchestrator`, on #887):
+**11 of 113 captures examined lose the full-page claim** (114 on disk; 1 had no usable census). **5 of the 11 are the
+consent-overlay problem**, which is older and already counted elsewhere: those captures never reached the page. **So
+the full-page problem itself is at most 6 of 113: 2 confirmed as reproducible properties of the page, 4 not yet
+read.** Print "11 of 113" only together with "at most 6 are this problem". Printed bare, it doubles the defect. **Still
+no page names**, per the ruling below.
+
 **Why there is no number here, stated because the board should know the difference:** two sessions ran the
 same function over two local copies of `runs/` and got **different answers over different populations**.
 Neither was wrong; **a copy is only as fresh as its last sync, and two stale copies disagreeing tells a
@@ -446,12 +454,22 @@ not — so naming any site from either would tell the board which copy the write
 edition names no page.** The figure by page comes from the lab run after round 3, or waits for the next
 edition.
 
-**The mechanism, in one sentence, and it is the reason nothing looked broken:** a landmark sweep walked
-into a chat widget and left the cursor inside its open dialog, so every later sweep truthfully exhausted
-*the dialog* — **every component behaved correctly and the report was false.** The screen reader's
-`exhausted` is its own honest *"no next link"*, and it is true about wherever its cursor happens to be.
-The same capture's `heading` sweep found 28, exactly as the healthy ones did, which is why the anomaly
-survived being looked at.
+**An earlier draft of this paragraph said a landmark sweep left the cursor inside a chat widget's open dialog. That is
+withdrawn and must not be printed.** Measured overnight: no modal dialog was open at any point (`openDialog: null` on
+every sweep), and the widget is a page region, not a dialog (#887, rounds 7 and 9).
+
+**The mechanism, in one sentence, and it is the reason nothing looked broken:** on a page with a chat widget, the link
+and graphic quick-navigation sweeps started *inside the widget*, found its one link and two graphics, and truthfully
+reported `exhausted` — **every component behaved correctly and the report was false.** The screen reader's `exhausted`
+is its own honest *"no next link"*, and it is true about wherever its cursor happens to be. In the earlier rounds the
+heading sweep matched the healthy captures, which is why the anomaly survived being looked at. **Why it escaped is not
+pinned** (on fresh machines it collapsed too), so do not print a reason for it.
+
+**It is in what ships, not in a lab tool.** The same collapse reproduced through the command a user runs
+(`npm run witness`), on three separate machines. **An overnight note that placed it in a lab tool only is withdrawn and
+must not be printed.** It was the one correction tonight that ran the other way: it would have understated the defect.
+**What is protected and what is not:** the fix below withholds the false full-page sentence, **but the evidence on such a
+page is still the widget's, not the page's.** That is open as #951, and chat widgets are common on marketing sites.
 
 **The fix needs no deploy and no recapture. The marks were always there and nothing read them.** The check
 is arithmetic — a sweep cannot have visited more elements than it made trips — so it names its own
