@@ -873,15 +873,27 @@ export function sweepCompleteness(capture: CapturedAnnouncements): Record<string
 function againstTheCensus(announced: string[] | undefined, expected: number | undefined, type: string): Completeness {
   if (typeof expected !== "number" || !Array.isArray(announced)) return "unknown";
   const { names, unnamed } = sweptElements(announced, type);
-  // A SWEEP THAT YIELDED NO ELEMENT AT ALL CANNOT SAY.
+  // A LANDMARK SWEEP THAT NAMES NOTHING CAN STILL PROVE IT WAS SHORT -- #962.
   //
-  // Reachable for LANDMARKS only, now that unnamed elements are counted for every type: the other types
-  // take one entry per announcement, so anything announced contributes either a name or an unnamed
-  // count. Landmarks flatMap over CONTAINERS, and an announcement carrying no landmark container
-  // contributes nothing — so a landmark sweep can announce lines and yield zero elements.
+  // Landmarks flatMap over CONTAINERS, and an announcement carrying no landmark container contributes
+  // nothing, so a landmark sweep can announce lines and yield zero elements. That read `unknown`, and both
+  // judge readers count `unknown` as examined in full (`EXAMINED_IN_FULL`): on the
+  // `focus-panel-undismissable-help` fixture the sweep stopped ONCE, on `"section, Contact name"` (Edge 152's
+  // `form`->`section` rename, which the grammar does not read as a landmark), against a census of TWO, and
+  // that supported absence as if the page had been examined in full (#962, `orchestrator`'s read of the lab
+  // snapshot fetched 2026-09-11 05:14:05Z).
   //
-  // Declining is the honest answer and not a pass. This guard previously also caught pages of unnamed
-  // controls, because they were dropped rather than counted; that was the bug, not the protection.
+  // A quick-nav sweep stops at most once per landmark, so FEWER STOPS THAN LANDMARKS IS SHORT WHATEVER THE
+  // STOPS WERE: `truncated`. As many stops or more proves nothing -- 35 of 267 real landmark-sweep entries
+  // announce something that is not a landmark ("Get Involved, link"), so counting stops as landmarks would
+  // invent a complete sweep, or a phantom, from announcements nobody can read. That stays `unknown`, the
+  // honest answer the test beside `sweepCompleteness` has pinned since before #962.
+  if (type === "landmark" && names.size === 0 && unnamed === 0 && announced.length > 0) {
+    return announced.length < expected ? "truncated" : "unknown";
+  }
+  // A SWEEP THAT YIELDED NO ELEMENT AT ALL CANNOT SAY -- unreachable for any other type today, because each
+  // takes one entry per announcement (a name or an unnamed count). Kept so a future type that parses to
+  // nothing declines rather than reading as a sweep that found none.
   if (names.size === 0 && unnamed === 0 && announced.length > 0) return "unknown";
   const found = names.size + unnamed;
   return found === expected ? "exact" : found < expected ? "truncated" : "phantom";
