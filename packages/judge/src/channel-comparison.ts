@@ -498,9 +498,17 @@ export function tabOrderCanProveAbsence(tabbedNames: string[], input: RuleInput)
 
 /**
  * The completeness verdicts under which a sweep counts as having examined the page: `exact`, and `unknown`
- * -- which is deliberately allowed and COUNTED rather than refused, because every capture predating the
- * counter reports it and refusing would silence 2.1.1 across the whole corpus. No verdict at all reads the
- * same as `unknown`.
+ * -- deliberately allowed and COUNTED rather than refused. No verdict at all reads the same as `unknown`.
+ *
+ * WHY `unknown` IS ALLOWED, measured 2026-09-11 (#961, `orchestrator` on a snapshot fetched 05:14:05Z, read
+ * with `sweepCompleteness` at `116b67e1`). The allowance was written when every capture predated the census
+ * counter and refusing would have silenced 2.1.1 corpus-wide. That population is now ZERO scored captures:
+ * 14 of 113 real-page captures lack a `distinct` census and all 14 are undeclared (none in calibration,
+ * training or fixture); 580 of 4,392 dataset capture files lack one and none shows a raw shortfall; none
+ * of the 2,820 exported records reads `unknown` for link, heading, graphic or formControl; 0 of 312
+ * acceptance captures lack it. Kept on that number (#961 decided (b)). Where `unknown` DOES still reach a
+ * gate is two other routes, #962's: `tableCells`, which no census counts and no rule reads, and landmark
+ * sweeps that name nothing, which `sweepCompleteness` now judges by count instead of reading `unknown`.
  *
  * Everything else is PARTIAL: `truncated`, `phantom`, `elsewhere` (#951), and any verdict added after this
  * line was written. It is spelled as the ALLOWED set, once, for both readers (`assertableSweep` here and

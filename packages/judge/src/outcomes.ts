@@ -193,9 +193,12 @@ const COMPLETENESS_OF: Readonly<Record<string, string>> = {
  * Which of this criterion's sweeps examined LESS of the page than a pass needs?
  *
  * Anything outside `EXAMINED_IN_FULL`, which is the one spelling of that set and says why `unknown` is in
- * it -- treating it as incompleteness would turn the whole corpus `cantTell` overnight, the same trade C2
- * makes. Asked as "not examined" rather than as a list of bad verdicts, so a verdict added later withdraws
- * the pass instead of reporting "examined in full" (#951's `elsewhere` did exactly that until named).
+ * it. The trade was "treating it as incompleteness would turn the whole corpus `cantTell` overnight"; as
+ * measured 2026-09-11 (#961), the missing-census `unknown` it protected reaches zero scored captures, and it
+ * is kept on that number -- `EXAMINED_IN_FULL`'s comment carries the counts and the two routes (#962) by
+ * which `unknown` still arrives. Asked as "not examined" rather than as a list of bad verdicts, so a verdict
+ * added later withdraws the pass instead of reporting "examined in full" (#951's `elsewhere` did exactly
+ * that until named).
  *
  * @param criterion the WCAG criterion number
  * @param completeness per-type verdicts from `oracleCounts`
