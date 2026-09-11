@@ -79,7 +79,7 @@ function specifiersOf(source) {
  * @param {string[]} packageDirs
  * @returns {Map<string, { dir: string, exportsMap: Record<string, unknown> }>}
  */
-function packageIndex(repoRoot, packageDirs) {
+export function packageIndex(repoRoot, packageDirs) {
   const index = new Map();
   for (const dir of packageDirs) {
     const manifest = JSON.parse(readFileSync(join(repoRoot, "packages", dir, "package.json"), "utf8"));

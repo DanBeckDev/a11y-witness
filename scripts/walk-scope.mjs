@@ -222,19 +222,6 @@ export function readsOutsideScope(reads, scope, ownFiles) {
   return reads.filter((path) => path === WHOLE_REPOSITORY || (!ownFiles.has(path) && !inScope(path, scope)));
 }
 
-/** Every package's name -> { dir, exportsMap }, which `sourceClosure` resolves bare specifiers with. */
-function packageIndex() {
-  const packages = new Map();
-  for (const entry of fs.readdirSync(resolve(REPO_ROOT, "packages"), { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const manifest = resolve(REPO_ROOT, "packages", entry.name, "package.json");
-    if (!fs.existsSync(manifest)) continue;
-    const parsed = JSON.parse(fs.readFileSync(manifest, "utf8"));
-    packages.set(parsed.name, { dir: entry.name, exportsMap: parsed.exports ?? {} });
-  }
-  return packages;
-}
-
 /**
  * Register the guard's own check: once every test in the file has run, anything it read outside its
  * declared scope fails the file.
@@ -259,8 +246,10 @@ export async function declareWalkScope(testUrl) {
     const reads = readsSoFar();
     // Dynamic, not static: `select-changed-tests.mjs` imports this module for `parseWalkScope`, and a static
     // edge back would be a cycle evaluated before either side's exports exist.
-    const { sourceClosure } = await import("./select-changed-tests.mjs");
-    const own = new Set([...sourceClosure(testPath, REPO_ROOT, packageIndex())]
+    const [{ sourceClosure, packageIndex }, { knownPackages }] = await Promise.all(
+      [import("./select-changed-tests.mjs"), import("./ci-changed.mjs")]);
+    const packages = packageIndex(REPO_ROOT, knownPackages(REPO_ROOT));
+    const own = new Set([...sourceClosure(testPath, REPO_ROOT, packages)]
       .map((absolute) => relative(REPO_ROOT, absolute)));
     const outside = readsOutsideScope(reads, scope, own);
     if (outside.length > 0) {
