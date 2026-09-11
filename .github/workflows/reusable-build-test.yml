@@ -32,7 +32,7 @@ on:
         type: boolean
         default: false
       run-docs-coverage:
-        description: "Run npm run docs:coverage before lint/typecheck, so doc-references.test.ts sees the generated file. ONLY ci.yml's ts job had this -- neither python nor trunkGate ever ran it."
+        description: "Run npm run docs:coverage before lint/typecheck, so the guards that read docs/coverage.md see the generated file (it was doc-references.test.ts until #954 retired it to the nightly report). ONLY ci.yml's ts job had this -- neither python nor trunkGate ever ran it."
         type: boolean
         default: false
       run-ts-tests:
@@ -136,9 +136,10 @@ jobs:
           echo "--- does tsc consider the graph up to date? ---"
           npx tsc --build --dry $(node -e "const fs=require('fs');console.log(fs.readdirSync('packages').filter(d=>fs.existsSync('packages/'+d+'/tsconfig.json')).map(d=>'packages/'+d).join(' '))") || true
       # docs/coverage.md is GENERATED and DELIBERATELY UNTRACKED (#158) -- a fresh checkout has no copy, so
-      # doc-references.test.ts (reached by the unscoped suite, and by a scoped run whenever
-      # select-changed-tests.mjs picks it) would otherwise report a real citation as broken. Only the
-      # original `ts` job ever paid for this; kept opt-in so trunkGate does not gain a step it never had.
+      # the guards that read it would otherwise be reading an absent file. It was doc-references.test.ts
+      # that paid for this originally; #954 retired that one to the nightly report, and `coverage-doc.test.
+      # ts` and its siblings still read the file. Only the original `ts` job ever paid for this; kept
+      # opt-in so trunkGate does not gain a step it never had.
       - if: inputs.run-docs-coverage
         run: npm run docs:coverage
       - if: inputs.run-lint-typecheck
