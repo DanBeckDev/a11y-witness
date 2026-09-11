@@ -306,7 +306,7 @@ faults in what a stranger sees — including one where the tool reported less th
   yesterday and the difference is theirs to see. Capture throughput stayed at one deliberately: its own
   definition excludes correctness of what a capture records, and every candidate was correctness.
 
-- **One line, approved by `ceo` 2026-09-11 (added 04:19Z): every training-data export has been refused since new test cases were added without regenerating the dataset's manifest.** The check that refused it is working as designed; what never ran was the regeneration. It blocks any retrain and the verification of one fix, and it is **first in tonight's lab order** (#957). **Say it as found and scheduled, not as a failure of the check.** Do not print a duration: when the refusals began has not been measured.
+- **One line, approved by `ceo` 2026-09-11 (added 04:19Z): every training-data export has been refused since new test cases were added without regenerating the dataset's manifest.** The check that refused it is working as designed; what never ran was the regeneration. It blocked any retrain and the verification of one fix. **It was found and fixed overnight** (#957, closed 2026-09-11): the manifest was regenerated, the five new cases were captured, and every export on `main` runs again. **Say it as found and fixed, not as a failure of the check.** Do not print a duration: when the refusals began has not been measured.
 
 ### A closed row is not always a settled one — #800 is a CORRECTED close, and the distinction is the board's
 
