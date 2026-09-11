@@ -246,6 +246,17 @@ export function boardingFor(argv) {
 }
 
 /**
+ * #941: a Region DIRECTORY (`.github/`) touches a lane whose paths lie inside it, or that it lies inside
+ * (`.github/workflows/nested/`). Read as a file, `.github/` is in no lane's prefix, and a row declaring the
+ * whole directory would have been labelled `lane:any` by omission. An `except` names a file, so it cannot
+ * cover a directory.
+ * @param {string} directory ends in `/` @param {string[]} paths the lane's own prefixes and files
+ */
+function directoryTouchesLane(directory, paths) {
+  return paths.some((path) => path.startsWith(directory) || (path.endsWith("/") && directory.startsWith(path)));
+}
+
+/**
  * #883: which `lane:<owner>` label(s) this row's Region section touches -- derived from the SAME
  * `docs/lane-ownership.json` `workflow-lane-check.mjs`'s merge guard reads, via that file's own exported
  * `inLane` predicate, never a second, hand-typed opinion. That is the whole point rather than an
@@ -267,7 +278,8 @@ export function boardingFor(argv) {
  */
 export function laneLabelsFor(regionFiles, lanes) {
   const owners = lanes.lanes
-    .filter((lane) => regionFiles.some((f) => inLane(f, lane.paths) && !inLane(f, lane.except ?? [])))
+    .filter((lane) => regionFiles.some((f) => (f.endsWith("/") ? directoryTouchesLane(f, lane.paths)
+      : inLane(f, lane.paths) && !inLane(f, lane.except ?? []))))
     .map((lane) => lane.owner);
   return owners.length > 0 ? owners.map((owner) => `lane:${owner}`) : ["lane:any"];
 }

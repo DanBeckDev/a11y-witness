@@ -76,18 +76,59 @@ export function extractRegionSection(body) {
 }
 
 /**
+ * #941: a STANDALONE directory item -- a whole line, or a whole item of a list on one line (split at `,`,
+ * `;`, `and`, `or`), that is exactly one path ending in `/`, bar a list bullet or backticks. `PATH_IN_PROSE`
+ * needs a file extension, so `packages/control/ansible/` never matched it and vanished: on 2026-09-11, 14 of
+ * 60 open rows with a Region declared nothing at all, 12 of them for this reason -- 5 written a directory
+ * per line, 7 as one line of comma-separated directories.
+ *
+ * STANDALONE ONLY: an item with any other word in it -- "`scripts/` for the helper" -- is prose, not a
+ * declaration. The Region's prose was read as a declaration twice on 2026-09-11 (#848, #920), and a prefix
+ * must not reopen that.
+ *
+ * ANY ROOT, not a list of them. The standalone rule is what keeps prose out; a hand-written list of roots
+ * only drops the ones nobody typed. The first version listed `packages|scripts|docs|.github` and read
+ * `examples/`, `data/` and `.claude/skills/` as `[]` -- #941's own defect for three of the eight roots
+ * the tree tracks (worker-judge's review of #945). `region-paths.test.ts` checks every tracked root.
+ */
+const DIRECTORY_ITEM = /^(?:[-*+]\s+)?`?((?:[A-Za-z0-9_.-]+\/)+)`?$/;
+/** `.` and `..` name no directory in the tree: `../x/` is outside it and `./` is all of it. */
+const isTreePath = (/** @type {string} */ path) => !path.split("/").some((segment) => segment === "." || segment === "..");
+const LIST_SEPARATOR = /[,;]|\band\b|\bor\b/;
+
+/**
+ * #941: does a declared Region entry cover this repo-relative file? A directory entry (`docs/`) covers
+ * everything under it and nothing that merely shares its spelling (`docsite/`); a file entry covers itself.
+ * The ONE answer, so the overlap rule and the lane derivation cannot read a prefix two ways.
+ * @param {string} entry @param {string} file
+ */
+export function regionCovers(entry, file) {
+  return entry.endsWith("/") ? file.startsWith(entry) : entry === file;
+}
+
+/**
  * #710: the paths a row's OWN `## Region` section declares it will touch -- NOT every path its prose
  * mentions anywhere (that question is `regionPathsFromBody`'s, unchanged, and still what
  * `row-reachability.mjs`'s STARTABLE check wants). A row citing a file as a worked example, a fixture, or
  * something someone else's PR already touches is not declaring intent to change it, and
  * `fileOverlapReason` needs exactly that narrower question. `null` when the body has no Region section at
  * all -- CANNOT_ASK, distinct from `[]` (a Region section that names no source path).
+ *
+ * #941: a standalone directory item is declared as that PREFIX (`packages/control/ansible/`), after the
+ * files -- see `DIRECTORY_ITEM` and `regionCovers`. It used to vanish, so a Region of only directories
+ * declared the empty set and overlap-checked as touching nothing.
  * @param {string} body
  * @returns {string[] | null}
  */
 export function declaredRegionFiles(body) {
   const section = extractRegionSection(body);
-  return section === null ? null : regionPathsFromBody(section);
+  if (section === null) return null;
+  const directories = section.split(/\r\n|\r|\n/)
+    .flatMap((line) => line.split(LIST_SEPARATOR))
+    .map((item) => DIRECTORY_ITEM.exec(item.trim())?.[1])
+    .filter((path) => path !== undefined)
+    .filter(isTreePath);
+  return [...new Set([...regionPathsFromBody(section), ...directories])];
 }
 
 /**
