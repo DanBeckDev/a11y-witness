@@ -375,7 +375,27 @@ jobs:
   # context conclude" about a commit it is itself currently testing would read STILL_RUNNING on every
   # ordinary push, forever, and block every merge rather than only the unsafe ones. `gate` below already
   # answers "did CI pass" by construction; this answers the one question `strict` used to.
-  mergeSafety:
+  # #902: WHAT SURVIVES OF `mergeSafety`, AND WHY IT IS STILL REQUIRED. The job kept two checks and lost
+  # two. What went: the LANE check (ceo's ruling 2026-09-11 -- the pipeline lane's owner is now ceo, every
+  # engineer's pipeline PR carries a `Lane-exception:` line naming them, and #916 brings CODEOWNERS and
+  # required reviews on the 15th, so its only remaining effect was refusing PRs ceo had assigned), and the
+  # job's authority over the five process jobs, which is the trim itself.
+  #
+  # What stays, and neither is process noise -- NONE of the last forty red `ci` runs was either of these:
+  #   * A HELD PR MUST NOT MERGE. `hold:` is the one control a person reaches for to stop a specific pull
+  #     request. `pr-hold.mjs` disarms auto-merge when it takes a hold and `auto-arm.yml` will not arm a
+  #     held PR, but the window pr-hold's own comment calls "the dangerous half" -- armed, then held -- is
+  #     caught HERE and nowhere else in CI. It must block, not merely report.
+  #   * WHAT THE BODY DECLARES MUST MATCH WHAT GITHUB WILL CLOSE (#549). `pr:open`/`pr:edit` parse the
+  #     body and ask whether the declaration is WELL FORMED; only this step has a token and asks whether
+  #     it matches what GitHub will actually close. Different questions, and the acceptance job still has
+  #     no token by design.
+  #
+  # The hold refusal arrives through `merge-guard.mjs --ci-gate`, which also carries #294's head-vs-tip
+  # race (does this head match what GitHub recorded for the branch). That is NOT #277's "behind main",
+  # which branch protection's `strict` now owns -- it is the racy-push case, it fires rarely, and it is
+  # not among the ten reds this row measured for this job.
+  holdAndCloses:
     if: github.event_name == 'pull_request' && github.event.pull_request.state == 'open'
     runs-on: ubuntu-latest
     steps:
@@ -417,36 +437,6 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: node scripts/closes-mismatch-check.mjs ${{ github.event.pull_request.number }}
 
-      # A LANE IS WHO MAY CHANGE A PATH -- ceo's ruling 2026-09-08, after a `pull_request` trigger added
-      # from outside the pipeline's lane attached a failing `audit` check to seven merged PRs and sat red
-      # for ninety minutes before anyone in the org read the view the chairman reads. Nobody was careless:
-      # the change was reasoned and the reasoning was sound, and its cost -- a red mark on every merged PR
-      # -- is visible from the merge queue and from nowhere else. A boundary nobody can see from where they
-      # sit is not enforced by a reminder.
-      #
-      # A SEPARATE STEP FROM `ownedPaths`, and the two questions must not be folded together: that job asks
-      # what a change to a path must DECLARE and lets anyone make it; this asks who may make it at all. A
-      # path can be lane-owned and fact-free, or fact-heavy and open to everyone, and one owner's edit to
-      # their own data file must never silently move the other's rule.
-      #
-      # The lane list is `docs/lane-ownership.json`, which `ceo` owns -- data, so a lane can move without
-      # touching the mechanism, and so the mechanism cannot quietly decide who owns what. A crossing is
-      # allowed and RECORDED rather than forbidden: a `Lane-exception:` line naming the lane, the assigner
-      # and the reason passes, and the check echoes the line into this log.
-      - name: A change in another session's lane was assigned, or it is refused
-        env:
-          PR_BODY: ${{ github.event.pull_request.body }}
-          # THROUGH AN ENV VAR, NOT INLINE. A branch name is author-controlled text, and interpolating it
-          # into the script would let a branch called `x'; rm -rf /; '` run as shell. actionlint refuses
-          # the inline form by name, and it is right to: the flag parser downstream is not the boundary.
-          HEAD_REF: ${{ github.event.pull_request.head.ref }}
-        run: |
-          # #939: THE ONE HELPER, so the SOURCE side of a rename is listed. A bare `git diff --name-only`
-          # prints only where a file WENT, so a pull request moving a file OUT of another session's lane was
-          # not seen by the check that owns that lane -- a bypass, not merely a short list.
-          node scripts/changed-files.mjs origin/${{ github.base_ref }}...HEAD > /tmp/lane-changed.txt
-          printf '%s' "$PR_BODY" > /tmp/lane-body.txt
-          node scripts/workflow-lane-check.mjs \
             --diff=/tmp/lane-changed.txt \
             --branch="$HEAD_REF" \
             --body=/tmp/lane-body.txt
@@ -537,7 +527,7 @@ jobs:
   # a `gate` check-run beside the real one. Two sessions read #996 as red from exactly that on
   # 2026-09-11. A superseded run should report nothing, not a red.
   gate:
-    needs: [changed, ts, python, ansible, changeset, rulesFitness]
+    needs: [changed, ts, python, ansible, changeset, rulesFitness, holdAndCloses]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     steps:
@@ -549,7 +539,8 @@ jobs:
             "${{ needs.python.result }}" \
             "${{ needs.ansible.result }}" \
             "${{ needs.changeset.result }}" \
-            "${{ needs.rulesFitness.result }}"
+            "${{ needs.rulesFitness.result }}" \
+            "${{ needs.holdAndCloses.result }}"
           do
             if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
               echo "::error::a job reported '$result', which is neither success nor skipped"
