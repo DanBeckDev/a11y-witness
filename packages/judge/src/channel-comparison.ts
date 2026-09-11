@@ -497,6 +497,21 @@ export function tabOrderCanProveAbsence(tabbedNames: string[], input: RuleInput)
 }
 
 /**
+ * The completeness verdicts under which a sweep counts as having examined the page: `exact`, and `unknown`
+ * -- which is deliberately allowed and COUNTED rather than refused, because every capture predating the
+ * counter reports it and refusing would silence 2.1.1 across the whole corpus. No verdict at all reads the
+ * same as `unknown`.
+ *
+ * Everything else is PARTIAL: `truncated`, `phantom`, `elsewhere` (#951), and any verdict added after this
+ * line was written. It is spelled as the ALLOWED set, once, for both readers (`assertableSweep` here and
+ * `incompleteFeeds` in `outcomes.ts`), because both used to list the BAD verdicts and let anything else
+ * through: `elsewhere` fell through each to "absence allowed" and "examined in full" until it was named, and
+ * in `outcomes.ts` nothing noticed (worker-judge's mutation on #956, 742 tests green). A new verdict now
+ * fails closed.
+ */
+export const EXAMINED_IN_FULL: ReadonlySet<string> = new Set(["exact", "unknown"]);
+
+/**
  * MAY A RULE ASSERT FROM THIS SWEEP? — capture-integrity-plan C2.
  *
  * Absence is the one claim a sweep cannot make alone, and this repo already states that rule and then
@@ -526,13 +541,12 @@ export function tabOrderCanProveAbsence(tabbedNames: string[], input: RuleInput)
  */
 export function assertableSweep(input: RuleInput, type: string, claim: "presence" | "absence"): boolean {
   const verdict = input.completeness?.[type];
+  if (verdict === undefined || EXAMINED_IN_FULL.has(verdict)) return true;
   // A sweep that announced more than the page exposes may have announced THIS one. Fatal to either claim.
   if (verdict === "phantom") return false;
-  // Short: it cannot rule anything out, but what it DID hear was still heard.
-  if (verdict === "truncated") return claim === "presence";
-  // `exact`, and `unknown` — which is deliberately allowed and COUNTED rather than refused, because every
-  // capture predating the counter reports it and refusing would silence 2.1.1 across the whole corpus.
-  return true;
+  // Short -- `truncated`, `elsewhere` (#951: it ran out of a container on the page), or a verdict this line
+  // predates. It cannot rule anything out, but what it DID hear is on the page and was still heard.
+  return claim === "presence";
 }
 
 export function unverifiedSweeps(input: RuleInput, types: string[]): string[] {
