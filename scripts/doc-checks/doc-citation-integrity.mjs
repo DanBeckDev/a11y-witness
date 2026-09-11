@@ -4,6 +4,9 @@
 // `doc-citation-integrity.test.ts`, which now asserts on `findCitations` -- read that file's header for the
 // scope (a citation that NAMES its document beside the `§`, in prose or as a markdown link resolved against
 // the HREF) and for why a bare `§N` is deliberately out of scope.
+// #954: `doc-citation-integrity.test.ts` IS GONE. The sentences above describing what it asserts are the record of where this
+// rule came from, not a claim about today: this module is now the only copy, and the nightly doc
+// cross-reference report is where it runs. A pull request no longer fails on it.
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { resolve, dirname, join, relative } from "node:path";
 
