@@ -119,3 +119,31 @@ jobs:
             echo "::warning::A11IGN_BOT_TOKEN is not set -- GITHUB_TOKEN cannot resolve a user-owned ProjectV2, so the board-membership check will report as unable to run. See #416."
           fi
           npm run ready:audit
+
+  # #948 (The CI Reset, step 3 of the doc-guard triage #905): the doc cross-reference REPORT, once a night,
+  # as one comment. Until #954 retires them, the ~14 doc cross-reference guards still run on every PR; this
+  # comment is their replacement, and #954 may retire them only after this step has posted once with
+  # per-guard examined counts (#928's rule: no watcher retires before its replacement has reported).
+  # The report script prints markdown, always exits 0 and never calls `gh` itself; posting is this step's.
+  # It fetches ~21 external URLs (`check-transfer-urls`), hence the timeout. Until #63 lands, the 21
+  # `a11ign/a11ign` URLs answer 404 and are named every night: expected, not a failure. The comment goes
+  # on #928 (the org's nightly reading) until #912 creates the nightly issue; then change the number.
+  doc-report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - name: Write the doc cross-reference report and post it as one comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/doc-cross-reference-report.mjs > /tmp/doc-report.md
+          gh issue comment 928 --body-file /tmp/doc-report.md
