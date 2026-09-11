@@ -329,7 +329,7 @@ A cheap pre-check decides whether to bother running the real one; it is never li
 **Two of these now run themselves. That is deliberate, and it is the point.**
 
 ```bash
-git push                      # pre-push hook: lint, typecheck, tests, check-signals, rules:gate (~5s)
+git push                      # pre-push hook: lint (changed), typecheck, leak scan (~10s)
 npm run release:gate          # migration -> shortcuts -> signals -> rules -> held-out acceptance -> judge quality
 npm run capture:check -- --worker=http://192.168.64.4:8765    # the capture layer, ~2 min
 ```
@@ -347,7 +347,7 @@ And the measurement that matters most is not in any of them: `calibrate-abstenti
 
 **Automate a check or lose it** — eight verifications existed and only two ran themselves; every manual one eventually went unrun for months. [Record →](docs/operational-lessons.md#eight-verifications-and-only-two-were-automatic)
 
-The pre-push hook holds only what costs nothing (~5s, no worker, no network) and SKIPS corpus-dependent checks loudly when `runs/` is absent, rather than passing quietly. `A11Y_SKIP_VERIFY=1 git push` overrides it.
+The pre-push hook is a COURTESY; CI is the gate (#911). Three checks, ~10s: lint (changed paths), typecheck, **the leak scan** — the one CI cannot cover, since a push here is public at once. [Full scope →](docs/operational-lessons.md#the-pre-push-hooks-scope-verbatim)
 
 Verification is layered; pick the layers your change touches:
 - `npm run lint` and `npm run typecheck` — must pass. **CI gates on both**, and on `npm test`
@@ -398,8 +398,8 @@ reported result**, and never in an acceptance section as though it settled anyth
 The reason is measured rather than procedural. `runs/` in any checkout is a copy only as fresh as its last
 sync — one measured here was 89 hours old and carried neither `focusEvents` nor `baselineWaitedMs`, so a
 sweep across it found zero of the two keys it was written to find. **A gate run there reports cleanly
-having examined a corpus that no longer exists.** The pre-push hook already SKIPS the corpus-dependent
-checks loudly for exactly this reason, and calls that honest rather than passing quietly.
+having examined a corpus that no longer exists.** The pre-push hook does not run them since #911; it
+names the lab job answering each, unconditionally.
 
 **So an issue's acceptance may name a `runs/`-reading gate, and must say who runs it.**
 
