@@ -147,6 +147,57 @@ export function extractRegionSection(body) {
  * the tree tracks (worker-judge's review of #945). `region-paths.test.ts` checks every tracked root.
  */
 const DIRECTORY_ITEM = /^(?:[-*+]\s+)?`?((?:[A-Za-z0-9_.-]+\/)+)`?$/;
+
+/**
+ * #999: A FENCED LINE UNDER `## Region` IS A DECLARATION, NOT PROSE TO PATTERN-MATCH.
+ *
+ * `PATH_IN_PROSE` requires an extension of two to four letters, so a file that has none was never SEEN --
+ * not dropped with a message, never a path at all. The live instance is #911, whose subject is
+ * `scripts/git-hooks/pre-push`: its Region names that file and the test beside it, and `declaredRegionFiles`
+ * returned ONE entry, the test. The file the row was actually about was invisible to every consumer of the
+ * Region, `fileOverlapReason` (B4) included.
+ *
+ * Measured on `origin/main` at `40e36ba4`: 11 tracked files under the four declarable prefixes have no
+ * extension, and FOUR are the git hooks -- `pre-push`, `pre-commit`, `post-checkout`,
+ * `reference-transaction`. Those are files rows change. A hook's filename is its contract with git, so
+ * renaming one to suit a parser is not available: `pre-push.sh` is run by nothing.
+ *
+ * WHY THE FENCE, AND NOT A LOOSER `PATH_IN_PROSE`. Deleting `\.[A-Za-z]{2,4}` from that regex is the
+ * obvious fix and it is the wrong one: it runs over PROSE as well, so every mention of a directory --
+ * `packages/lab/src`, `docs/adr` -- would become a declared FILE, silently undoing #941/#945's prefix rule
+ * in the same direction as the bug. The Region's prose has already been read as a declaration twice
+ * (#848, #920). A fenced block is structured: a line inside it is something a person wrote AS a path, in
+ * the section whose whole purpose is naming paths, which is the one place the guess is not a guess.
+ *
+ * STANDALONE, the same discipline `DIRECTORY_ITEM` carries: the whole line is one path, bar a list bullet
+ * or backticks. `scripts/git-hooks/pre-push and the test beside it` is prose that happens to sit in a
+ * fence, and it declares nothing here.
+ *
+ * A `/` IS REQUIRED, which is what keeps this from reading any fenced word as a path. A root-level file
+ * has none, and needs none: #975's `ROOT_FILE_CANDIDATE` already declares those, ANCHORED to the tree.
+ * These are deliberately NOT anchored -- a row routinely declares a file it is about to CREATE (#911's own
+ * test file did not exist when its Region was written), and a rule that reads the tree would refuse
+ * exactly the new files a Region exists to reserve.
+ */
+const FENCE_LINE = /^\s*(?:```|~~~)/;
+const FENCED_PATH_ITEM = /^(?:[-*+]\s+)?`?([A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+)`?$/;
+
+/**
+ * Every path declared by a line inside a fenced block of `section`. Lines outside a fence are left to the
+ * prose grammar, which is the point of the split.
+ * @param {string} section @returns {string[]}
+ */
+function fencedPaths(section) {
+  const out = [];
+  let inFence = false;
+  for (const line of section.split(/\r\n|\r|\n/)) {
+    if (FENCE_LINE.test(line)) { inFence = !inFence; continue; }
+    if (!inFence) continue;
+    const path = FENCED_PATH_ITEM.exec(line.trim())?.[1];
+    if (path !== undefined && isTreePath(path)) out.push(path);
+  }
+  return out;
+}
 /** `.` and `..` name no directory in the tree: `../x/` is outside it and `./` is all of it. */
 const isTreePath = (/** @type {string} */ path) => !path.split("/").some((segment) => segment === "." || segment === "..");
 const LIST_SEPARATOR = /[,;]|\band\b|\bor\b/;
@@ -174,6 +225,9 @@ export function regionCovers(entry, file) {
  * declared the empty set and overlap-checked as touching nothing.
  *
  * #975: so is a ROOT-LEVEL file the tree has (`package.json`) -- see `ROOT_FILE_CANDIDATE`.
+ *
+ * #999: and so is a standalone path on a line inside a FENCED block, extension or no extension -- see
+ * `FENCED_PATH_ITEM`. That is how `scripts/git-hooks/pre-push` declares; prose still needs an extension.
  * @param {string} body
  * @param {{ rootFiles?: Set<string> }} [options] the tree's root files; defaults to `origin/main`'s, and a test
  *   passes its own so the rule can be checked without the repository it runs in
@@ -190,7 +244,7 @@ export function declaredRegionFiles(body, { rootFiles: known = rootFilesOnMain()
     .map((item) => DIRECTORY_ITEM.exec(item.trim())?.[1])
     .filter((path) => path !== undefined)
     .filter(isTreePath);
-  return [...new Set([...regionPathsFromBody(section), ...directories, ...roots])];
+  return [...new Set([...regionPathsFromBody(section), ...directories, ...roots, ...fencedPaths(section)])];
 }
 
 /**
