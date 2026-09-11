@@ -5,10 +5,12 @@
 // `select-changed-tests.mjs`'s `alwaysRunTests` runs every guard whose population is discovered from the tree,
 // on every pull request, because *"a file added anywhere can join the population of a guard living anywhere
 // else"*. That is right for a guard whose population IS the repository. Measured by running all 131 of them
-// with their reads observed: 17 walk the whole repository and 83 read inside a product package -- but 31 read
-// nothing a product diff can touch, and 14 of those read nothing outside their own imports at all. Those 14
-// are flagged because they transitively import `scripts/ready-label-audit.mjs`, whose `run("git",
-// ["for-each-ref", ...])` the static predicate reads as a walk; the tests never take that path.
+// under this module's observer: 38 walk the whole repository and 69 read inside a product package -- but 24
+// read nothing a product diff can touch, and 6 of those nothing outside their own imports at all. Five of the
+// 6 transitively import `scripts/ready-label-audit.mjs`, whose `run("git", ["for-each-ref", ...])` the static
+// predicate reads as a walk; the tests never take that path. A first observer that saw only the sync `fs`
+// calls and argv `git` counted 17 / 83 / 31: child processes and root listings, which it could not see, are
+// the difference.
 //
 // So a guard may DECLARE its scope -- `export const WALK_SCOPE = ["docs"];` -- and the selector drops it from
 // the always-run set on a diff that touches none of it. Undeclared means unbounded: nothing changes for a
