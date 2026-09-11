@@ -56,7 +56,7 @@ const TESTS = "packages/lab/src/packaging";
  */
 export const CHECKS = [
   { name: "action-reference", test: null, check: actionReference.check },
-  { name: "adr-index", test: `${TESTS}/adr-index.test.ts`, check: adrIndex.check },
+  { name: "adr-index", test: null, check: adrIndex.check },
   { name: "adr-status", test: null, check: adrStatus.check },
   { name: "check-transfer-urls", test: `${TESTS}/check-transfer-urls.test.ts`, check: (root) => checkTransferUrls.check(root) },
   { name: "claude-md-links", test: `${TESTS}/claude-md-links.test.ts`, check: claudeMdLinks.check },
@@ -229,7 +229,18 @@ export function fitToComment(report, limit = COMMENT_LIMIT) {
     kept.push(line);
     if (line.startsWith("| `")) shown += 1;
   }
-  return `${kept.join("\n")}${notice(rows - shown)}${tail}`;
+  const fitted = `${kept.join("\n")}${notice(rows - shown)}${tail}`;
+  // THE GUARANTEE IS UNCONDITIONAL -- worker-capture's review of #996. Everything above assumes the parts
+  // this function REFUSES to drop (the headline, the per-check table, the could-not-run section) fit inside
+  // the limit. They do today and the checks in this repo cannot make them not fit -- `runChecks` stores
+  // `error.message`, never a stack, and the only two checks that spawn anything return short git stderr.
+  // But "cannot happen today" is a property of the callers, not of this function, and the cost of being
+  // wrong is the whole comment: `gh issue comment` answers 422 and posts NOTHING, which fails the nightly
+  // step. So the last word is a hard cut with the reason attached, rather than a returned value that is
+  // over the limit because the arithmetic ran out of room.
+  if (fitted.length <= limit) return fitted;
+  const cut = "\n_CUT: even the summary exceeded GitHub's comment limit; run the report locally._\n";
+  return `${fitted.slice(0, limit - cut.length)}${cut}`;
 }
 
 /**
