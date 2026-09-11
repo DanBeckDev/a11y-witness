@@ -544,13 +544,21 @@ function compareStates(states: Record<string, Record<string, number>>):
  * the single grammar for that, validated on 6,555 cross-channel comparisons, and it is TypeScript the
  * plain-node worker cannot import.
  *
+ * ## `elsewhere` is a verdict -- #951
+ *
+ * The sweep said it reached the end -- `exhausted` both ways -- having found FAR LESS than the page's census.
+ * Something held it: a chat widget, a consent overlay, or a cause nobody has read. Its `exhausted` is true
+ * about wherever the caret was held, so it says nothing about the page's absences; what it did hear is still
+ * on the page. It is a coverage verdict, not a widget detector. See `sweptElsewhere`, the one place that
+ * decides it.
+ *
  * ## `unknown` is a verdict
  *
  * A capture whose census predates `distinct` cannot answer, and that must never read as `exact`. Absence
  * treated as agreement is the defect this project pays for most often — `census.heading` absent read as
  * zero, `sameState: undefined` read as false, a recovery metric read with `?? 0`.
  */
-export type Completeness = "exact" | "truncated" | "phantom" | "unknown";
+export type Completeness = "exact" | "truncated" | "phantom" | "unknown" | "elsewhere";
 
 /**
  * WHAT THE CAPTURE ITSELF SAYS IT ASKED — capture-protocol 9, preferred over inferring it.
@@ -710,6 +718,126 @@ function tableCompleteness(capture: CapturedAnnouncements): Completeness {
 }
 
 /**
+ * A SWEEP THAT SAID IT REACHED THE END, HAVING FOUND FAR LESS THAN THE CENSUS -- #951, the cause of #887.
+ *
+ * `exhausted` is NVDA's own "no next link", and it is true about wherever the caret's quick navigation is
+ * held. Measured on `runs/887-r9A-hubspot-w7.json`: on capture-1 HubSpot's chat widget had opened by itself,
+ * and the link and graphic sweeps that followed found the widget's 1 link and 2 graphics, both directions
+ * `exhausted`, with no modal open -- so #897's dialog check correctly cannot see it. On capture-2, the same
+ * box minutes later, the same sweeps found 44 and 22.
+ *
+ * WHATEVER HELD IT. The claim is coverage -- found far less than the census -- and not a cause. On the lab's
+ * corpus the sweeps it catches are consent overlays and two zeros nobody has read; the chat widget is only in
+ * this Mac's `runs/`. So nothing here says "widget", and `container` is a hint, never proof.
+ *
+ * ## Why not the phrases
+ *
+ * The rule #951 was filed with -- "every item inside the one container the sweep started in" -- fails its
+ * own fixture: the trapped graphic sweep's two items announce two different containers, and the trapped
+ * link announces none. No rule reading only phrases can flag that link without flagging a one-link page.
+ *
+ * ## Where it sits, measured in two populations, on the rule's own denominator
+ *
+ * Found ÷ `census.distinct.link` for link sweeps `exhausted` in both directions, with at least
+ * `LINK_CENSUS_FLOOR` distinct links:
+ *
+ *                     doubtful                             healthy
+ *     local runs/     17 at most 0.066                     77 at least 0.603     this Mac, recounted 2026-09-11;
+ *                                                                               a pre-check
+ *     lab corpus      4: three zeros-and-ones below 0.1,   80 at least 0.639     corpus-2026-09-11_03-35-45,
+ *                     and nrscotland at 0.460                                    orchestrator's gate 1 on #951
+ *
+ * The local copy has nothing between 0.066 and 0.603. The lab has one sweep at 0.460, a consent overlay that
+ * held PART of the sweep -- so what holds a sweep does not always hold all of it, and a threshold at 0.1
+ * would have missed it. product-manager's placement, on #951: above the highest doubtful sweep in EITHER
+ * population (0.460) and below the lowest healthy in either (0.603). It marks no healthy sweep in either.
+ *
+ * Two lab sweeps the placement was first argued from are not in that table, and the fixture says why.
+ * `nrscotland/statistics-and-data` is 0.479 on the RAW census but 0.639 on `distinct`, so it is healthy by the
+ * rule's own measure. `sepa/bathing-waters` has no `distinct` census at all, so the rule cannot judge it.
+ *
+ * ## The floor
+ *
+ * Below `LINK_CENSUS_FLOOR` distinct links the rule does not judge. One link found or not found is not
+ * evidence that anything held the sweep: `focus-panel-undismissable-help`, a known-good dataset page, counts
+ * one distinct link and its sweep finds none, which is below every threshold. The lab's gate-1 population
+ * already had the floor. Under it, the census comparison answers exactly as before #951 -- so
+ * `keyboard-trap-modal-escape.bad` (0 of 6) reads `truncated`, its absence still withheld.
+ *
+ * GRAPHICS HAVE NO GAP TO USE -- locally, trapped at most 0.074 and a page's own sweep from 0.131 -- but the
+ * collapse is the CAPTURE's, not the channel's: all 17 local trapped-link captures with a graphic census
+ * collapse on graphics too, and none collapses on graphics without a trapped link. So a graphic sweep
+ * follows its capture's link verdict.
+ *
+ * ## The direction of error
+ *
+ * `elsewhere` WITHHOLDS: it never asserts the page has more links than were found. A page the census
+ * over-counts is withheld from, never accused -- #894's principle, "withholding needs doubt".
+ */
+export const LINK_SWEEP_OF_THE_PAGE_FROM = 0.54;
+
+/** Below this many distinct links the rule does not judge -- see "The floor" above. */
+export const LINK_CENSUS_FLOOR = 10;
+
+/** A sweep that found far less than the census, and the first container it named -- `null` for none. */
+export interface SweptElsewhere { type: "link" | "graphic"; container: string | null; found: number }
+
+/** A sweep of `type` whose BOTH directions exhausted -- the one claim this verdict can contradict. */
+function exhaustedSweep(marks: readonly unknown[], type: string): { found: number; phrases: unknown[] } | undefined {
+  const mark = marks.find((m) => typeof m === "object" && m !== null
+    && (m as { event?: unknown; type?: unknown }).event === "sweep" && (m as { type?: unknown }).type === type) as
+    { found?: unknown; prevStop?: unknown; nextStop?: unknown; phrases?: unknown } | undefined;
+  if (!mark || typeof mark.found !== "number") return undefined;
+  if (mark.prevStop !== "exhausted" || mark.nextStop !== "exhausted") return undefined;
+  return { found: mark.found, phrases: Array.isArray(mark.phrases) ? mark.phrases : [] };
+}
+
+/** The first container this sweep's own announcements name, as NVDA said it -- `null` when none names one. */
+function firstAnnouncedContainer(phrases: readonly unknown[]): string | null {
+  for (const phrase of phrases) {
+    const [container] = parseAnnouncement(String(phrase), "sweep").containers;
+    if (container) return container.name ? `${container.name}, ${container.role}` : container.role;
+  }
+  return null;
+}
+
+/**
+ * Which of this capture's sweeps said they reached the end having found far less than the page's census --
+ * `[]` when the page was swept, and `[]` when the rule does not judge (no `distinct` census, fewer than
+ * `LINK_CENSUS_FLOOR` distinct links, or no exhausted link sweep). THE ONE VERDICT: `sweepCompleteness`, `captureSupports`, `capture:explain`, the ambiguity audit
+ * and the lab's sweep verdict all read it, so none of them can call the held sweep complete while another
+ * calls it elsewhere (#951: a fix at one call site, when the behaviour reaches several, is this repo's most
+ * expensive recurring shape). NOT the silent-sweep check, which decides evidence -- see its comment.
+ */
+export function sweptElsewhere(capture: CapturedAnnouncements): SweptElsewhere[] {
+  const marks = Array.isArray(capture.diagnostics) ? capture.diagnostics : [];
+  const census = marks.find((m) => typeof m === "object" && m !== null
+    && (m as { event?: unknown }).event === "structureCensus") as { distinct?: Record<string, number> } | undefined;
+  const links = census?.distinct?.link;
+  if (typeof links !== "number" || links < LINK_CENSUS_FLOOR) return [];
+  const link = exhaustedSweep(marks, "link");
+  if (!link || link.found / links >= LINK_SWEEP_OF_THE_PAGE_FROM) return [];
+  const graphic = exhaustedSweep(marks, "graphic");
+  return [
+    { type: "link" as const, container: firstAnnouncedContainer(link.phrases), found: link.found },
+    ...(graphic ? [{ type: "graphic" as const, container: firstAnnouncedContainer(graphic.phrases), found: graphic.found }] : []),
+  ];
+}
+
+/**
+ * What held the sweep, in the words every reader prints -- one spelling, so `captureSupports` and
+ * `capture:explain` cannot describe the same sweep two ways. The container is the first one the sweep's own
+ * announcements named: a hint about what held it, never proof, and naming none is a first-class answer.
+ *
+ * @param held the verdict's entry for one sweep
+ * @returns a predicate for "the sweep ...", e.g. `said it reached the end having found far less than ...`
+ */
+export function whatHeldTheSweep(held: Pick<SweptElsewhere, "container">): string {
+  const named = held.container ? `it named "${held.container}" first` : "it named no container";
+  return `said it reached the end having found far less than the page's census, so something held it (${named})`;
+}
+
+/**
  * Per-type: did the sweep announce as many distinct names as the page exposes?
  *
  * @param capture a capture, unwrapped
@@ -721,30 +849,42 @@ export function sweepCompleteness(capture: CapturedAnnouncements): Record<string
     && (m as { event?: unknown }).event === "structureCensus") as
     { distinct?: Record<string, number> } | undefined;
   const out: Record<string, Completeness> = {};
+  const elsewhere = new Set(sweptElsewhere(capture).map((s) => s.type as string));
   for (const [type, field] of Object.entries(SWEEP_OF)) {
     // A CHANNEL NOBODY ASKED ABOUT CANNOT BE COMPARED, and under protocol 9 the capture says so itself
     // rather than being inferred from a census that may simply be absent. Checked BEFORE the census, so
     // "we never asked" is never reported as "the sweep came up short".
     if (observationOf(capture, field)?.asked === false) { out[type] = "unknown"; continue; }
-    const expected = census?.distinct?.[type];
-    const announced = (capture.structure as Record<string, string[]> | undefined)?.[field];
-    if (typeof expected !== "number" || !Array.isArray(announced)) { out[type] = "unknown"; continue; }
-    const { names, unnamed } = sweptElements(announced, type);
-    // A SWEEP THAT YIELDED NO ELEMENT AT ALL CANNOT SAY.
-    //
-    // Reachable for LANDMARKS only, now that unnamed elements are counted for every type: the other types
-    // take one entry per announcement, so anything announced contributes either a name or an unnamed
-    // count. Landmarks flatMap over CONTAINERS, and an announcement carrying no landmark container
-    // contributes nothing — so a landmark sweep can announce lines and yield zero elements.
-    //
-    // Declining is the honest answer and not a pass. This guard previously also caught pages of unnamed
-    // controls, because they were dropped rather than counted; that was the bug, not the protection.
-    if (names.size === 0 && unnamed === 0 && announced.length > 0) { out[type] = "unknown"; continue; }
-    const found = names.size + unnamed;
-    out[type] = found === expected ? "exact" : found < expected ? "truncated" : "phantom";
+    // A SWEEP OF A CONTAINER IS NOT COMPARED WITH THE PAGE'S CENSUS AT ALL (#951) -- it would read as
+    // `truncated`, which says the sweep came up short on the page, when it never examined the page.
+    if (elsewhere.has(type)) { out[type] = "elsewhere"; continue; }
+    out[type] = againstTheCensus(
+      (capture.structure as Record<string, string[]> | undefined)?.[field], census?.distinct?.[type], type);
   }
   out.tableCells = tableCompleteness(capture);
   return out;
+}
+
+/**
+ * One swept type's announcements against the census's distinct count -- split out of `sweepCompleteness`
+ * when #951's `elsewhere` took it one branch over the complexity budget.
+ * @param announced the sweep's announcements, if the capture has them @param expected the census's count
+ */
+function againstTheCensus(announced: string[] | undefined, expected: number | undefined, type: string): Completeness {
+  if (typeof expected !== "number" || !Array.isArray(announced)) return "unknown";
+  const { names, unnamed } = sweptElements(announced, type);
+  // A SWEEP THAT YIELDED NO ELEMENT AT ALL CANNOT SAY.
+  //
+  // Reachable for LANDMARKS only, now that unnamed elements are counted for every type: the other types
+  // take one entry per announcement, so anything announced contributes either a name or an unnamed
+  // count. Landmarks flatMap over CONTAINERS, and an announcement carrying no landmark container
+  // contributes nothing — so a landmark sweep can announce lines and yield zero elements.
+  //
+  // Declining is the honest answer and not a pass. This guard previously also caught pages of unnamed
+  // controls, because they were dropped rather than counted; that was the bug, not the protection.
+  if (names.size === 0 && unnamed === 0 && announced.length > 0) return "unknown";
+  const found = names.size + unnamed;
+  return found === expected ? "exact" : found < expected ? "truncated" : "phantom";
 }
 
 
@@ -788,6 +928,21 @@ export interface CaptureSupports {
 const REACHED_THE_END = new Set(["exhausted", "repeatBottom", "wrap"]);
 
 /**
+ * What one type's completeness verdict supports about the page having none, and why -- in words a reader
+ * can check. `elsewhere` says what held the sweep, as far as the sweep itself said, because that is what a
+ * reader needs in order to go and look (#951).
+ */
+function absenceSupport(verdict: Completeness, elsewhere: SweptElsewhere | undefined): Support {
+  if (verdict === "exact") return { ok: true, why: "the sweep announced exactly what the tree exposes" };
+  if (verdict === "unknown") return { ok: false, why: "this capture cannot say whether the sweep was complete" };
+  if (verdict === "elsewhere") {
+    return { ok: false, why: `the sweep ${whatHeldTheSweep(elsewhere ?? { container: null })}, so it cannot `
+      + "speak for the page (#951)" };
+  }
+  return { ok: false, why: `the sweep is ${verdict} against the tree` };
+}
+
+/**
  * WHAT CAN THIS CAPTURE SUPPORT? — capture-integrity-plan C6.
  *
  * The property that makes the rest of the plan checkable, and the reason it lives HERE rather than in the
@@ -817,13 +972,10 @@ export function captureSupports(capture: CapturedAnnouncements): CaptureSupports
   // about a dialog. An exact sweep of the wrong thing is the most confident way to be wrong.
   const banner = consentBanner(capture);
   const absence: Record<string, Support> = {};
+  const elsewhere = new Map(sweptElsewhere(capture).map((s) => [s.type as string, s]));
   for (const [type, verdict] of Object.entries(completeness)) {
     if (banner.blocking) { absence[type] = { ok: false, why: banner.why }; continue; }
-    absence[type] = verdict === "exact"
-      ? { ok: true, why: "the sweep announced exactly what the tree exposes" }
-      : verdict === "unknown"
-        ? { ok: false, why: "this capture cannot say whether the sweep was complete" }
-        : { ok: false, why: `the sweep is ${verdict} against the tree` };
+    absence[type] = absenceSupport(verdict, elsewhere.get(type));
   }
 
   // ORDERING rests on the READ-THROUGH, which is the only ordered channel this tool has: the sweep is a
@@ -1296,6 +1448,12 @@ function sweepWentSilentOnAPopulatedPage(capture: CapturedAnnouncements): boolea
     && (m as { event?: unknown }).event === "structureCensus") as
     { distinct?: Record<string, number> } | undefined;
   if (!census?.distinct) return false;
+  // NOT `sweptElsewhere`, deliberately (#951). This check decides whether a capture is EVIDENCE at all
+  // (`captureIsSelfConsistent` -> `isEvidence` -> a training capture is rejected and retried), and a sweep
+  // confined to a container is sometimes the page's own defect: `keyboard-trap-modal-escape.bad` traps its
+  // sweeps in a modal by design, 0 of 6 links, both directions exhausted, and that confinement IS the 2.1.2
+  // finding. Reading the verdict here rejected it -- measured: self-consistent on `origin/main`, not on the
+  // first #951 branch. The verdict withholds claims; it never discards a capture.
   return Object.entries(SWEEP_OF).some(([type, field]) => {
     if ((census.distinct?.[type] ?? 0) <= 0) return false;
     const announced = (capture.structure as Record<string, string[]> | undefined)?.[field];
