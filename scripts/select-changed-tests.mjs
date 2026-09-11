@@ -57,6 +57,8 @@ import { stripComments } from "@a11ign/evidence/source-text";
 import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
 import { knownPackages, readWorkspaceDependencyGraph, classify, ROOT_TS_FILES } from "./ci-changed.mjs";
+// The parser only: importing `walk-scope.mjs` would install its read observer in this process.
+import { parseWalkScope, inScope } from "./walk-scope-declaration.mjs";
 
 /**
  * `import ... from "<spec>"` specifiers, in source order -- identical regex to
@@ -78,7 +80,7 @@ function specifiersOf(source) {
  * @param {string[]} packageDirs
  * @returns {Map<string, { dir: string, exportsMap: Record<string, unknown> }>}
  */
-function packageIndex(repoRoot, packageDirs) {
+export function packageIndex(repoRoot, packageDirs) {
   const index = new Map();
   for (const dir of packageDirs) {
     const manifest = JSON.parse(readFileSync(join(repoRoot, "packages", dir, "package.json"), "utf8"));
@@ -371,6 +373,48 @@ export function alwaysRunTests(testFiles, { closureOf, repoRoot, readSource }) {
   return guards.sort((a, b) => a.test.localeCompare(b.test));
 }
 
+/**
+ * WHICH ALWAYS-RUN GUARDS THIS DIFF CAN ACTUALLY REACH, by each guard's own declared walk scope -- #929.
+ *
+ * `alwaysRunTests` is unchanged and stays broad: *"a file added anywhere can join the population of a guard
+ * living anywhere else"*, which is right for a guard whose population is the repository. This only removes
+ * a guard that has DECLARED a narrower population (`export const WALK_SCOPE = [...]`, see
+ * `scripts/walk-scope.mjs`) when nothing in the diff lies inside it. A guard that declares nothing is kept
+ * exactly as today -- undeclared is unbounded, because the failure mode of a wrong narrowing is a guard that
+ * silently stops running.
+ *
+ * Kept SEPARATE from `alwaysRunTests` so the predicate that decides "this walks the tree" and the declaration
+ * that says "but only this much of it" are two readable facts, each with its own test.
+ *
+ * `declaredWalkScope` is the parse, named here because this file is where selection is decided.
+ *
+ * @param {Array<{ test: string, why: string }>} alwaysRun
+ * @param {string[]} changedFiles repo-relative
+ * @param {{ readSource: (rel: string) => string }} options
+ * @returns {{ kept: Array<{ test: string, why: string }>, narrowed: Array<{ test: string, scope: string[] }> }}
+ */
+export function narrowByDeclaredScope(alwaysRun, changedFiles, { readSource }) {
+  /** @type {Array<{ test: string, why: string }>} */
+  const kept = [];
+  /** @type {Array<{ test: string, scope: string[] }>} */
+  const narrowed = [];
+  for (const guard of alwaysRun) {
+    const scope = declaredWalkScope(readSource(guard.test));
+    if (scope === null) { kept.push(guard); continue; }
+    if (changedFiles.some((file) => inScope(file, scope))) {
+      kept.push({ test: guard.test, why: `${guard.why}; its declared walk scope (${scope.join(", ") || "none"}) is touched` });
+    } else {
+      narrowed.push({ test: guard.test, scope });
+    }
+  }
+  return { kept, narrowed };
+}
+
+/** @param {string} source @returns {string[] | null} */
+export function declaredWalkScope(source) {
+  return parseWalkScope(source);
+}
+
 // #A1c: `.github/workflows/ci.yml` itself -- a job definition can affect anything the job runs, so
 // narrowing it would mean reasoning about what the CHANGE to the job does, not what it touches.
 const BROAD_ALWAYS = new Set([".github/workflows/ci.yml"]);
@@ -559,8 +603,21 @@ export function testFilesToRun({ selectedTests, alwaysRun, fallbackPackages }) {
   return [...files, ...fallbackPackages.map((p) => `packages/${p}/src/**/*.test.ts`)];
 }
 
+/**
+ * The guards a declared walk scope left out of this run, NAMED -- a narrowing that only reports a count is a
+ * guard that stopped running with nothing saying which.
+ * @param {Array<{ test: string, scope: string[] }>} narrowed
+ */
+function describeNarrowed(narrowed) {
+  if (narrowed.length === 0) return "";
+  const shown = narrowed.slice(0, 8).map((n) => `${n.test} (walks ${n.scope.join(", ") || "only its own imports"})`);
+  return `, leaving out ${narrowed.length} guard(s) whose declared walk scope this diff does not touch: `
+    + `${shown.join("; ")}${narrowed.length > 8 ? ", ..." : ""}`;
+}
+
 /** @param {{ selectedTests: string[], fallbackPackages: string[], uncoveredFiles: string[],
- *   broad: string[], alwaysRun: Array<{ test: string, why: string }> }} result */
+ *   broad: string[], alwaysRun: Array<{ test: string, why: string }>,
+ *   narrowed?: Array<{ test: string, scope: string[] }> }} result */
 function writeOutputs(result) {
   const testFiles = result.broad.length > 0 ? [] : testFilesToRun(result);
   const count = result.broad.length > 0 ? -1 : result.selectedTests.length;
@@ -571,6 +628,9 @@ function writeOutputs(result) {
     // SEPARATE from `selectedCount` on purpose: "this diff reaches four tests" and "the repository has 88
     // guards that no diff can ever reach" are different facts, and one summed number would hide both.
     `alwaysRunCount=${result.broad.length > 0 ? -1 : result.alwaysRun.length}`,
+    // AND WHAT WAS LEFT OUT, never folded into the count above: "134 guards ran" and "131 ran because 3
+    // declared a scope this diff does not touch" are different facts, and only the second can be checked.
+    `alwaysRunNarrowed=${result.broad.length > 0 ? -1 : (result.narrowed ?? []).length}`,
     `fallbackPackages=${result.fallbackPackages.join(" ")}`,
     `broad=${result.broad.length > 0}`,
   ];
@@ -580,12 +640,29 @@ function writeOutputs(result) {
       + "falling back to ci-changed.mjs's existing package-level scope, which already runs every guard"
     : `${result.selectedTests.length} test file(s) selected precisely`
       + describeAlwaysRun(result.alwaysRun, result.selectedTests)
+      + describeNarrowed(result.narrowed ?? [])
       + (result.fallbackPackages.length > 0
         ? `, plus the full suite of ${result.fallbackPackages.length} package(s) with an uncovered change `
           + `(${result.uncoveredFiles.join(", ")})`
         : "")}`);
   if (!outFile) { console.log(lines.join("\n")); return; }
   appendFileSync(outFile, `${lines.join("\n")}\n`);
+}
+
+/**
+ * The paths a pull request changed, repo-relative -- BOTH SIDES OF A RENAME.
+ *
+ * `--no-renames`, because `git diff --name-only` detects renames by default and prints only where a file
+ * went: a PR moving `scripts/a.mjs` to `tools/a.mjs` listed `tools/a.mjs` alone. `narrowByDeclaredScope`
+ * (#929) needs the side that LEFT -- without it, a guard declared on `scripts` was left out of the very run
+ * that took a file out of its population. Every other consumer here only ever selects more from a longer
+ * list, so the extra path cannot narrow anything.
+ *
+ * @param {string} base @param {string} repoRoot @returns {string[]}
+ */
+export function changedFiles(base, repoRoot) {
+  return execFileSync("git", ["diff", "--name-only", "--no-renames", `${base}...HEAD`],
+    { cwd: repoRoot, env: sandboxGitEnv(), encoding: "utf8" }).split("\n").filter(Boolean);
 }
 
 async function main() {
@@ -597,10 +674,9 @@ async function main() {
       + "same shape ci-changed.mjs refuses, for the identical reason.");
     process.exit(2);
   }
-  const files = execFileSync("git", ["diff", "--name-only", `${base}...HEAD`],
-    { cwd: repoRoot, env: sandboxGitEnv(), encoding: "utf8" }).split("\n").filter(Boolean);
+  const files = changedFiles(base, repoRoot);
   if (files.length === 0) {
-    console.error(`select-changed-tests: "git diff --name-only ${base}...HEAD" returned nothing.`);
+    console.error(`select-changed-tests: "git diff --name-only --no-renames ${base}...HEAD" returned nothing.`);
     process.exit(2);
   }
 
@@ -626,8 +702,10 @@ async function main() {
   // and a guard in `packages/worker-fleet` governs a file added to `packages/judge`. Measured at ~0.7s
   // for all 453 test files, which is why the whole population is affordable to walk here.
   const everyTestFile = discoverTestFiles(repoRoot, allPackages);
-  const alwaysRun = alwaysRunTests(everyTestFile, { closureOf, repoRoot });
-  writeOutputs({ ...result, broad: [], alwaysRun });
+  const everyGuard = alwaysRunTests(everyTestFile, { closureOf, repoRoot });
+  const { kept: alwaysRun, narrowed } = narrowByDeclaredScope(everyGuard, files,
+    { readSource: (rel) => readFileSync(join(repoRoot, rel), "utf8") });
+  writeOutputs({ ...result, broad: [], alwaysRun, narrowed });
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
