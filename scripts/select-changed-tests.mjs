@@ -648,6 +648,22 @@ function writeOutputs(result) {
   appendFileSync(outFile, `${lines.join("\n")}\n`);
 }
 
+/**
+ * The paths a pull request changed, repo-relative -- BOTH SIDES OF A RENAME.
+ *
+ * `--no-renames`, because `git diff --name-only` detects renames by default and prints only where a file
+ * went: a PR moving `scripts/a.mjs` to `tools/a.mjs` listed `tools/a.mjs` alone. `narrowByDeclaredScope`
+ * (#929) needs the side that LEFT -- without it, a guard declared on `scripts` was left out of the very run
+ * that took a file out of its population. Every other consumer here only ever selects more from a longer
+ * list, so the extra path cannot narrow anything.
+ *
+ * @param {string} base @param {string} repoRoot @returns {string[]}
+ */
+export function changedFiles(base, repoRoot) {
+  return execFileSync("git", ["diff", "--name-only", "--no-renames", `${base}...HEAD`],
+    { cwd: repoRoot, env: sandboxGitEnv(), encoding: "utf8" }).split("\n").filter(Boolean);
+}
+
 async function main() {
   refuseUnknownFlags(["--base", "--repo"], { entry: import.meta.url, command: "select-changed-tests" });
   const repoRoot = flagValue(process.argv, "repo") ?? process.cwd();
@@ -657,10 +673,9 @@ async function main() {
       + "same shape ci-changed.mjs refuses, for the identical reason.");
     process.exit(2);
   }
-  const files = execFileSync("git", ["diff", "--name-only", `${base}...HEAD`],
-    { cwd: repoRoot, env: sandboxGitEnv(), encoding: "utf8" }).split("\n").filter(Boolean);
+  const files = changedFiles(base, repoRoot);
   if (files.length === 0) {
-    console.error(`select-changed-tests: "git diff --name-only ${base}...HEAD" returned nothing.`);
+    console.error(`select-changed-tests: "git diff --name-only --no-renames ${base}...HEAD" returned nothing.`);
     process.exit(2);
   }
 
