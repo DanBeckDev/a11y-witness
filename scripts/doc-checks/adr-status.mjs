@@ -3,6 +3,9 @@
 // index lists no ADR that does not exist. Moved out of `adr-status.test.ts`, which now asserts on these same
 // functions -- see that file's header for why seven ADRs once contradicted the index, and why the INDEX is the
 // authority (it carries the qualification the file header cannot).
+// #954: `adr-status.test.ts` IS GONE. The sentences above describing what it asserts are the record of where this
+// rule came from, not a claim about today: this module is now the only copy, and the nightly doc
+// cross-reference report is where it runs. A pull request no longer fails on it.
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { adrFiles } from "./adr-index.mjs";

@@ -41,27 +41,31 @@ const TESTS = "packages/lab/src/packaging";
 
 /**
  * @typedef {import("./doc-checks/check-result.mjs").CheckResult} CheckResult
- * @typedef {{ name: string, test: string, check: (root: string) => CheckResult | Promise<CheckResult> }} DocCheck
- * @typedef {{ name: string, test: string } & ({ result: CheckResult } | { error: string })} Outcome
+ * @typedef {{ name: string, test: string | null, check: (root: string) => CheckResult | Promise<CheckResult> }} DocCheck
+ * @typedef {{ name: string, test: string | null } & ({ result: CheckResult } | { error: string })} Outcome
  */
 
 /**
- * The fourteen, each with the test file that asserts on the same module -- so a reader of a disagreement
- * knows which test will say the same thing on the next pull request.
+ * The fourteen. `test` is the pull-request test that asserts the same thing, so a reader of a disagreement
+ * knows what will say it again on the next PR -- and `null` for the six #954 took OFF the pull-request path,
+ * where this report is the only thing that still reads the rule. Those six are not less checked than they
+ * were; they are checked once a night instead of on every diff, which is the trade #905 argued and #928's
+ * rule made safe by making this report post first. `doc-cross-reference-report.test.ts` holds the list of
+ * nulls to exactly the files that no longer exist, so a resurrected guard cannot sit here unnoticed.
  * @type {DocCheck[]}
  */
 export const CHECKS = [
-  { name: "action-reference", test: `${TESTS}/action-reference.test.ts`, check: actionReference.check },
-  { name: "adr-index", test: `${TESTS}/adr-index.test.ts`, check: adrIndex.check },
-  { name: "adr-status", test: `${TESTS}/adr-status.test.ts`, check: adrStatus.check },
+  { name: "action-reference", test: null, check: actionReference.check },
+  { name: "adr-index", test: null, check: adrIndex.check },
+  { name: "adr-status", test: null, check: adrStatus.check },
   { name: "check-transfer-urls", test: `${TESTS}/check-transfer-urls.test.ts`, check: (root) => checkTransferUrls.check(root) },
   { name: "claude-md-links", test: `${TESTS}/claude-md-links.test.ts`, check: claudeMdLinks.check },
   { name: "commands-documented", test: `${TESTS}/commands-documented.test.ts`, check: commandsDocumented.check },
-  { name: "doc-citation-integrity", test: `${TESTS}/doc-citation-integrity.test.ts`, check: docCitationIntegrity.check },
-  { name: "doc-references", test: `${TESTS}/doc-references.test.ts`, check: docReferences.check },
-  { name: "env-doc-coverage", test: `${TESTS}/env-doc-coverage.test.ts`, check: envDocCoverage.check },
+  { name: "doc-citation-integrity", test: null, check: docCitationIntegrity.check },
+  { name: "doc-references", test: null, check: docReferences.check },
+  { name: "env-doc-coverage", test: null, check: envDocCoverage.check },
   { name: "known-gaps-index", test: `${TESTS}/known-gaps-index.test.ts`, check: knownGapsIndex.check },
-  { name: "not-working-numbering", test: `${TESTS}/not-working-numbering.test.ts`, check: notWorkingNumbering.check },
+  { name: "not-working-numbering", test: null, check: notWorkingNumbering.check },
   { name: "roles-memory", test: `${TESTS}/roles-memory.test.ts`, check: rolesMemory.check },
   { name: "roles-readme", test: `${TESTS}/roles-readme.test.ts`, check: rolesReadme.check },
   { name: "schema-migration-citations", test: `${TESTS}/schema-migration-citations.test.ts`, check: schemaMigrationCitations.check },
@@ -124,14 +128,21 @@ export function headline(outcomes) {
   return `${parts.join("; ")}.`;
 }
 
+/**
+ * Where the same thing is asserted again: the pull-request test, or -- for the six #954 retired -- this
+ * report, named as such rather than as an empty cell. A blank there reads as "nobody checks this".
+ * @param {Outcome} o @returns {string}
+ */
+const assertedBy = (o) => (o.test ? `\`${o.test}\`` : "this report, nightly (#954)");
+
 /** @param {Outcome} o @returns {string} */
 function summaryRow(o) {
-  if (!("result" in o)) return `| ${o.name} | could not run | -- | \`${o.test}\` |`;
+  if (!("result" in o)) return `| ${o.name} | could not run | -- | ${assertedBy(o)} |`;
   const { examined, unit, disagreements } = o.result;
   // "No verdict" only when it also named nothing: a missing top-level doc is a disagreement found by reading 0.
   const read = examined > 0 ? `${examined} ${cell(unit)}`
     : `**examined 0** ${cell(unit)}${disagreements.length ? "" : " -- nothing to check, so no verdict"}`;
-  return `| ${o.name} | ${read} | ${disagreements.length} | \`${o.test}\` |`;
+  return `| ${o.name} | ${read} | ${disagreements.length} | ${assertedBy(o)} |`;
 }
 
 /** @param {Outcome} o @returns {string[]} */
@@ -145,20 +156,112 @@ function disagreementSection(o) {
 }
 
 /**
- * The report's markdown. Pure, so the test reads exactly what the workflow would post.
- * @param {Outcome[]} outcomes @param {{ root: string, commit?: string | null }} context @returns {string}
+ * WHAT WAS READ, in terms a reader can act on -- #954.
+ *
+ * This said `Read against /home/runner/work/a11y-witness/a11y-witness`, which is where the nightly job's
+ * checkout happened to sit and tells a reader nothing they can check out. A commit alone is not enough
+ * either: `at 464edf9c` does not say whether that was `main` or somebody's branch. So it names the REF and
+ * the commit when the root is a git work tree, and falls back to the path only for a fixture tree, which is
+ * the one case where the path IS the identity.
+ * @param {{ root: string, commit?: string | null, ref?: string | null }} context @returns {string}
  */
-export function renderReport(outcomes, { root, commit = null }) {
+function readAgainst({ root, commit = null, ref = null }) {
+  if (!commit) return `Read against \`${root}\`.`;
+  return `Read against \`${ref ?? "a detached HEAD"}\` at \`${commit}\`.`;
+}
+
+/**
+ * The report's markdown. Pure, so the test reads exactly what the workflow would post.
+ * @param {Outcome[]} outcomes
+ * @param {{ root: string, commit?: string | null, ref?: string | null }} context @returns {string}
+ */
+export function renderReport(outcomes, { root, commit = null, ref = null }) {
   const failed = outcomes.flatMap((o) => ("error" in o ? [o] : []));
   return [
     "## Doc cross-reference report", "",
-    `${headline(outcomes)} Read against \`${root}\`${commit ? ` at \`${commit}\`` : ""}.`, "",
+    `${headline(outcomes)} ${readAgainst({ root, commit, ref })}`, "",
     "| check | examined | disagreements | the test that asserts the same |", "|---|---|---|---|",
     ...outcomes.map(summaryRow),
     ...outcomes.flatMap(disagreementSection),
     ...(failed.length ? ["", "### Could not run", "", ...failed.map((o) => `- **${o.name}**: ${cell(o.error)}`)] : []),
     "",
   ].join("\n");
+}
+
+/**
+ * WHAT GITHUB WILL ACCEPT IN ONE COMMENT -- #954, and it is a REFUSAL, not a trim.
+ *
+ * `gh issue comment` over this many characters answers HTTP 422 and posts NOTHING, so the night the report
+ * finally has a lot to say is the night it says nothing at all -- the failure mode this whole report exists
+ * to avoid, arriving through the door nobody watched. The 21 `a11ign/a11ign` URLs already make it 4,774
+ * characters; one bad rename across the docs would clear 65,536 without difficulty.
+ */
+export const COMMENT_LIMIT = 65_536;
+
+/**
+ * The report cut to `limit`, losing DETAIL ROWS and never the summary.
+ *
+ * WHAT SURVIVES IS CHOSEN, not whatever the first N characters happen to be: the headline, the per-check
+ * table (every check, its examined count and its disagreement COUNT) and the "could not run" section, which
+ * is the one part that says a check did not happen at all. A `slice(0, limit)` would have cut exactly those
+ * loose, since they are the parts a long report pushes off the end.
+ *
+ * The notice says how many rows went, so a reader is never told a smaller number than the report found.
+ * @param {string} report @param {number} [limit] @returns {string}
+ */
+export function fitToComment(report, limit = COMMENT_LIMIT) {
+  if (report.length <= limit) return report;
+  const failedAt = report.indexOf("\n### Could not run\n");
+  const tail = failedAt === -1 ? "" : report.slice(failedAt);
+  const lines = (failedAt === -1 ? report : report.slice(0, failedAt)).split("\n");
+  const firstDetail = lines.findIndex((line) => line.startsWith("### "));
+  const kept = firstDetail === -1 ? lines.slice() : lines.slice(0, firstDetail);
+  const detail = firstDetail === -1 ? [] : lines.slice(firstDetail);
+  const rows = detail.filter((line) => line.startsWith("| `")).length;
+  const notice = (/** @type {number} */ dropped) =>
+    `\n_TRUNCATED: ${dropped} of ${rows} disagreement row(s) are not shown -- the whole report would be `
+    + `${report.length} characters and GitHub refuses a comment over ${limit}. The counts above are complete; `
+    + "run `node scripts/doc-cross-reference-report.mjs` for every row._\n";
+  const budget = limit - tail.length - notice(rows).length;
+  let shown = 0;
+  for (const line of detail) {
+    if (kept.join("\n").length + line.length + 1 > budget) break;
+    kept.push(line);
+    if (line.startsWith("| `")) shown += 1;
+  }
+  const fitted = `${kept.join("\n")}${notice(rows - shown)}${tail}`;
+  // THE GUARANTEE IS UNCONDITIONAL -- worker-capture's review of #996. Everything above assumes the parts
+  // this function REFUSES to drop (the headline, the per-check table, the could-not-run section) fit inside
+  // the limit. They do today and the checks in this repo cannot make them not fit -- `runChecks` stores
+  // `error.message`, never a stack, and the only two checks that spawn anything return short git stderr.
+  // But "cannot happen today" is a property of the callers, not of this function, and the cost of being
+  // wrong is the whole comment: `gh issue comment` answers 422 and posts NOTHING, which fails the nightly
+  // step. So the last word is a hard cut with the reason attached, rather than a returned value that is
+  // over the limit because the arithmetic ran out of room.
+  if (fitted.length <= limit) return fitted;
+  const cut = "\n_CUT: even the summary exceeded GitHub's comment limit; run the report locally._\n";
+  return `${fitted.slice(0, limit - cut.length)}${cut}`;
+}
+
+/**
+ * The ref `root`'s HEAD is on, named the way a reader would check it out -- the tracking branch
+ * (`origin/main`) where there is one, else the local branch, else null for a detached HEAD. #954: the
+ * nightly job checks out `main`, so this is what turns a bare commit into an answerable claim.
+ * @param {string} root @returns {string | null}
+ */
+function refAt(root) {
+  const git = (/** @type {string[]} */ args) =>
+    execFileSync("git", args, { cwd: root, env: sandboxGitEnv(), encoding: "utf8", stdio: "pipe" }).trim();
+  for (const args of [["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], ["rev-parse", "--abbrev-ref", "HEAD"]]) {
+    try {
+      const ref = git(args);
+      // A detached HEAD answers the second call with the word HEAD, which names nothing a reader can fetch.
+      if (ref && ref !== "HEAD") return ref;
+    } catch {
+      continue; // no upstream configured, or not a work tree: try the next spelling, then give up
+    }
+  }
+  return null;
 }
 
 /** The commit `root` is at, or null outside a git work tree; the report names what it read. @param {string} root */
@@ -174,7 +277,8 @@ async function main() {
   refuseUnknownFlags(["--root"], { entry: import.meta.url, command: "node scripts/doc-cross-reference-report.mjs" });
   const root = resolve(flagValue(process.argv, "root") ?? REPO);
   try {
-    process.stdout.write(renderReport(await runChecks(root), { root, commit: commitAt(root) }));
+    const report = renderReport(await runChecks(root), { root, commit: commitAt(root), ref: refAt(root) });
+    process.stdout.write(fitToComment(report));
   } catch (error) {
     // Even the report itself failing is printed, not thrown: exit 0 is this command's contract (see header).
     process.stdout.write(`## Doc cross-reference report\n\n**The report itself failed:** ${error instanceof Error ? error.stack : String(error)}\n`);

@@ -2,6 +2,9 @@
 // DOC CROSS-REFERENCE CHECK (#905): every documented `uses:` line names THIS repository and a ref the remote
 // actually has. Moved out of `action-reference.test.ts`, which now asserts on these same functions; read its
 // header for the `a11ign/a11ign@v1` line a stranger copied and got `Unable to resolve action` from.
+// #954: `action-reference.test.ts` IS GONE. The sentences above describing what it asserts are the record of where this
+// rule came from, not a claim about today: this module is now the only copy, and the nightly doc
+// cross-reference report is where it runs. A pull request no longer fails on it.
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";

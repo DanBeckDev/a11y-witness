@@ -1,8 +1,9 @@
 // @ts-check
 // DOC CROSS-REFERENCE CHECK (#905): every ADR is in `docs/adr/README.md`'s index, and the index links no ADR
-// that does not exist. Moved out of `adr-index.test.ts`, which now asserts on these same functions, so the PR
-// path and the nightly report read one copy of the rule. The prose ADR count in the same test file is #907's
-// (a number pinned in prose) and stays there.
+// that does not exist. Moved out of `adr-index.test.ts` by #905, and #954 deleted that file: this module is
+// now the only copy, and the nightly doc cross-reference report is where it runs. A pull request no longer
+// fails on it. The prose ADR count that shared the file is #907's kind, not a cross-reference, so it moved
+// to `claude-md-counts.test.ts`, which walks `docs/adr/` itself and is therefore always-run.
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 

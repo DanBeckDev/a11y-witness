@@ -3,6 +3,9 @@
 // is one git tracks (or one this check knows how to generate). Moved out of `doc-references.test.ts`, which now
 // asserts on these same functions; read its header for #393 (a generated page cited in prose, present only by
 // residue) and for why build output is CLASSIFIED rather than silently excluded.
+// #954: `doc-references.test.ts` IS GONE. The sentences above describing what it asserts are the record of where this
+// rule came from, not a claim about today: this module is now the only copy, and the nightly doc
+// cross-reference report is where it runs. A pull request no longer fails on it.
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";

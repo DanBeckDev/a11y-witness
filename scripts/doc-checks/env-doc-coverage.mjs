@@ -4,6 +4,9 @@
 // `env-doc-coverage.test.ts`, which now asserts on these same functions; read its header for why
 // `docs/architecture-audit.md` is excluded from the corpus BY NAME (including it once made a real measurement
 // read "0 undocumented" while the true number was 55).
+// #954: `env-doc-coverage.test.ts` IS GONE. The sentences above describing what it asserts are the record of where this
+// rule came from, not a claim about today: this module is now the only copy, and the nightly doc
+// cross-reference report is where it runs. A pull request no longer fails on it.
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join, relative } from "node:path";
 
