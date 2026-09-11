@@ -353,17 +353,30 @@ tonight. Every figure below is read from the row it is recorded on, not relayed.
 
 **The #311 correction is a good example of a measurement being worth more than its number**, and the summary
 should use it that way rather than as a timing statistic. `docs/try-it.md` says **"Expect five to eight
-minutes for a real page."** Six measurements now exist:
+minutes for a real page."** Eleven completed runs now exist:
 
 ```
-3 m 45 s   4 m 38 s   4 m 50 s   5 m 48 s   7 m 52 s   7 m 54 s
+3m14s  3m45s  4m14s  4m32s  4m38s  4m50s  5m48s  5m52s  6m35s  7m52s  7m54s
 ```
 
-**Three of the six are under the promised floor, including two the sentence itself cites.** And the reason
-matters more than the range: **the fastest capture is fast because it failed.** The 3 m 45 s run opened on a
-consent overlay Escape did not dismiss and read almost none of the page — the tool said so in its own
-report. **A run that finishes well under four minutes is evidence of the consent-banner failure**, which is
-the risk the next section of that document already warns about. A floor of five minutes hides that signal.
+**Five of the eleven are under the promised floor.** The honest range is roughly **three to eight minutes**,
+and the top of it is not the same claim as the bottom: **two of the completed runs were partial** — their
+sweeps stopped on a deadline — so *"finished"* and *"examined the whole page"* diverge exactly where a
+reader would assume the slow runs were the thorough ones.
+
+**An earlier draft of this section said a run finishing well under four minutes is evidence of the
+consent-banner failure. That is withdrawn and must not be printed.** It rested on one run — 3 m 45 s, which
+did open on an overlay it could not dismiss. **The next sub-four-minute run, 3 m 14 s, completed cleanly
+with 84 announcements and no overlay.** One of two does not support "usually", let alone "evidence". **The
+true, weaker version: a fast run is worth checking against the report's own overlay warning.** Corrected on
+`orchestrator`'s own retraction of the wording they had proposed.
+
+**And the same round found the failure a first reader will actually meet first, which no wording covered.**
+**Four of nine large marketing pages refused in under forty seconds** — `stripe.com`, `shopify.com`,
+`canva.com` and `zendesk.com` each geo-redirect a UK visitor to a regional page, and the tool correctly
+refuses a page it was not asked for. **So a UK reader pointing the tool at a global homepage meets a
+one-minute refusal before any four-to-eight-minute capture.** The tool is right and the message names the
+redirect; what is missing is one sentence in the doc telling the reader to pass the regional URL.
 
 `try-it.md` has deliberately **not** been edited yet: it is a promise to an outside reader and should change
 as a decision, not as a side effect of a measurement run.
