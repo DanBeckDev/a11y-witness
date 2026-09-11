@@ -57,7 +57,8 @@ import { stripComments } from "@a11ign/evidence/source-text";
 import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
 import { knownPackages, readWorkspaceDependencyGraph, classify, ROOT_TS_FILES } from "./ci-changed.mjs";
-import { parseWalkScope, inScope } from "./walk-scope.mjs";
+// The parser only: importing `walk-scope.mjs` would install its read observer in this process.
+import { parseWalkScope, inScope } from "./walk-scope-declaration.mjs";
 
 /**
  * `import ... from "<spec>"` specifiers, in source order -- identical regex to

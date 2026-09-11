@@ -30,11 +30,10 @@
 import { createRequire, syncBuiltinESMExports } from "node:module";
 import { fileURLToPath } from "node:url";
 import { basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-// THE STRING-AWARE ONE, which `select-changed-tests.mjs` already uses. `local-import-closure.mjs` has its own
-// `stripComments`, a regex that does not know about strings -- so a `//` inside one (any URL) blanks the rest
-// of its line. The first version of this file imported that one, and a guard whose first import named a
-// `file://` URL read as declaring nothing. Two copies of one function; this uses the right one.
-import { stripComments } from "@a11ign/evidence/source-text";
+// The declaration's parser lives apart, so the selector can read declarations without installing this.
+import { inScope, parseWalkScope } from "./walk-scope-declaration.mjs";
+
+export { inScope, parseWalkScope };
 
 const require = createRequire(import.meta.url);
 // Indexed by NAME below to wrap each function in turn, so typed as a record rather than as the module.
@@ -44,6 +43,10 @@ const fs = require("node:fs");
 const childProcess = require("node:child_process");
 /** @type {Record<string, any>} */
 const workerThreads = require("node:worker_threads");
+/** @type {Record<string, any>} */
+const nodeTest = require("node:test");
+/** @type {Record<string, any>} */
+const moduleApi = require("node:module");
 
 // REAL, because every comparison below is against a real path: on macOS `/tmp` is a link to `/private/tmp`.
 export const REPO_ROOT = fs.realpathSync.native(resolve(fileURLToPath(new URL("..", import.meta.url))));
@@ -51,90 +54,6 @@ export const REPO_ROOT = fs.realpathSync.native(resolve(fileURLToPath(new URL(".
 /** A read that cannot be bounded to a subtree -- a whole-repository walk. Never inside any declared scope. */
 export const WHOLE_REPOSITORY = "(the whole repository)";
 
-// ---------------------------------------------------------------------------------------------------------
-// THE DECLARATION -- read statically, because the selector must not import a test file to learn its scope.
-// ---------------------------------------------------------------------------------------------------------
-
-const DECLARATION = /^export\s+const\s+WALK_SCOPE(?:\s*:\s*[^=\n]+)?\s*=\s*\[([^\]]*)\]\s*(?:as\s+const\s*)?;/m;
-// AN ATTEMPT at a declaration: the name BOUND by `const`/`let`/`var`. A bare mention -- in a regex literal, a
-// property access, an assertion message -- is not one, and must not be refused: the selector parses every
-// always-run guard, so a refusal there breaks selection for every pull request. The first version refused
-// any mention in code and threw on the very test that pins this parser, whose assertions quote the name
-// inside regex literals.
-const ATTEMPT = /\b(?:const|let|var)\s+WALK_SCOPE\b/;
-const QUOTED = /^(["'])([^"']+)\1$/;
-
-/**
- * The scope a test file declares, or `null` when it declares none.
- *
- * `null` and `[]` are different answers and must stay different: `null` is "this guard has not said", which
- * keeps today's always-run behaviour; `[]` is "this guard reads nothing outside its own imports", which its
- * own run then has to prove.
- *
- * A file that BINDS `WALK_SCOPE` without declaring it in the one parseable form is REFUSED rather than read
- * as undeclared. Guessing there is the silent-loss direction: a malformed declaration read as none
- * keeps the guard running, but one read as `[]` would stop it.
- *
- * @param {string} source
- * @returns {string[] | null}
- */
-export function parseWalkScope(source) {
-  const code = stripComments(source);
-  // NAMED IN CODE, not in a string. A test that talks about `WALK_SCOPE` in an assertion message or builds a
-  // fixture containing the word has not declared anything -- and refusing it would crash the selector on
-  // every pull request, since the selector parses every always-run guard.
-  if (!ATTEMPT.test(blankLiterals(code, { templatesOnly: false }))) return null;
-  // And never matched inside a template literal, where a fixture's text can start a line with exactly the
-  // declaration's shape. Quoted strings are kept: the declaration's own entries are quoted strings.
-  const match = DECLARATION.exec(blankLiterals(code, { templatesOnly: true }));
-  if (!match) {
-    throw new Error("walk-scope: `WALK_SCOPE` is named but not declared as `export const WALK_SCOPE = "
-      + "[\"<path>\", ...];` -- refusing to guess, because a scope read wrongly is a guard that silently "
-      + "stops running.");
-  }
-  const items = match[1].split(",").map((item) => item.trim()).filter(Boolean);
-  return items.map((item) => {
-    const quoted = QUOTED.exec(item);
-    if (!quoted) throw new Error(`walk-scope: WALK_SCOPE entry ${item} is not a string literal`);
-    return quoted[2].replace(/\/+$/, "");
-  });
-}
-
-/**
- * The source with the CONTENTS of its string literals blanked (quotes kept, so positions and shape survive).
- * A small scanner rather than a regex: an escaped quote, or a quote character inside a different kind of
- * literal, is exactly where a regex silently ends a string early.
- *
- * @param {string} code comment-free source
- * @param {{ templatesOnly: boolean }} options blank only backtick templates, leaving quoted strings intact
- */
-function blankLiterals(code, { templatesOnly }) {
-  let out = "";
-  /** @type {string | null} */
-  let open = null;
-  for (let i = 0; i < code.length; i += 1) {
-    const ch = code[i];
-    if (open === null) {
-      if (ch === "`" || (!templatesOnly && (ch === "\"" || ch === "'"))) open = ch;
-      out += ch;
-      continue;
-    }
-    if (ch === "\\") { out += "  "; i += 1; continue; }
-    if (ch === open) { open = null; out += ch; continue; }
-    out += ch === "\n" ? "\n" : " ";
-  }
-  return out;
-}
-
-/**
- * Is this repo-relative path inside the declared scope? A scope entry covers itself and everything under it.
- *
- * @param {string} path
- * @param {readonly string[]} scope
- */
-export function inScope(path, scope) {
-  return scope.some((entry) => path === entry || path.startsWith(`${entry}/`));
-}
 
 // ---------------------------------------------------------------------------------------------------------
 // THE OBSERVER -- installed on import, so it sees every read after this module evaluates.
@@ -154,13 +73,20 @@ export function inScope(path, scope) {
 //     everything EXCEPT docs). `rev-parse`, `config` and `var` read no population. Anything else is the
 //     whole repository. A git run from somewhere else reads nothing here -- unless `--git-dir`,
 //     `--work-tree`, a `GIT_*` variable or an operand points it back at this checkout.
-//   - ANY OTHER CHILD PROCESS or WORKER THREAD -- `node`, `rg`, a shell, `git` inside a shell string -- is
-//     the whole repository. What it reads is invisible from here, so a guard that starts one cannot be
-//     verified, and an unverifiable declaration is the one #929 exists to refuse.
+//   - ANY OTHER CHILD PROCESS or WORKER THREAD -- `node`, `rg`, a shell, `git` inside a shell string, and
+//     `node:test`'s `run()`, which starts its files through Node's INTERNAL spawn -- is the whole repository.
+//     What it reads is invisible from here, so a guard that starts one cannot be verified, and an
+//     unverifiable declaration is the one #929 exists to refuse.
+//   - THE REST OF THE ALLOWLISTED SURFACE: `process.loadEnvFile`/`dlopen` and `module.findPackageJSON` read
+//     through internal bindings, so they are wrapped as reads; `Module._resolveFilename` records what a
+//     `require`/`require.resolve` resolved to; `process.binding`, `execve`, a loader hook, and
+//     `getBuiltinModule` of anything outside `DECLARER_BUILTINS` are the whole repository. The exhaustiveness
+//     test covers every function on `node:test`, `node:module`, `process` and `worker_threads` too.
 //
 // Not seen, and refused in every declaring guard's own import closure instead: `import()` of a computed
-// path (the loader reads off this thread), a `ReadStream` constructed directly, and any builtin module
-// outside `DECLARER_BUILTINS` (`node:sqlite` and `node:wasi` open paths through no `fs` call).
+// path and `import.meta.resolve` (the ESM loader reads off this thread), a `ReadStream` or `ChildProcess`
+// built by hand, Node's module internals called directly, and any builtin outside `DECLARER_BUILTINS`
+// (`node:sqlite` and `node:wasi` open paths through no `fs` call).
 //
 // AND ONE LIMIT OF THE METHOD ITSELF: a read set is verified on the runs where the guard runs, in the
 // environment it ran in. A guard whose reads depend on an environment variable, a changed-files list or
@@ -424,17 +350,32 @@ export function isObserved(/** @type {unknown} */ fn) {
 }
 
 /**
- * Replace `owner[name]` with a wrapper that records before it calls through. Own properties are carried
- * across: `realpathSync.native` is called directly, and `exists` keeps a `util.promisify.custom`.
+ * Replace `owner[name]` with a wrapper that records before it calls through -- or, given `after`, once it has
+ * returned or thrown, for the calls whose answer is what was read (`_resolveFilename`, `findPackageJSON`).
+ * A throw is recorded and RETHROWN, never swallowed. Own properties are carried across: `realpathSync.native`
+ * is called directly, and `exists` keeps a `util.promisify.custom`.
  * @param {Record<string, any>} owner @param {string} name @param {(args: unknown[]) => void} record
+ * @param {(args: unknown[], result: unknown) => void} [after] `result` is undefined when the call threw
  */
-function wrap(owner, name, record) {
+function wrap(owner, name, record, after) {
   const original = owner[name];
   if (typeof original !== "function") return;
   const observed = function observed(/** @type {unknown[]} */ ...args) {
     record(args);
-    // @ts-expect-error -- `this` is whatever the caller bound, passed through untouched
-    return original.apply(this, args);
+    if (!after) {
+      // @ts-expect-error -- `this` is whatever the caller bound, passed through untouched
+      return original.apply(this, args);
+    }
+    let result;
+    try {
+      // @ts-expect-error -- as above
+      result = original.apply(this, args);
+    } catch (error) {
+      after(args, undefined);
+      throw error;
+    }
+    after(args, result);
+    return result;
   };
   for (const key of Reflect.ownKeys(original)) {
     if (key === "length" || key === "name" || key === "prototype") continue;
@@ -476,15 +417,108 @@ export const NOT_WRAPPED = Object.freeze({
     ChildProcess: "UNSEEN when constructed by hand and started with `.spawn()` -- refused in a declarer instead",
     _forkChild: "Node's own IPC setup inside a forked child; no guard calls it",
   }),
+  test: Object.freeze(Object.fromEntries(["after", "afterEach", "before", "beforeEach", "describe", "it", "only",
+    "skip", "suite", "test", "todo"].map((name) => [name, "registers a test or a hook; reads nothing"]))),
+  module: Object.freeze({
+    Module: "a module record; loading one resolves through `_resolveFilename` and reads through `fs`, both wrapped",
+    SourceMap: "parses a source map it is handed", _debug: "a debug logger",
+    _findPath: "Node's internal probe, called by the wrapped `_resolveFilename` -- refused in a declarer's own source",
+    _initPaths: "reads `NODE_PATH` from the environment", _load: "resolves through `_resolveFilename`, which is wrapped",
+    _nodeModulePaths: "computes a list of directories; reads nothing",
+    _resolveLookupPaths: "computes a list of directories; reads nothing", _preloadModules: "startup only",
+    runMain: "startup only", createRequire: "the `require` it returns resolves through `_resolveFilename`, which "
+      + "is wrapped, and reads through the wrapped `fs`",
+    enableCompileCache: "caches compiled code for modules already loaded -- no population",
+    flushCompileCache: "caches compiled code for modules already loaded -- no population",
+    getCompileCacheDir: "names a directory; reads nothing", findSourceMap: "an in-memory lookup",
+    getSourceMapsSupport: "a setting", setSourceMapsSupport: "a setting", isBuiltin: "a name check",
+    stripTypeScriptTypes: "transforms a string it is handed", syncBuiltinESMExports: "re-points bindings",
+  }),
+  process: Object.freeze({
+    ...Object.fromEntries(["_debugEnd", "_debugProcess", "_fatalException", "_getActiveHandles",
+      "_getActiveRequests", "_kill", "_rawDebug", "_startProfilerIdleNotifier", "_stopProfilerIdleNotifier",
+      "_tickCallback", "abort", "assert", "availableMemory", "constrainedMemory", "cpuUsage", "cwd", "emitWarning",
+      "exit", "getActiveResourcesInfo", "getegid", "geteuid", "getgid", "getgroups", "getuid",
+      "hasUncaughtExceptionCaptureCallback", "hrtime", "initgroups", "kill", "memoryUsage", "nextTick",
+      "openStdin", "reallyExit", "ref", "resourceUsage", "setSourceMapsEnabled",
+      "setUncaughtExceptionCaptureCallback", "setegid", "seteuid", "setgid", "setgroups", "setuid",
+      "threadCpuUsage", "umask", "unref", "uptime"].map((name) => [name, "takes no path"])),
+    chdir: "moves where a RELATIVE path resolves from; every read is resolved against the cwd when it is made",
+    emit: "an emitter's own `emit`, which a test runner installs on `process`; takes no path",
+  }),
+  "worker_threads": Object.freeze({
+    ...Object.fromEntries(["BroadcastChannel", "MessageChannel", "MessagePort", "getEnvironmentData",
+      "isMarkedAsUntransferable", "markAsUncloneable", "markAsUntransferable", "moveMessagePortToContext",
+      "postMessageToThread", "receiveMessageOnPort", "setEnvironmentData"].map((name) => [name,
+      "passes messages or data between threads that already exist; reads nothing"])),
+  }),
 });
 
 /**
- * The builtins a declaring guard's import closure may use: each either reads no path, or reads only through
- * `fs`, `child_process` and `worker_threads`, which are observed. Anything else -- `node:sqlite` and
- * `node:wasi` open paths through no `fs` call -- is refused by `declared-walk-scope.test.ts`.
+ * Wrapped functions whose ESM binding `syncBuiltinESMExports` does NOT re-point, and what covers them instead.
+ * Measured, not assumed: `node:test` is outside what it syncs, so `import { run } from "node:test"` keeps the
+ * original while `require("node:test").run` is wrapped. `declared-walk-scope.test.ts` checks every other
+ * wrapped function's ESM binding IS the wrapper.
  */
-export const DECLARER_BUILTINS = Object.freeze(["assert", "assert/strict", "buffer", "child_process", "crypto",
-  "events", "fs", "fs/promises", "module", "os", "path", "process", "test", "url", "util", "worker_threads"]);
+export const ESM_UNSYNCED = Object.freeze({
+  test: Object.freeze({ run: "a named, namespace or dynamic `node:test` import of `run` is refused in a "
+    + "declarer's own source; a default import or `require` reaches the wrapper" }),
+});
+
+/**
+ * The builtins a declaring guard's import closure may use, each with why. Five have a surface that can read
+ * or start something, and the exhaustiveness test checks each of their functions is wrapped or in
+ * `NOT_WRAPPED`; the rest take no repository path at all. Anything else -- `node:sqlite` and `node:wasi` open
+ * paths through no `fs` call -- is refused by `declared-walk-scope.test.ts`.
+ */
+export const DECLARER_BUILTINS = Object.freeze({
+  fs: "every function checked by the exhaustiveness test", "fs/promises": "the same object as `fs.promises`",
+  "child_process": "every function checked by the exhaustiveness test",
+  "worker_threads": "every function checked by the exhaustiveness test",
+  module: "every function checked by the exhaustiveness test", test: "every function checked by the exhaustiveness test",
+  process: "a global; every function checked by the exhaustiveness test",
+  assert: "compares values; no path", "assert/strict": "compares values; no path",
+  buffer: "bytes in memory; no path", crypto: "hashes and ciphers over bytes it is handed; no path",
+  events: "emitters; no path", os: "facts about the machine, not the repository", path: "string arithmetic",
+  url: "string arithmetic", util: "formatting and types; no path",
+});
+
+/** @param {string} how */
+const whole = (how) => () => { observedReads.add(unbounded(how)); };
+
+/** Where `findPackageJSON` walked: from its start up to the manifest it found -- all of that directory. */
+function recordPackageLookup(/** @type {unknown} */ found) {
+  if (typeof found === "string") recordRead(dirname(found));
+  else observedReads.add(unbounded("findPackageJSON found no manifest, having walked to the root"));
+}
+
+/** What a CommonJS `require`/`require.resolve` resolved to -- or, for a relative request that failed, where it looked. */
+function recordResolution(/** @type {unknown[]} */ [request, parent], /** @type {unknown} */ resolved) {
+  if (typeof resolved === "string" && isAbsolute(resolved)) { recordRead(resolved); return; }
+  const from = /** @type {{ filename?: unknown } | undefined} */ (parent)?.filename;
+  if (resolved === undefined && /^\.{0,2}\//.test(String(request))) {
+    recordRead(String(request), typeof from === "string" ? dirname(from) : process.cwd());
+  }
+}
+
+/**
+ * The allowlisted builtins' surface beyond `fs` and `child_process`: each call that starts something the
+ * observer cannot see, or reads a path through an internal binding rather than through `fs`.
+ */
+function installBeyondFs() {
+  wrap(nodeTest, "run", whole("node:test's run(), whose child processes are started by Node's internal spawn"));
+  wrap(process, "loadEnvFile", ([path]) => recordRead(path ?? ".env"));
+  wrap(process, "dlopen", ([, filename]) => recordRead(filename));
+  wrap(process, "execve", whole("process.execve, which replaces this process"));
+  for (const name of ["binding", "_linkedBinding"]) wrap(process, name, whole(`process.${name}, Node's raw internals`));
+  wrap(process, "getBuiltinModule", ([id]) => {
+    const name = String(id).replace(/^node:/, "");
+    if (!Object.hasOwn(DECLARER_BUILTINS, name)) observedReads.add(unbounded(`getBuiltinModule("${name}"), not allowlisted`));
+  });
+  wrap(moduleApi, "_resolveFilename", () => {}, recordResolution);
+  wrap(moduleApi, "findPackageJSON", () => {}, (_args, found) => recordPackageLookup(found));
+  for (const name of ["register", "registerHooks"]) wrap(moduleApi, name, whole(`module.${name}, a loader hook`));
+}
 
 function install() {
   const read = (/** @type {unknown[]} */ [target]) => recordRead(target);
@@ -510,6 +544,8 @@ function install() {
       super(...args);
     }
   };
+  Object.defineProperty(workerThreads.Worker, OBSERVED, { value: true });
+  installBeyondFs();
   // Named ESM imports of a builtin are a snapshot of its exports; this re-points them at the wrappers -- for
   // `node:fs/promises` too, whose exports are `fs.promises`.
   syncBuiltinESMExports();
@@ -564,7 +600,7 @@ export function readsOutsideScope(reads, scope, ownFiles) {
  * @param {string} testUrl the declaring guard's `import.meta.url`
  */
 export async function declareWalkScope(testUrl) {
-  const { after } = await import("node:test");
+  const { after } = nodeTest;
   const testPath = fileURLToPath(testUrl);
   const scope = parseWalkScope(fs.readFileSync(testPath, "utf8"));
   if (scope === null) {
@@ -575,8 +611,8 @@ export async function declareWalkScope(testUrl) {
     // every `package.json` and probe extensions for files that do not exist, through the same patched `fs` --
     // and counted as the guard's reads, they would be violations the guard never committed.
     const reads = readsSoFar();
-    // Dynamic, not static: `select-changed-tests.mjs` imports this module for `parseWalkScope`, and a static
-    // edge back would be a cycle evaluated before either side's exports exist.
+    // Dynamic, not static: the selector's module graph is loaded only when a declaring guard's tests finish,
+    // and never ahead of the observer in a declarer's import order.
     const [{ sourceClosure, packageIndex }, { knownPackages }] = await Promise.all(
       [import("./select-changed-tests.mjs"), import("./ci-changed.mjs")]);
     const packages = packageIndex(REPO_ROOT, knownPackages(REPO_ROOT));
