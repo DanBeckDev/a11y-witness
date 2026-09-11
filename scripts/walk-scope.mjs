@@ -84,9 +84,11 @@ export const WHOLE_REPOSITORY = "(the whole repository)";
 //     test covers every function on `node:test`, `node:module`, `process` and `worker_threads` too.
 //
 // Not seen, and refused in every declaring guard's own import closure instead: `import()` of a computed
-// path and `import.meta.resolve` (the ESM loader reads off this thread), a `ReadStream` or `ChildProcess`
-// built by hand, Node's module internals called directly, and any builtin outside `DECLARER_BUILTINS`
-// (`node:sqlite` and `node:wasi` open paths through no `fs` call).
+// path and `import.meta.resolve` (the ESM loader reads off this thread), any ESM binding of an
+// `ESM_UNSYNCED` name (import or re-export), a `ReadStream` or `ChildProcess` built by hand, Node's module
+// internals called directly, and any builtin outside `DECLARER_BUILTINS` (`node:sqlite` and `node:wasi`
+// open paths through no `fs` call). That refusal reads the FIRST-PARTY closure: a third-party dependency is
+// not scanned, and is trusted not to do these -- the five declarers' only one is `typescript`.
 //
 // AND ONE LIMIT OF THE METHOD ITSELF: a read set is verified on the runs where the guard runs, in the
 // environment it ran in. A guard whose reads depend on an environment variable, a changed-files list or
@@ -461,8 +463,9 @@ export const NOT_WRAPPED = Object.freeze({
  * wrapped function's ESM binding IS the wrapper.
  */
 export const ESM_UNSYNCED = Object.freeze({
-  test: Object.freeze({ run: "a named, namespace or dynamic `node:test` import of `run` is refused in a "
-    + "declarer's own source; a default import or `require` reaches the wrapper" }),
+  test: Object.freeze({ run: "every ESM binding that can carry it -- named or namespace import, dynamic "
+    + "import, named or `*` re-export -- is refused in a declarer's own source; a default import, `require` "
+    + "and `getBuiltinModule` reach the wrapper" }),
 });
 
 /**
