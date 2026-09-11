@@ -1,6 +1,30 @@
 #!/usr/bin/env node
 // @ts-check
-// RULE: IS THE CLAIMING SESSION'S OWN OPEN PR RED OR UNMERGED? -- B2, #476.
+// RULE: DOES THE CLAIMING SESSION ALREADY HOLD A ROW IN BUILD? -- B2, #476, rewritten by #989.
+//
+// IT ASKED ABOUT A PULL REQUEST AND THE QUESTION IS ABOUT A ROW. Until #989 this refused while the
+// session's own PR was open AT ALL, so a PR that was green and waiting only on its reviewer blocked its
+// author from starting anything: #988 was green from 07:46Z and waited through a twelve-hour restart gap,
+// with nothing its author could do. ceo granted a hand exception three times in one day and then ruled
+// that an engineer does not wait on review -- as many PRs in review as it takes, ONE row in build.
+//
+// IN BUILD MEANS A CLAIMED ROW WHOSE OWN DELIVERABLE IS A COMMIT THAT DOES NOT EXIST YET. One sentence,
+// and everything below reads it from the tracker rather than from a label a session applies to itself:
+//
+//   held        `in-progress` + `session:<name>`, which is what `lookupOtherHeldIssues` already finds
+//   undelivered no PR that is OPEN or MERGED closes it. OPEN means the commit is proposed, MERGED means
+//               it exists; a CLOSED-unmerged PR means neither, so an abandoned PR leaves the row in build
+//   owed        its Region declares at least one path. A row that names files is one somebody owes a
+//               commit for; one that names none is a settings change, a ruling, a measurement on the row
+//   its own     it has no sub-issues. A parent's deliverable is its sub-rows' commits, not its own
+//
+// MEASURED BEFORE IT WAS WRITTEN (#989's own row carries the workings). `closedByPullRequestsReferences`
+// takes an `includeClosedPrs` argument defaulting to FALSE, so a closed-unmerged PR is invisible to the
+// query below -- confirmed on real data, issues #79 and #93, whose abandoned PRs (#89, #107) appear only
+// with the argument set. #159 is the case that decides the wording: it carries BOTH #172 CLOSED and #473
+// MERGED, so "no PR at all" would have called a delivered row in build while "no PR that is OPEN or
+// MERGED" gets it right. The explicit CLOSED filter below therefore never fires under today's query --
+// it is a guard against a future one, said plainly so nobody deletes it as dead.
 //
 // "A unit is finished when the PR reads MERGED -- not when the local run is green." #472's owner
 // reported a clean local run and moved on while CI went red; nine PRs sat red on their acceptance lines
@@ -24,8 +48,8 @@
 // computes it server-side. So: find the OTHER issues `mySession` currently holds (`in-progress` +
 // `session:<name>`, excluding the row being claimed right now), and ask GitHub which PR would close each.
 import { REPO } from "../repo-identity.mjs";
-import { gh, lookup, lookupRequiredContexts, lookupCheckRuns } from "../merge-guard/lookups.mjs";
-import { checkReasons } from "../merge-guard/checks-rule.mjs";
+import { gh, lookup } from "../merge-guard/lookups.mjs";
+import { declaredRegionFiles } from "../region-paths.mjs";
 
 // NO `git` SPAWN HERE, deliberately -- every lookup in this file goes through `gh` (issue/PR/GraphQL
 // reads), which needs no `sandboxGitEnv()` scrub: that helper exists for `execFileSync("git", ...)`
@@ -33,47 +57,50 @@ import { checkReasons } from "../merge-guard/checks-rule.mjs";
 // `git-spawn-classification.test.ts` discovers files spawning `git`, not `gh`. #455 found the real gap
 // this shape can hide in `scripts/merge-guard/lookups.mjs`; this file has no such call to have one in.
 
+// #989: `colourFor` AND THE CHECK-STATE READ ARE GONE WITH THE VERDICT THAT USED THEM. B2 no longer asks
+// whether a PR is red -- it asks whether a row is in build -- so a PR's colour answers a question nobody
+// is asking here. Removing it took TWO network calls per held row with it, for a value nothing consumed:
+// `row-claim-session-eligibility.test.ts` had a case taking 8.4 seconds because an un-injected fixture
+// reached the real API through that path.
+
 /**
- * #733: THE COLOUR, NAMED FROM THE REASONS THEMSELVES -- `checkReasons` (`checks-rule.mjs`) already
- * separates "still running" from "failing" (and "never ran") in its own returned strings; this reads
- * those categories back rather than re-deriving them, so a mutation to `checkReasons`'s own output shape
- * is the only thing that can desynchronise this from what it actually found.
- *
- * `unfinished`-only is a DIFFERENT sentence from `failing`-only: a still-running required check is not a
- * failure a claimant can go fix, it is a wait whose remedy is asking again -- reported to `checkReasons`'s
- * own PROSE as "Not a refusal forever". Naming it "a required check is failing" sent a reader
- * (`product-manager`, #733) looking for a failure that did not exist, on a PR that needed nothing but 80
- * more seconds.
- * @param {readonly string[]} reasons the exact array `checkReasons` returned for this PR's head
- * @returns {string}
+ * @typedef {{ number: number, declaresPaths: boolean, subIssues: number,
+ *             closingPr: { state: "OPEN" | "MERGED" | "CLOSED" } | undefined }} RowFacts
  */
-function colourFor(reasons) {
-  const stillRunning = reasons.some((reason) => reason.startsWith("STILL RUNNING"));
-  const failing = reasons.some((reason) => reason.startsWith("FAILING")
-    || reason.startsWith("REQUIRED CONTEXT NEVER RAN"));
-  if (failing && stillRunning) {
-    return "RED (a required check is failing) AND STILL RUNNING (another has not finished -- not a "
-      + "refusal forever on that half, ask again)";
-  }
-  if (failing) return "RED (a required check is failing)";
-  if (stillRunning) return "STILL RUNNING (a required check has not finished yet -- not a failure; the "
-    + "wait is the remedy, ask again)";
-  return "not yet merged";
+
+/**
+ * Is this row IN BUILD -- does somebody still owe a commit for it? See the file header for each clause and
+ * what it is read from.
+ * @param {RowFacts} row @returns {boolean}
+ */
+export function isInBuild(row) {
+  if (row.closingPr && row.closingPr.state !== "CLOSED") return false; // proposed, or delivered
+  if (!row.declaresPaths) return false;                                // its deliverable is not a commit
+  if (row.subIssues > 0) return false;                                 // a parent: its sub-rows owe them
+  return true;
 }
 
 /**
- * THE VERDICT, PURE.
+ * THE VERDICT, PURE. `null` when nothing blocks -- including when the lookup could not ask, which its own
+ * caller reports separately; this function only ever sees rows it was given.
  *
- * @param {{ number: number, state: "OPEN" | "MERGED" | "CLOSED", reasons: readonly string[] } | null} ownPr
+ * THE REFUSAL NAMES THE ROW, NOT A PR, because the row is what is in build -- and it names BOTH ways out,
+ * since a refusal a reader cannot follow is the shape this repo has paid for most often. It also names the
+ * one thing that can make a parent look like a build: the sub-issue link exists only where the sub-row was
+ * filed with `row-file --parent`, so a parent whose children were filed without it reads as in build.
+ * `row-claim-own-pr-health-rule.test.ts` pins that as a known limitation rather than describing it.
+ *
+ * @param {readonly RowFacts[]} rows every OTHER row this session holds
  * @returns {string | null}
  */
-export function ownPrHealthReason(ownPr) {
-  if (ownPr === null) return null;
-  if (ownPr.state !== "OPEN") return null;
-  const colour = colourFor(ownPr.reasons);
-  return `#${ownPr.number} is still open and ${colour} -- a unit is finished when the PR reads MERGED, `
-    + "not when a local run is green. Finish that one before starting another (this is B2: one PR in "
-    + "flight per session).";
+export function inBuildReason(rows) {
+  const inBuild = rows.find(isInBuild);
+  if (!inBuild) return null;
+  return `#${inBuild.number} is IN BUILD: you hold it, no PR that is open or merged closes it, and its `
+    + "Region declares files somebody still owes a commit for. Finish it, or `decline` it, before claiming "
+    + "another (this is B2: one ROW in build per session -- an open PR no longer blocks a claim).\n"
+    + `  If #${inBuild.number} is a PARENT whose sub-rows were filed without \`--parent\`, link one with \``
+    + `gh api repos/${REPO}/issues/${inBuild.number}/sub_issues -f sub_issue_id=<id>\` and this refusal lifts.`;
 }
 
 /**
@@ -108,12 +135,10 @@ export function lookupOtherHeldIssues(mySession, excludeIssueNumber, { run = gh 
  * lookup -- "nothing to check" and "could not ask" are different states.
  *
  * @param {number} issueNumber
- * @param {{ run?: (args: string[]) => string, requiredContexts?: typeof lookupRequiredContexts,
- *           checkRuns?: typeof lookupCheckRuns }} [deps]
- * @returns {{ number: number, state: "OPEN" | "MERGED" | "CLOSED", reasons: string[] } | undefined | null}
+ * @param {{ run?: (args: string[]) => string }} [deps]
+ * @returns {{ number: number, state: "OPEN" | "MERGED" | "CLOSED" } | undefined | null}
  */
-export function lookupClosingPrHealth(issueNumber,
-  { run = gh, requiredContexts = lookupRequiredContexts, checkRuns = lookupCheckRuns } = {}) {
+export function lookupClosingPrHealth(issueNumber, { run = gh } = {}) {
   return lookup(() => {
     const [owner, name] = REPO.split("/");
     const query = "query($owner:String!,$name:String!,$number:Int!){"
@@ -127,44 +152,58 @@ export function lookupClosingPrHealth(issueNumber,
     // MOST RECENT (last) reference wins -- an issue can accumulate more than one over its life (a
     // reverted fix reopened and closed by a second PR); the newest is the one that matters now.
     const pr = nodes[nodes.length - 1];
-    if (pr.state !== "OPEN") return { number: pr.number, state: pr.state, reasons: [] };
-    // INJECTABLE, NOT THE BARE IMPORTS -- `lookupRequiredContexts`/`lookupCheckRuns` spawn `gh` through
-    // their OWN internal helper, not through this file's `run` parameter, so a test injecting `run` alone
-    // would silently make a real network call the moment a fixture's PR reads OPEN. Defaulting the params
-    // to the real functions keeps production behaviour identical; only a test needs to override them.
-    const required = requiredContexts();
-    const runs = checkRuns(pr.headRefOid);
-    const reasons = required !== null && runs !== null
-      ? checkReasons({ headRefOid: pr.headRefOid }, required, runs) : [];
-    return { number: pr.number, state: "OPEN", reasons };
+    // #989: THE CHECK STATE IS NOT READ ANY MORE, and removing it removed two network calls per held row
+    // for a value nothing consumed. B2 asks whether a row is in build; a PR's colour answers a question
+    // nobody is asking here, and `row-claim-session-eligibility.test.ts` had one case taking 8.4 SECONDS
+    // because an un-injected fixture reached the real API through that path.
+    return { number: pr.number, state: pr.state };
   });
 }
 
 /**
- * THE FULL LOOKUP, composed: does `mySession` hold any OTHER row whose PR is open? `null` on ANY failed
- * sub-lookup -- an inconclusive answer must never read as "healthy", which would silently defeat the
- * rule this file exists to enforce.
+ * What a row declares and whether anyone owes a commit for it -- the two readings the header names, each a
+ * property of the tracker rather than a label. `null` on a failed lookup, never a guess.
+ *
+ * @param {number} issueNumber
+ * @param {{ run?: (args: string[]) => string }} [deps]
+ * @returns {{ declaresPaths: boolean, subIssues: number } | null}
+ */
+export function lookupRowShape(issueNumber, { run = gh } = {}) {
+  return lookup(() => {
+    const body = JSON.parse(run(["issue", "view", String(issueNumber), "--repo", REPO, "--json", "body"])).body;
+    // `declaredRegionFiles` is the tree's own parser, not a second reading of the Region: #941 taught it
+    // directory items, #975 root-level files, #999 fenced extensionless paths. A row whose Region it reads
+    // as empty is a row naming no file -- which is what "the deliverable is not a commit" looks like.
+    const declared = declaredRegionFiles(body ?? "") ?? [];
+    // GitHub's OWN sub-issue link, written by `row-file --parent`. It cannot be self-applied the way a
+    // label can: filing the sub-row is what creates it.
+    const subs = JSON.parse(run(["api", `repos/${REPO}/issues/${issueNumber}/sub_issues`]));
+    return { declaresPaths: declared.length > 0, subIssues: Array.isArray(subs) ? subs.length : 0 };
+  });
+}
+
+/**
+ * THE FULL LOOKUP, composed: every OTHER row `mySession` holds, with the facts `isInBuild` needs. `null`
+ * on ANY failed sub-lookup -- an inconclusive answer must never read as "nothing in build", which would
+ * silently defeat the rule this file exists to enforce.
  *
  * @param {string} mySession
  * @param {number} excludeIssueNumber the row being claimed right now -- never checked against itself
- * @param {{ run?: (args: string[]) => string, requiredContexts?: typeof lookupRequiredContexts,
- *           checkRuns?: typeof lookupCheckRuns }} [deps]
- * @returns {{ number: number, state: "OPEN" | "MERGED" | "CLOSED", reasons: string[] } | null}
+ * @param {{ run?: (args: string[]) => string }} [deps]
+ * @returns {RowFacts[] | null}
  */
-export function lookupOwnPrHealth(mySession, excludeIssueNumber, deps = {}) {
+export function lookupHeldRows(mySession, excludeIssueNumber, deps = {}) {
   const otherHeld = lookupOtherHeldIssues(mySession, excludeIssueNumber, deps);
   if (otherHeld === null) return null;
-  if (otherHeld.length === 0) return null;
-  // #476 is B2, "ONE PR in flight" -- so ordinarily this is 0 or 1 issues. If more than one is somehow
-  // held (a state this rule exists to prevent from recurring, not one it assumes never happened before
-  // it shipped), the FIRST one found unhealthy is reported; a session with several open fronts learns
-  // about one and fixes it before the others are even asked about, rather than being handed all of them
-  // in one refusal that reads like a demand.
+  /** @type {RowFacts[]} */
+  const rows = [];
   for (const issueNumber of otherHeld) {
-    const health = lookupClosingPrHealth(issueNumber, deps);
-    if (health === null) return null; // a failed lookup partway through is INCONCLUSIVE, not "healthy"
-    if (health === undefined) continue; // no PR opened yet for that row -- nothing to be unhealthy
-    if (health.state === "OPEN") return health;
+    const closing = lookupClosingPrHealth(issueNumber, deps);
+    if (closing === null) return null; // a failed lookup partway through is INCONCLUSIVE
+    const shape = lookupRowShape(issueNumber, deps);
+    if (shape === null) return null;
+    rows.push({ number: issueNumber, declaresPaths: shape.declaresPaths, subIssues: shape.subIssues,
+      closingPr: closing === undefined ? undefined : { state: closing.state } });
   }
-  return null;
+  return rows;
 }
