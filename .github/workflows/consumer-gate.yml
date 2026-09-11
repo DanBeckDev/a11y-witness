@@ -31,7 +31,7 @@ jobs:
           fi
       - name: Refuse a pin that predates a change to what it pins
         run: |
-          changed=$(git diff --name-only 5df261084a3916042ff79a9de28a1b4fd975b39a "${{ github.sha }}" -- README.md scripts/generate-consumer-gate.mjs)
+          changed=$(git diff --name-only --no-renames 5df261084a3916042ff79a9de28a1b4fd975b39a "${{ github.sha }}" -- README.md scripts/generate-consumer-gate.mjs)
           if [ -n "$changed" ]; then
             echo "::error::consumer-gate.yml is pinned to 5df261084a3916042ff79a9de28a1b4fd975b39a, but this changed since:"
             echo "::error::$changed"

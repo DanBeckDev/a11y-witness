@@ -306,7 +306,10 @@ function buildCheckPinJob(pinnedSha) {
     "          fi",
     "      - name: Refuse a pin that predates a change to what it pins",
     "        run: |",
-    `          changed=$(git diff --name-only ${pinnedSha} "\${{ github.sha }}" -- README.md scripts/generate-consumer-gate.mjs)`,
+    // #939: `--no-renames`, so a rename of either pinned file out of the pathspec is not missed. Inline
+    // rather than through `changed-files.mjs`: this step runs before `npm ci`, with no checkout of scripts
+    // guaranteed beyond the workflow itself.
+    `          changed=$(git diff --name-only --no-renames ${pinnedSha} "\${{ github.sha }}" -- README.md scripts/generate-consumer-gate.mjs)`,
     '          if [ -n "$changed" ]; then',
     `            echo "::error::consumer-gate.yml is pinned to ${pinnedSha}, but this changed since:"`,
     '            echo "::error::$changed"',
