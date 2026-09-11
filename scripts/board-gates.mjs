@@ -66,7 +66,10 @@ export function worstVerdict(gateOutput) {
  * @returns {boolean}
  */
 export function isConformanceGate(gate) {
-  return /(?:^|\s)-e\s+job=rules-real-pages\b/.test(String(gate?.command ?? ""));
+  // THE NAME ENDS AT WHITESPACE OR THE END -- never at `\b`, which let `rules-real-pages-update` through: the
+  // catalogue job that REWRITES the baseline, sharing the verdict contract, so its PASS took the slot
+  // (worker-capture's review of #946). A quoted value (`job="rules-real-pages"`) is the same job.
+  return /(?:^|\s)-e\s+job=(["']?)rules-real-pages\1(?=\s|$)/.test(String(gate?.command ?? ""));
 }
 
 /**
