@@ -312,13 +312,18 @@ export function openMilestones({ run = defaultRun } = {}) {
  * @param {string[] | null} milestones @returns {string}
  */
 export function milestoneRefusal(milestones) {
-  const list = milestones === null
-    ? "the milestone list could not be read, so pick from `gh api repos/" + REPO + "/milestones --jq '.[].title'`"
-    : milestones.map((m) => `"${m}"`).join(", ");
+  // THE UNREADABLE CASE GETS ITS OWN LINE, not the list's slot -- worker-capture's review of #1016. Reading
+  // `--milestone <one of the milestone list could not be read, so pick from ...>` is garbage inside angle
+  // brackets, and it is the one case where the reader cannot see the list either, so the message is doing
+  // the most work exactly where it read worst.
+  const either = milestones === null
+    ? `  Either: --milestone <a milestone> -- the list could not be read from here; \`gh api repos/${REPO}`
+      + "/milestones --jq '.[].title'` prints it"
+    : `  Either: --milestone <one of ${milestones.map((m) => `"${m}"`).join(", ")}>`;
   return "row-file: REFUSING to file a row that declares no release -- nothing was sent to GitHub.\n"
     + "  The org's health check reads a row with neither a milestone nor `" + OUT_OF_RELEASE + "` as a "
     + "finding within thirty minutes, so a row filed without one is incomplete the moment it lands.\n"
-    + `  Either: --milestone <one of ${list}>\n`
+    + `${either}\n`
     + `  Or:     --label ${OUT_OF_RELEASE}, if this row is genuinely outside the release.`;
 }
 
