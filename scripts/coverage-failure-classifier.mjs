@@ -44,8 +44,48 @@ export const KIND = {
 /** c8's own error line, verbatim, from `checkCoverage()` in `node_modules/c8/lib/commands/check-coverage.js`. */
 const THRESHOLD_MISS = /ERROR: Coverage for (\w+) \(([\d.]+)%\) does not meet (?:global )?threshold \((\d+)%\)/g;
 
-/** node's built-in test runner's own summary line, printed once per invocation. */
-const TEST_SUMMARY_FAIL = /ℹ fail (\d+)/;
+/**
+ * NODE'S TEST RUNNER HAS TWO REPORTERS AND THIS READ ONLY ONE OF THEM -- #1089.
+ *
+ * `/ℹ fail (\d+)/` is the **spec** reporter's glyph, which is the default on a TTY and on node 24. CI is
+ * neither: it runs node 22 with no TTY, where the default is **TAP**. Measured on both, same command shape:
+ *
+ *     node 22, TAP     not ok 2 - fails on purpose      # fail 1
+ *     node 24, spec    ✖ fails on purpose (0.36ms)      ℹ fail 1
+ *
+ * So `testsFailed` was **0 for every CI run there has ever been**, and run 34677157881's single, named
+ * failure classified as CANNOT TELL. The unit tests passed because the fixture was typed from what the
+ * author's terminal showed -- a fixture in a format the producer does not emit here.
+ *
+ * `not ok` is NOT the answer on its own, and I measured that rather than taking it: the spec reporter
+ * prints `✖`, never `not ok`. **Both are read, and so are both summary lines.**
+ */
+const TEST_FAILURE_PATTERNS = Object.freeze({
+  tapSummary: /^# fail (\d+)$/m,
+  specSummary: /^ℹ fail (\d+)$/m,
+  tapCase: /^not ok \d+ - (.+)$/gm,
+  specCase: /^✖ (.+?)(?: \([\d.]+m?s\))?$/gm,
+});
+
+/**
+ * How many tests failed, and which -- `null` when the log carries NEITHER reporter's summary.
+ *
+ * **`null` is the point.** The old code read `failMatch ? Number(failMatch[1]) : 0`, so a log it could not
+ * parse and a log with nothing wrong produced the same `0`. That is the conflation this repository records
+ * most, and here it turned a named test failure into CANNOT TELL for every CI run.
+ *
+ * @param {string} log
+ * @returns {{ count: number, names: string[] } | null}
+ */
+export function testFailuresIn(log) {
+  const summary = TEST_FAILURE_PATTERNS.tapSummary.exec(log) ?? TEST_FAILURE_PATTERNS.specSummary.exec(log);
+  if (summary === null) return null;
+  const names = [
+    ...[...log.matchAll(TEST_FAILURE_PATTERNS.tapCase)].map((m) => m[1].trim()),
+    ...[...log.matchAll(TEST_FAILURE_PATTERNS.specCase)].map((m) => m[1].trim()),
+  ].filter((n) => n !== "failing tests:");
+  return { count: Number(summary[1]), names: [...new Set(names)] };
+}
 
 /**
  * @param {{ciOutcome: string, buildOutcome: string, coverageLog: string | null}} facts
@@ -74,8 +114,9 @@ export function classifyCoverageFailure({ ciOutcome, buildOutcome, coverageLog }
 
   const thresholdMisses = [...coverageLog.matchAll(THRESHOLD_MISS)]
     .map(([, metric, actual, threshold]) => ({ metric, actual: Number(actual), threshold: Number(threshold) }));
-  const failMatch = coverageLog.match(TEST_SUMMARY_FAIL);
-  const testsFailed = failMatch ? Number(failMatch[1]) : 0;
+  const failures = testFailuresIn(coverageLog);
+  const testsFailed = failures?.count ?? 0;
+  const named = failures?.names ?? [];
 
   if (thresholdMisses.length > 0) {
     return { kind: KIND.REGRESSION, thresholdMisses, testsFailed,
@@ -84,8 +125,17 @@ export function classifyCoverageFailure({ ciOutcome, buildOutcome, coverageLog }
   }
   if (testsFailed > 0) {
     return { kind: KIND.TEST_FAILURE, testsFailed,
-      detail: `${testsFailed} test(s) failed. This is a TEST regression, not a coverage regression -- `
-        + "c8 propagates the test runner's own exit code, and no threshold was actually breached." };
+      detail: `${testsFailed} test(s) failed${named.length > 0 ? `: ${named.join(", ")}` : ""}. This is a `
+        + "TEST regression, not a coverage regression -- c8 propagates the test runner's own exit code, "
+        + "and no threshold was actually breached." };
+  }
+  // #1089: "no summary line at all" is NOT "no failures". Said separately, because the two need different
+  // actions -- one is a clean run that failed for a third reason, the other is a log this cannot read.
+  if (failures === null) {
+    return { kind: KIND.UNKNOWN,
+      detail: "the coverage step failed and its output carries NEITHER reporter's test summary (`# fail` "
+        + "for TAP, `ℹ fail` for spec), so the number of failing tests could not be read at all. "
+        + "INCONCLUSIVE -- this is a log this classifier cannot parse, not a run with nothing wrong." };
   }
   return { kind: KIND.UNKNOWN,
     detail: "the coverage step failed, but neither a threshold miss nor a test failure was found in its "
