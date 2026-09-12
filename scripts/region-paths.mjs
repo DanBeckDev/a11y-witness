@@ -26,8 +26,69 @@ import { fileURLToPath } from "node:url";
 
 import { sandboxGitEnv } from "./git-env.mjs";
 
+/**
+ * The repository's own top-level directories, from git rather than from a list.
+ *
+ * #1158: `PATH_IN_PROSE` carried `packages|scripts|docs|\.github` as literals, so a Region naming
+ * `.claude/rules/agent-practices.md` **inline** declared NOTHING while the same path **fenced** declared
+ * normally -- two spellings of one intent, disagreeing in silence. `row-file` accepted the row, the author
+ * saw their path in the body, and B4 reserved nothing.
+ *
+ * **Adding `.claude` to the list would fix today and rebuild the trap for the next directory**, which is
+ * exactly what happened between #975 and this. So the list is derived: a directory exists in this repo or
+ * it does not, and that question has an answer git can give.
+ *
+ * Memoised on first use -- one `ls-files` per process, and this module is imported by a dozen test files.
+ * @returns {string[]}
+ */
+/** @type {string[] | null} */
+let topLevelCache = null;
+export function trackedTopLevelDirs() {
+  if (topLevelCache) return topLevelCache;
+  const out = execFileSync("git", ["ls-files"], { encoding: "utf8", env: sandboxGitEnv() });
+  const dirs = new Set();
+  for (const line of out.split("\n")) {
+    const slash = line.indexOf("/");
+    if (slash > 0) dirs.add(line.slice(0, slash));
+  }
+  topLevelCache = [...dirs].sort();
+  return topLevelCache;
+}
+
 /** Repo-relative source paths named anywhere in a row's prose — its Region, and whatever else it cites. */
-export const PATH_IN_PROSE = /(?:^|[\s`"'(])((?:packages|scripts|docs|\.github)\/[A-Za-z0-9/_.-]+\.[A-Za-z]{2,4})/g;
+export function pathInProse() {
+  const alts = trackedTopLevelDirs().map((d) => d.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+  return new RegExp(`(?:^|[\\s\`"'(])((?:${alts})\\/[A-Za-z0-9/_.-]+\\.[A-Za-z]{2,4})`, "g");
+}
+
+/**
+ * Something in the Region that LOOKS like a repo path and that nothing declared.
+ *
+ * #1158 clause 3, and the clause that matters: **the failure mode is silence.** A Region that declares
+ * less than it says must say so -- the author reads their own path back out of the body and believes it
+ * is declared, and nothing in the tooling disagrees with them.
+ *
+ * Deliberately separate from the derivation above, so the two fail independently: deriving the prefixes
+ * fixes every directory that EXISTS, and this catches the rest -- a typo, a path in a repo that is not
+ * this one, a file moved since the row was filed.
+ *
+ * @param {string} body a row body
+ * @returns {string[]} path-shaped tokens in the Region that `declaredRegionFiles` did not take
+ */
+export function unrecognisedRegionPaths(body) {
+  const section = extractRegionSection(body);
+  if (section === null) return [];
+  const declared = new Set(declaredRegionFiles(body) ?? []);
+  const shaped = section.matchAll(/(?:^|[\s`"'(])([A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+)/g);
+  /** @type {string[]} */
+  const out = [];
+  for (const [, token] of shaped) {
+    if (declared.has(token)) continue;
+    if ([...declared].some((d) => d.endsWith("/") && token.startsWith(d))) continue;
+    if (!out.includes(token)) out.push(token);
+  }
+  return out;
+}
 
 /**
  * #975: A ROOT-LEVEL FILE NAMED IN A REGION IS A DECLARATION -- `package.json`, `CLAUDE.md`, `README.md`.
@@ -122,7 +183,7 @@ export function rootFilesOnMain({ repoRoot } = {}) {
  * @returns {string[]}
  */
 export function regionPathsFromBody(body) {
-  return [...new Set([...body.matchAll(PATH_IN_PROSE)].map((m) => m[1]))];
+  return [...new Set([...body.matchAll(pathInProse())].map((m) => m[1]))];
 }
 
 // #710: `## Region` (any heading level, optional trailing colon and inline text) or a bare `Region:` /
