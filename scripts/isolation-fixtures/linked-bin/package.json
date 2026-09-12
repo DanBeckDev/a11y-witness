@@ -1,0 +1,9 @@
+{
+  "name": "@a11ign-fixture/linked-bin",
+  "version": "0.0.0",
+  "private": false,
+  "type": "module",
+  "exports": { ".": "./index.mjs" },
+  "bin": { "a11ign-fixture-linked": "./cli.mjs" },
+  "files": ["index.mjs", "cli.mjs"]
+}
