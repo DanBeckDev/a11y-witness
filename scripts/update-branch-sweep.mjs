@@ -308,6 +308,73 @@ export function readHeadNow({ number, repo, run = gh }) {
   }
 }
 
+/**
+ * #1018: THE WHOLE LOOP, as a seam -- so `main` is argv and I/O and nothing else.
+ *
+ * Extracting `updateOnePr` alone was not enough, and the mutation says so: making `main`'s loop stop
+ * calling it turned **0 red**, because the loop itself was still inside a function no test can enter. Each
+ * extraction moves the unheld surface up one level; this one moves it to the last level that is not worth
+ * moving -- reading argv, printing lines, choosing an exit code. **What remains unheld is stated rather
+ * than hoped about**, which is the difference between a small honest gap and an invisible one.
+ * @param {{ number: number, headRefOid: string, autoMergeRequest: unknown,
+ *           statusCheckRollup: { name?: string, conclusion?: string | null, completedAt?: string | null,
+ *                                startedAt?: string | null }[] | null }[]} prs
+ * @param {{ repo: string, run?: typeof gh, readHead?: typeof readHeadNow, runGit?: typeof runGitForReal,
+ *           now?: Date }} deps
+ * @returns {{ updated: number, failed: number[], lines: string[] }}
+ */
+export function sweepPrs(prs, { repo, run = gh, readHead = readHeadNow, runGit = runGitForReal, now = new Date() }) {
+  const failed = [];
+  const lines = [];
+  let updated = 0;
+  for (const pr of prs) {
+    const armed = pr.autoMergeRequest != null;
+    const gateConclusion = newestConclusion(pr.statusCheckRollup, "gate");
+    const behind = isBehind("origin/main", pr.headRefOid, runGit);
+    const quietSeconds = headQuietSeconds(pr.statusCheckRollup, now);
+    const { update, reason } = updateBranchDecision({ armed, gateConclusion, behind, quietSeconds });
+    if (!update) {
+      lines.push(`#${pr.number} SKIPPED -- ${reason}`);
+      continue;
+    }
+    const outcome = updateOnePr({ pr, repo, reason }, { run, readHead });
+    lines.push(outcome.line);
+    if (outcome.acted) updated += 1;
+    if (outcome.failed) failed.push(pr.number);
+  }
+  return { updated, failed, lines };
+}
+
+/**
+ * #1018: ONE PR'S ACT-OR-REFUSE, as a seam -- so the CALL SITE is held, not only the decision.
+ *
+ * worker-capture's finding on this PR, and it is the finding I had made on theirs four hours earlier:
+ * `movedHeadRefusal` and `readHeadNow` were both driven thoroughly and NEITHER WAS WIRED TO ANYTHING A
+ * TEST COULD SEE. `if (false && refusal)` turned **0 red** -- delete the `if`, or the `continue` inside
+ * it, and the sweep goes back to pushing on a stale decision with every test green.
+ *
+ * **Driving the function holds the function and misses the call being deleted.** So the wiring moves out
+ * of `main`'s loop into here, where a test can hand it a moved head and assert that `gh pr update-branch`
+ * was never invoked -- which is the property, rather than "the refusal string was computed".
+ *
+ * @param {{ pr: { number: number, headRefOid: string }, repo: string, reason: string }} args
+ * @param {{ run?: typeof gh, readHead?: typeof readHeadNow }} [deps]
+ * @returns {{ acted: boolean, failed: boolean, line: string }}
+ */
+export function updateOnePr({ pr, repo, reason }, { run = gh, readHead = readHeadNow } = {}) {
+  const refusal = movedHeadRefusal({
+    number: pr.number, decidedFrom: pr.headRefOid, headNow: readHead({ number: pr.number, repo, run }),
+  });
+  if (refusal) return { acted: false, failed: false, line: refusal };
+  try {
+    run(["pr", "update-branch", String(pr.number), "--repo", repo]);
+    return { acted: true, failed: false, line: `#${pr.number} UPDATED -- ${reason}` };
+  } catch (cause) {
+    return { acted: false, failed: true,
+      line: `#${pr.number} FAILED -- ${cause instanceof Error ? cause.message : cause}` };
+  }
+}
+
 // #1018: WHY NOT `expected_head_sha`, WHICH WOULD CLOSE THE WINDOW ENTIRELY.
 //
 // The REST endpoint `PUT /repos/{o}/{r}/pulls/{n}/update-branch` documents an `expected_head_sha` that
@@ -358,40 +425,8 @@ function main() {
     process.exit(EXIT.CANNOT_ASK);
   }
 
-  const failed = [];
-  let updated = 0;
-  for (const pr of prs) {
-    const armed = pr.autoMergeRequest != null;
-    const gateConclusion = newestConclusion(pr.statusCheckRollup, "gate");
-    const behind = isBehind("origin/main", pr.headRefOid, runGitForReal);
-
-    const quietSeconds = headQuietSeconds(pr.statusCheckRollup, new Date());
-    const { update, reason } = updateBranchDecision({ armed, gateConclusion, behind, quietSeconds });
-    if (!update) {
-      console.log(`UPDATE-BRANCH: #${pr.number} SKIPPED -- ${reason}`);
-      continue;
-    }
-
-    // #1018: PINNED. The decision above came from `pr.headRefOid` as the list reported it; this asks what
-    // the head is NOW, and refuses rather than acting on a verdict computed from a sha that has moved.
-    const refusal = movedHeadRefusal({
-      number: pr.number, decidedFrom: pr.headRefOid, headNow: readHeadNow({ number: pr.number, repo }),
-    });
-    if (refusal) {
-      console.log(`UPDATE-BRANCH: ${refusal}`);
-      continue;
-    }
-
-    try {
-      gh(["pr", "update-branch", String(pr.number), "--repo", repo]);
-      console.log(`UPDATE-BRANCH: #${pr.number} UPDATED -- ${reason}`);
-      updated += 1;
-    } catch (cause) {
-      console.log(`UPDATE-BRANCH: #${pr.number} FAILED -- ${cause instanceof Error ? cause.message : cause}`);
-      failed.push(pr.number);
-    }
-  }
-
+  const { updated, failed, lines } = sweepPrs(prs, { repo });
+  for (const line of lines) console.log(`UPDATE-BRANCH: ${line}`);
   console.log(`UPDATE-BRANCH: ${updated} updated, ${failed.length} failed, ${prs.length - updated - failed.length} skipped.`);
 
   if (failed.length > 0) {
