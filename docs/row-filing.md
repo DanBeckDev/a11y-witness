@@ -128,6 +128,54 @@ type. `pr:open`'s own refusal says it best, and a filer who follows it exactly w
 
 > a PR whose author cannot name a file that verifies it has no acceptance
 
+**AND THE FILES IT NAMES COME FROM THE RIGHT POPULATION. A transcript names the files a defect is IN. An
+acceptance names the files that must RUN. A population derived for one purpose does not transfer to the
+other.** #1160 (2026-09-12) had already been refused once for saying `npm test`; the replacement was
+built from the sweep output that found the defect — a list of the files it appeared in — and `pr:open`
+refused that too:
+
+> needs `corpus`, which this job does not have — `exit-code-contract.test.ts` requires corpus, at :119
+
+**The second refusal was the same refusal**, and the wrong population was chosen in the very edit that
+answered the first. The two lists overlap enough to look interchangeable and they answer different
+questions: *where did I find it* has no opinion about what the acceptance job can run, and *what must run*
+has no opinion about where the defect was. Derive the second from the first by asking, of each file, **will
+this command open it and can this job run it** — and check the answer the way the section is read:
+
+```bash
+comm -3 <(git diff --name-only origin/main...HEAD | sort) <(<the acceptance command, one path per line> | sort)
+```
+
+Anything in either column is a file the change touches and the acceptance never opens, or a file the
+acceptance names and the change never touched. **Both are wrong and they cancel in a count**, which is how
+#1160 read as 24-for-24 while naming one file it did not touch and omitting one it did.
+
 **Neither rule is a request to teach the parser more grammar.** Teaching `declaredRegionFiles` to read
 negation would make it guess at intent, and the exclusion belongs under its own heading for the human
 reader anyway.
+
+## `out-of-release` answers one question, and importance is not it
+
+**`out-of-release` answers ONE question: does this block the 20 September publish. It does not mean
+unimportant. A row that is out of release and worth fixing soon is spelled "out of release, ready" —
+importance is said by the ready order, not by which milestone a row sits on.**
+
+Earned 2026-09-12 on #1161, a defect in `scripts/row-claim.mjs`'s refusal message. It was moved **into**
+the release on an argument from severity, and `worker-capture`'s objection was that the label had been
+answering its own question correctly all along: `row-claim.mjs` ships in no package, so it cannot block a
+publish however badly it behaves. **`ceo` reversed their own ruling** — no severity axis, because the
+tracker already has one and it is the ready order. The row is now *out of release, `ready`*, which says
+both things without either contradicting the other.
+
+**The `Out of release` milestone's own description carries this sentence too, and the two are compared by
+a guard rather than left to agree.** `ready-label-audit.mjs`'s `guidanceDrift` fails when either copy stops
+carrying what the other says — because two copies of one rule with nothing comparing them is the defect
+that produced five incidents in one day (`docs/operational-lessons.md`), and writing a rule about drift
+twice, unpinned, would be this page refuting itself.
+
+**It detects a rule going MISSING, not a rule changing meaning**, and the distinction is worth knowing
+before you edit either copy. It matches phrases, so a faithful rewording of either one reads as *deleted*
+and reddens the nightly audit until the two are re-synced — **and the remedy is to re-sync them, never to
+loosen the check.** The two saying it the same way is the property. A copy that keeps every phrase and
+reverses every meaning passes clean, which no phrase-matching guard can prevent; if you are inverting a
+rule rather than editing it, this guard is not the thing that will catch you.
