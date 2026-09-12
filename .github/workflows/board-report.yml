@@ -16,8 +16,11 @@ on:
   schedule:
     # BOTH, and the job gates on London's actual hour -- see the first step. 07:00 UTC is 08:00 London
     # under BST; 08:00 UTC is 08:00 London under GMT. Exactly one of the two acts on any given day.
-    - cron: "0 7 * * *"
-    - cron: "0 8 * * *"
+    # #965: OFF THE HOUR (:13). Four consecutive days the :00 pair started ~5 h late and the edition was
+    # dispatched by hand. London still reads 08 at 08:13, so the hour gate below is unchanged; the summary's
+    # dateline must now be within 60 minutes of 08:13 London, i.e. written at 07:14 or later.
+    - cron: "13 7 * * *"
+    - cron: "13 8 * * *"
   workflow_dispatch:
     inputs:
       republish:
