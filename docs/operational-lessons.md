@@ -1347,3 +1347,61 @@ Deleting any of the five would leave a live, merge-blocking mechanism with no te
 that retires its *calling* workflow lands. Left in place; a future row may retire them once #902 (and
 whatever eventually replaces `pr-hold`/`arm-pr`'s labeling for the new four-role org) actually ships.
 
+
+## A probe whose own health is invisible in its own output
+
+**Nine times on 2026-09-12, between two agents, an instrument that did not run rendered identically to one
+that ran and passed.** This is not the vacuity shape (a guard that cannot fail — that is `#1123` and the
+`local/uncontrolled-emptiness` rule). It is one level earlier: **the failure mode and the success value are
+the same glyph**, so nothing about the output invites a second look.
+
+| # | the probe | it printed | it meant |
+|---|---|---|---|
+| 1 | a `catch` mutation anchored by index search | `0 red` | the anchor never matched; the file was never mutated |
+| 2 | an `indexOf("@")` anchor in a guard rewrite | `19/0` | ANCHOR NOT FOUND; the suite ran against unmodified source |
+| 3 | `npx tsx --test $ACC` in zsh | no output at all | zsh passes the list as ONE argument; nothing ran |
+| 4 | a source-text regex written to match code | green | it matched the same phrase in the PROSE above the code |
+| 5 | `deriveClosureRequirements([path])` | `[]` | the signature takes ONE absolute path; `existsSync` took the array and said no |
+| 6 | a row's Open-check, `grep -c … row-claim.mjs` | `1` | the string has never been in that file; the command prints `0` |
+| 7 | `node -e '…' "--field"` in a mutation matrix | `fail 0`, three times | zsh handed `--field` to *node* as an option; a **uniform answer across a varied set** was the tell |
+| 8 | `npx eslint <file> \| grep -c '<rule>'` | `0` | the edit left a syntax error; ESLint emitted a PARSE ERROR, and a count cannot hear one |
+| 9 | a row's Open-check, `git grep -c` | stated `0` | `git grep -c` prints NOTHING on a miss; `grep -c` on a file prints `0` |
+
+**Instance 8 is the one that changes the remedy.** The other eight are quiet: nothing was said. In 8 the tool
+said exactly what was wrong, in a message, and **the reading threw it away** — `grep -c` cannot hear a parse
+error. It was one sentence from reporting that a working fix did not work.
+
+### The remedy is two sentences, and the second is the general one
+
+> **Assert the anchor matched before you read the count.** A mutation that did not apply and a guard that
+> did not bite print the same green.
+
+> **Assert the tool ANSWERED before you read its answer.** Covers the cases that are not mutations at all.
+
+**And the operational rule both reduce to: do not COUNT a tool's output when the tool can also refuse.**
+`grep -c` on a linter, `wc -l` on a test run, `| head` on a status list — each turns *"I could not answer"*
+into a number shaped like an answer. **`0` from a rule that did not fire and `0` from a file that never
+parsed are the same number**, because a count is a lossy read of a message.
+
+That is **never truncate a status you report** from the other side: there a filter loses the failing rows,
+here a count loses the refusal. Same defect, opposite operation.
+
+### Four checks, all of them before you read the number
+
+```
+print the mutated line back                        catches 1 and 2
+count the arguments the shell actually built       catches 3 and 7
+assert the anchor matched, == 1                    catches 1, 2, 4 and 6
+read the tool's own message, never a count of it   catches 8 and 9
+```
+
+### Why no guard, and the ratio that is the real argument
+
+**A machine cannot tell a mutation that applied from one that did not without being told what the mutation
+was**, which is the same regress. So this is a habit, and the honest thing is to say what habits cost here.
+
+**Five of the nine were caught by the person holding the probe; four by the other person, or by a column
+whose expected value was known in advance.** The instinct after nine of these is to resolve to be more
+careful — and care is what caught the cheap ones. **Every instance that was about to travel to somebody
+else was caught by review or by a pre-declared expectation**, never by care. That ratio is the argument for
+review, and for tables with a column you can predict, rather than for vigilance.
