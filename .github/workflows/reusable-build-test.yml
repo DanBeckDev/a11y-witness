@@ -2,7 +2,7 @@ name: reusable-build-test
 
 # A1 (#452): ONE definition of "build, lint, typecheck, test" shared by TWO callers that used to carry two
 # independent, hand-maintained copies of the same steps -- `ci.yml`'s `ts`/`python` jobs and
-# `trunk-guard.yml`'s `trunkGate`. Chairman's own comment on `ci.yml` already measured the two running
+# `trunk.yml`'s `trunkGate`. Chairman's own comment on `ci.yml` already measured the two running
 # "the SAME suite, on every merge, close enough in wall time" -- the fact-stated-twice shape this repo's
 # own rule says to end by deletion or derivation, never by a third reader trusting the two stay equal.
 #

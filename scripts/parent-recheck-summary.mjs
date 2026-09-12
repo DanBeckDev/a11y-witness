@@ -2,7 +2,7 @@
 // @ts-check
 // command: read a node:test TAP log and print its failing subtests by name -- #744, never a fixed tail
 //
-// `trunk-guard.yml`'s #616 parent re-check used to print `tail -40 /tmp/parent-test.log` when the parent
+// `trunk.yml`'s #616 parent re-check used to print `tail -40 /tmp/parent-test.log` when the parent
 // failed. The last forty lines of a `node:test` run are the TAP SUMMARY -- trailing PASSING subtests,
 // never the failing ones, which are wherever they happen to sit in a run of thousands. Measured live on
 // #718 (2026-09-09): a genuine failure produced a step output of nothing but `ok 4180`, `ok 4181`, `ok
@@ -63,7 +63,7 @@ function main() {
     process.stdout.write(`UNKNOWN: ${reason}\n`);
   }
   // The workflow step captures this exact line to decide `result=fail` vs `result=unknown` -- see
-  // `trunk-guard.yml`'s own re-check step, and `parent-recheck-summary.test.ts`'s CLI test pinning it.
+  // `trunk.yml`'s own re-check step, and `parent-recheck-summary.test.ts`'s CLI test pinning it.
   process.stdout.write(`RECHECK_RESULT=${verdict}\n`);
 }
 

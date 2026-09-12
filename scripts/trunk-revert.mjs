@@ -7,7 +7,7 @@
 // trigger there for exactly that reason -- "a check that runs AFTER it cannot stop it, which is exactly
 // what a push trigger was". Unit 1 (#298) then made `strict=false` real: GitHub completes a merge the
 // instant `gate` is green for the PR's own head, with no requirement that the resulting MERGE COMMIT
-// itself has ever been tested. `trunk-guard.yml` is the check that commit never got: it runs the full,
+// itself has ever been tested. `trunk.yml` is the check that commit never got: it runs the full,
 // unscoped suite against `main`'s actual new tip, on every push, and this script decides what to do when
 // that fails.
 //
@@ -53,7 +53,7 @@ import { gh, lookup, lookupCheckRuns } from "./merge-guard.mjs";
 export const EXIT = { READY: 0, REFUSED: 1, CANNOT_ASK: 2, PUSHED_NO_PR: 3 };
 
 /**
- * WHICH JOBS' FAILURE MEANS "MAIN IS RED" -- DERIVED FROM `trunk-guard.yml`'s OWN `if:`, NEVER LISTED.
+ * WHICH JOBS' FAILURE MEANS "MAIN IS RED" -- DERIVED FROM `trunk.yml`'s OWN `if:`, NEVER LISTED.
  *
  * #582: this was `GATE_JOB_NAME = "trunkGate"`, one hand-written name, while A1 had already widened
  * `decideRevert`'s trigger to `needs.trunkGate.result == 'failure' || needs.trunkBuildTest.result ==
@@ -69,7 +69,7 @@ export const EXIT = { READY: 0, REFUSED: 1, CANNOT_ASK: 2, PUSHED_NO_PR: 3 };
  * silence. Same remedy as `busy-worker-guard.test.ts`, which DISCOVERS every playbook rather than naming
  * them -- a test naming files by hand could never see the one nobody thought of.
  *
- * @param {string} workflowText the raw text of `.github/workflows/trunk-guard.yml`
+ * @param {string} workflowText the raw text of `.github/workflows/trunk.yml`
  * @returns {string[]} every job named in `decideRevert`'s `if:` as a `needs.<job>.result` reference
  */
 export function revertTriggerJobs(workflowText) {
@@ -174,7 +174,7 @@ export function revertVerdict({ beforeConclusions, currentMainSha, pushSha, pare
   // derivation must be able to come back empty and be REFUSED for it rather than believed.
   const jobs = Object.keys(beforeConclusions);
   if (jobs.length === 0) {
-    return { code: EXIT.CANNOT_ASK, reason: "no trigger jobs were derived from `trunk-guard.yml` -- the "
+    return { code: EXIT.CANNOT_ASK, reason: "no trigger jobs were derived from `trunk.yml` -- the "
       + "condition this decision depends on could not be read, so there is nothing to have been green. A "
       + "derived list that comes back empty is a broken derivation, never a satisfied one." };
   }
@@ -344,7 +344,7 @@ export function revertPrBody({ pushSha, originPr, runUrl }) {
  * shells to `git`/`gh` throughout) -- the pure decision above and the body-builder above are; this is
  * proven live, the same way `fleet-playbook.mjs` and `board-document.mjs`'s action code is.
  *
- * RUNS IN THE JOB'S OWN CHECKOUT, not a fresh clone -- `trunk-guard.yml`'s `decideRevert` job checks out
+ * RUNS IN THE JOB'S OWN CHECKOUT, not a fresh clone -- `trunk.yml`'s `decideRevert` job checks out
  * this repository with `fetch-depth: 0` (a shallow clone leaves the reverted commit's parent objects
  * absent, which `git revert -m 1` needs to compute the diff), already sitting at `pushSha`. Reusing it
  * avoids a second clone for no reason; the working directory IS the target repository here.
@@ -444,14 +444,14 @@ function main() {
   const runUrl = flag("run-url") ?? "";
   if (!pushSha || !beforeSha) {
     console.error("Usage: node scripts/trunk-revert.mjs --push-sha=<sha> --before-sha=<sha> [--run-url=<url>]\n"
-      + "Called by trunk-guard.yml's decideRevert job after trunkGate has already failed for --push-sha.");
+      + "Called by trunk.yml's decideRevert job after trunkGate has already failed for --push-sha.");
     process.exit(EXIT.CANNOT_ASK);
   }
 
   // The trigger jobs are read from the workflow FILE, in the checkout this job already has. Reading them
   // from the API would ask GitHub which jobs exist rather than which ones this decision is conditioned on,
   // and those are different questions -- `decideRevert` itself is a job on the same run.
-  const workflow = readFileSync(new URL("../.github/workflows/trunk-guard.yml", import.meta.url), "utf8");
+  const workflow = readFileSync(new URL("../.github/workflows/trunk.yml", import.meta.url), "utf8");
   // #616: `pass` / `fail` from the workflow having re-run the failing check at the PARENT, now. Anything
   // else -- absent, empty, a value nobody recognises -- is `null` and therefore CANNOT_ASK. A flag this
   // decision depends on must never be interpreted generously: a typo that read as "pass" would restore
