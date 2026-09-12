@@ -37,7 +37,8 @@ import { dirname, join, resolve } from "node:path";
  * @returns {string}
  */
 export function stripComments(text) {
-  // LINE COMMENTS FIRST, AND THE ORDER IS THE WHOLE FIX -- #1019.
+  // ONE ALTERNATION, NOT TWO PASSES -- #1019. Whichever comment form starts FIRST in the text wins, which
+  // is what a tokenizer would do, and no pass can see inside what another already consumed.
   //
   // With the block pass first, a `//` comment CONTAINING `/*` -- a glob in prose, `--branches='agent/*'`,
   // `@a11ign/*` -- opened a block-comment match that closed at the next `*/` ANYWHERE LATER IN THE FILE,
@@ -50,11 +51,18 @@ export function stripComments(text) {
   // `//`-embedded `/*` AND a later block comment to close against. #725's fixture had the opener and no
   // closer, so the regex never matched and the case passed.
   //
-  // Blanking the line comments first removes the opener before anything looks for a block, and a real
-  // block comment is still found afterwards because nothing inside it was touched.
-  return text
-    .replace(/\/\/[^\n]*/g, (m) => " ".repeat(m.length))
-    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "));
+  // SEQUENTIAL PASSES FAIL IN BOTH DIRECTIONS, and swapping the order only moves which one. The mirror,
+  // found by worker-judge reviewing this: a BLOCK comment containing `//` whose closer is on the SAME LINE
+  // -- `/${"*"} see http://example.com ${"*"}/` above an import -- has its closer eaten by a line-first
+  // pass, leaving the opener to match forward to the next closer anywhere later. Same under-charging
+  // direction, same silence, and a URL in a one-line block comment is the most ordinary comment there is.
+  //
+  // The alternation closes both. Measured across all 871 tracked files: it agrees with the line-first
+  // version on every one, 0 differing, and preserves the offset property identically -- same length, same
+  // line count -- which is the property `closureRequirementMessage` needs and the reason this module does
+  // not use `@a11ign/evidence/source-text`'s tokenizer. `pre-install-import-graph.test.ts:82-89` already
+  // names this file and ships this exact line as the fix.
+  return text.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, (m) => m.replace(/[^\n]/g, " "));
 }
 
 /**
