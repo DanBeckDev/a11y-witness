@@ -94,6 +94,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
+import { leakRefusalReason } from "../packages/lab/src/packaging/leak-patterns.mjs";
 import { missingTemplateFields, wholeSuiteAcceptanceReason } from "./row-claim/template-fields-rule.mjs";
 import { moveProjectStatus, filedByLine, fetchLabels as fetchIssueLabels, ensureLabelsExist } from "./row-claim.mjs";
 import { PROJECT_OWNER, PROJECT_NUMBER } from "./board-snapshot.mjs";
@@ -171,6 +172,11 @@ export function fileRefusalReason(body) {
       + "them so the three required sections (Region, Acceptance, Open-check) can be checked before this "
       + "reaches GitHub.";
   }
+  // #891: checked BEFORE the template-shape check -- a leak is refused on its own facts regardless of
+  // whether the rest of the body is well-formed, and never restated: `leakRefusalReason` is the same
+  // `allLeaksIn` predicate the tree-wide guards already drive.
+  const leak = leakRefusalReason(body);
+  if (leak) return `row-file: ${leak}`;
   const missing = missingTemplateFields(body);
   if (missing.length > 0) {
     return `row-file: REFUSING to file -- missing ${missing.join(", ")}. The issue template requires all `
