@@ -303,6 +303,39 @@ const READY_FLAG = "--ready";
 export const OUT_OF_RELEASE = "out-of-release";
 
 /**
+ * The milestone that says the same thing as the label, created 2026-09-12 on `ceo`'s ruling so the board
+ * can SEE that population rather than meet it as nine unmilestoned rows.
+ *
+ * #1130: TWO FACTS NOW SAY "OUTSIDE EVERY RELEASE" AND NOTHING COMPARED THEM. `declaresRelease` already
+ * accepted this milestone -- any `--milestone` with a value satisfies it -- so the gap was the other
+ * direction: the LABEL alone was accepted and left the row out of the milestone, recreating one row at a
+ * time exactly the state the milestone was made to end.
+ *
+ * So `outOfReleaseArgv` gives the label path the milestone too. Filing can no longer produce a row where
+ * the two disagree -- and `row-file.test.ts` pins them equal ACROSS THE TRACKER as well, because
+ * filing-time agreement does not survive a hand-edit and a hand-edit is how `ready`/Status drifted across
+ * 16 rows unseen.
+ */
+export const OUT_OF_RELEASE_MILESTONE = "Out of release";
+
+/**
+ * The argv to file with: unchanged, unless this row declares itself out of release by LABEL alone, in
+ * which case the milestone is added beside it.
+ *
+ * NOT the reverse. A row given the milestone and no label is left alone here, because the label is what
+ * `board-data.mjs`'s `outOfRelease()` reads and adding labels a caller did not ask for is a wider change
+ * than this row's. The tracker-level assertion is what catches that direction.
+ *
+ * @param {string[]} argv @returns {string[]}
+ */
+export function outOfReleaseArgv(argv) {
+  const byLabel = argv.some((a, i) =>
+    ((a === "--label" || a === "-l") && argv[i + 1] === OUT_OF_RELEASE) || a === `--label=${OUT_OF_RELEASE}`);
+  if (!byLabel || milestoneFromArgv(argv) !== null) return argv;
+  return [...argv, "--milestone", OUT_OF_RELEASE_MILESTONE];
+}
+
+/**
  * #1011: A ROW NEEDS A MILESTONE, OR `out-of-release` -- AND `row-file` WAS THE ONE TOOL NOT ASKING.
  *
  * `--milestone`/`-m` sits in the passthrough allowlist and nowhere else: this tool accepted one, never
@@ -615,7 +648,8 @@ export function createIssue(argv, deps = {}) {
   // #844: THE BOARD LABEL IS NOT ADDED HERE -- see `boardAndVerify`'s own header for why it has to wait
   // until AFTER the Project Status is set, not merely after the issue exists. The lane label(s) travel
   // with it for the identical reason and the same simplicity: one label-add step, not two.
-  const filedArgv = withFiledBy(argv, session, /** @type {string} */ (body));
+  // #1130: the label alone must not leave the row out of the milestone that says the same thing.
+  const filedArgv = withFiledBy(outOfReleaseArgv(argv), session, /** @type {string} */ (body));
 
   /** @type {string} */
   let url;

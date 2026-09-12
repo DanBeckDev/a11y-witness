@@ -58,6 +58,9 @@ import { READY_LABEL, WAS_READY_LABEL } from "./claim-labels.mjs";
 // untouched. Safe from a cycle (#804): `close-rows-for-merged-pr.mjs` imports its own label constants
 // from the leaf `claim-labels.mjs`, never from this file, so this file importing FROM it forms no loop.
 import { labelsToStrip } from "./close-rows-for-merged-pr.mjs";
+// #1130: the label constant comes from where the BOARD reads it, never restated here -- the drift
+// check below exists because two copies of one fact disagreed, so it must not add a third.
+import { OUT_OF_RELEASE_LABEL } from "./board-data.mjs";
 
 // #804: READY_LABEL/WAS_READY_LABEL are IMPORTED (above) from the leaf claim-labels.mjs and re-exported
 // here, not declared in this file -- see claim-labels.mjs's own header for why. Every existing
@@ -1550,6 +1553,77 @@ function reportCoverageTrackerDisagreement() {
 }
 
 /** @type {[string, () => number][]} */
+/**
+ * #1130: THE LABEL AND THE MILESTONE SAY THE SAME THING, AND NOTHING COMPARED THEM.
+ *
+ * `out-of-release` the LABEL and `Out of release` the MILESTONE (created 2026-09-12 on `ceo`'s ruling)
+ * both mean "outside every release". `row-file` now gives the label path the milestone too, so FILING
+ * can no longer produce a disagreement -- but **filing-time agreement does not survive a hand-edit**, and
+ * a hand-edit is exactly how `ready` and Ready-Status drifted across 16 rows unseen.
+ *
+ * WHY HERE AND NOT IN `row-file.test.ts`, which is where #1130's acceptance put it. Two reasons, both
+ * measured rather than argued:
+ *
+ *   - that file derives `[]` in #827's closure walk, and a live `gh issue list` would move it to
+ *     `["token"]` -- disqualifying it from the job that runs acceptance commands, the exact trap #1116
+ *     was filed about;
+ *   - and a PR-path test asserting a TRACKER state fails the author of an unrelated PR the moment
+ *     somebody hand-edits a row. That is a monitor wearing a test's name.
+ *
+ * This audit already runs nightly, already holds the token, and already reports rather than refuses --
+ * which is what a drift between two hand-editable fields needs.
+ *
+ * PURE, with the two sets passed in, so the test drives it without reaching GitHub.
+ *
+ * @param {{number: number}[]} labelled  open rows carrying the label
+ * @param {{number: number}[]} milestoned  open rows in the milestone
+ * @returns {{ labelOnly: number[], milestoneOnly: number[] }}
+ */
+export function releaseDeclarationDrift(labelled, milestoned) {
+  const inMilestone = new Set(milestoned.map((row) => row.number));
+  const hasLabel = new Set(labelled.map((row) => row.number));
+  return {
+    labelOnly: labelled.map((r) => r.number).filter((n) => !inMilestone.has(n)).sort((a, b) => a - b),
+    milestoneOnly: milestoned.map((r) => r.number).filter((n) => !hasLabel.has(n)).sort((a, b) => a - b),
+  };
+}
+
+/** @param {{ run?: typeof defaultRun }} [args] */
+function reportReleaseDrift({ run = defaultRun } = {}) {
+  // THROUGH THE WALK, never a hand-set --limit. #1090's own guard caught the first version of this line
+  // carrying `--limit 500`, an hour after I removed the last four such caps from this file: a cap goes
+  // stale silently the day the population passes it, and this population only grows.
+  const list = (/** @type {string[]} */ args) => listUntilShort({ run, what: `out-of-release rows`,
+    argv: (ask) => ["issue", "list", "--repo", REPO, "--state", "open", "--limit", String(ask),
+      "--json", "number", ...args] });
+  const labelled = list(["--label", OUT_OF_RELEASE_LABEL]);
+  const milestoned = list(["--milestone", OUT_OF_RELEASE_MILESTONE_NAME]);
+  const { labelOnly, milestoneOnly } = releaseDeclarationDrift(labelled, milestoned);
+
+  if (labelOnly.length === 0 && milestoneOnly.length === 0) {
+    process.stdout.write(`OK  ${labelled.length} row(s) carry \`${OUT_OF_RELEASE_LABEL}\` and `
+      + `${milestoned.length} are in "${OUT_OF_RELEASE_MILESTONE_NAME}" -- the same set\n`);
+    return 0;
+  }
+  for (const n of labelOnly) {
+    process.stdout.write(`RELEASE DRIFT  #${n} carries \`${OUT_OF_RELEASE_LABEL}\` and is NOT in the `
+      + `"${OUT_OF_RELEASE_MILESTONE_NAME}" milestone -- invisible to every milestone view, which is the `
+      + `state that milestone was created to end\n`);
+  }
+  for (const n of milestoneOnly) {
+    process.stdout.write(`RELEASE DRIFT  #${n} is in "${OUT_OF_RELEASE_MILESTONE_NAME}" and does NOT `
+      + `carry \`${OUT_OF_RELEASE_LABEL}\` -- invisible to \`board-data.mjs\`'s \`outOfRelease()\`, which `
+      + `reads the label, so the board's out-of-release figure undercounts it\n`);
+  }
+  process.stderr.write(`\n${labelOnly.length + milestoneOnly.length} row(s) declare themselves out of `
+    + `release by one of two fields and not the other. Two expressions of one state with nothing `
+    + `comparing them is what let \`ready\` and Ready-Status drift across 16 rows unseen.\n`);
+  return 1;
+}
+
+/** The milestone that says what the label says -- one name, read by the check above. */
+const OUT_OF_RELEASE_MILESTONE_NAME = "Out of release";
+
 export const CHECKS = [
   ["open issues", reportMutexViolations],
   ["hand claims", reportHandClaims],
@@ -1562,6 +1636,7 @@ export const CHECKS = [
   ["closed-row provenance", reportUnattributableClosedRows],
   ["closing PR never merged", reportSoleUnmergedCloser],
   ["coverage vs tracker", reportCoverageTrackerDisagreement],
+  ["release declaration", reportReleaseDrift],
 ];
 
 /**
