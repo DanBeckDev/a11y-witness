@@ -20,6 +20,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { stripComments } from "@a11ign/evidence/source-text";
 import { readFileSync, readdirSync, existsSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join, dirname, basename } from "node:path";
@@ -240,18 +241,255 @@ function trackedSources(): string[] {
 }
 
 /**
- * A file's source with `//` comments removed — because a MENTION is not a USE, and this repo has paid for
+ * A file's source with its comments removed — because a MENTION is not a USE, and this repo has paid for
  * that three times in one night. `install-git-hooks.mjs`'s own header QUOTES the banned form to explain
  * why it does not use it; scanning unstripped reports it as an offender.
+ *
+ * `stripComments` RATHER THAN A HAND-ROLLED LINE FILTER — worker-judge reviewing #1099. The filter here
+ * dropped lines beginning `//` and nothing else, so a JSDoc block quoting a guard form survived it. Today
+ * no tracked non-test file does that, which made it latent rather than live — **and the trigger is this
+ * row's own consequence**: the next person who sweeps a file writes a block comment explaining the new
+ * form, which is precisely what `install-git-hooks.mjs` did for the old one, the file this function's own
+ * header cites as the reason it exists.
+ *
+ * It was also unheld in either spelling: removing the stripping entirely was **0 red**, measured, while
+ * genuinely changing what `cli-flags.mjs` and `guest-run.mjs` read. A live guard with no test.
  */
-function executableSource(path: string): string {
-  return readFileSync(`${REPO}${path}`, "utf8").split("\n")
-    .filter((line) => !line.trimStart().startsWith("//")).join("\n");
+function executableSource(path: string, read: (p: string) => string = (p) => readFileSync(p, "utf8")): string {
+  return stripComments(read(`${REPO}${path}`));
 }
 
 function declaresAnEntryGuard(): string[] {
   return trackedSources().filter((path) => executableSource(path).includes("import.meta.url ==="));
 }
+
+/**
+ * #1086: THE FORM THIS FILE RECOMMENDS, IN ONE PLACE, AND CHECKED BY THE PREDICATE THAT JUDGES FILES.
+ *
+ * Until this row, the two messages above recommended `pathToFileURL(process.argv[1] ?? "").href` — the
+ * form #1073 proved SILENTLY FALSE through a symlink. So the guard that enforces the entry-point shape
+ * taught the defect, and a file that complied with it was broken through any symlink: `import.meta.url`
+ * is resolved through symlinks by Node's ESM loader and `process.argv[1]` is not, so the tool loads,
+ * `main()` never runs, and it exits 0.
+ *
+ * **Not a second copy of the rule.** `guardIsRealpathd` below judges both this string and every tracked
+ * source, so the recommendation cannot drift from the check: the test asserts the advice PASSES its own
+ * predicate and the old advice FAILS it. An advice string compared to a literal would be two facts.
+ */
+const RECOMMENDED_FORM =
+  'import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href';
+
+/** The spelling this file used to recommend — kept only as the NEGATIVE case for the predicate. */
+const SUPERSEDED_FORM = 'import.meta.url === pathToFileURL(process.argv[1] ?? "").href';
+
+/**
+ * Does this source realpath the argv path before comparing?
+ *
+ * Comment-stripped, because a MENTION is not a USE — the same reason `executableSource` exists, and the
+ * reason `install-git-hooks.mjs` (whose header quotes the banned form) is not an offender.
+ *
+ * @param source already comment-stripped
+ */
+function guardIsRealpathd(source: string): boolean {
+  return /import\.meta\.url === pathToFileURL\(\s*process\.argv\[1\]/.test(source)
+    && /realpathSync\(\s*process\.argv\[1\]/.test(source);
+}
+
+/** Declares the guard in the plain, symlink-blind form. */
+function guardIsPlain(source: string): boolean {
+  return /import\.meta\.url === pathToFileURL\(\s*process\.argv\[1\]/.test(source)
+    && !/realpathSync\(\s*process\.argv\[1\]/.test(source);
+}
+
+/**
+ * #1086: THE FILES STILL CARRYING THE SYMLINK-BLIND FORM — a ratchet, not a floor.
+ *
+ * Measured on `45dcad15`: **77 files**, 64 under `packages/` and 13 under `scripts/`, against 68 carrying
+ * the realpath'd form, 58 of THOSE under `scripts/`. **Whoever swept it swept the directory they were
+ * standing in** — the class was fixed for `scripts/` and left for `packages/`.
+ *
+ * Sweeping all 77 in one commit would hold the whole tree through B4, so the deliverable is this list:
+ * it may SHRINK and may not GROW, and an entry that no longer carries the form is STALE and fails. That
+ * makes each later sweep a small pull request that cannot regress, and it makes "the defect is gone"
+ * something you have to prove by emptying the list rather than by a count going quiet.
+ *
+ * AN UNTRACKED NEW OFFENDER ESCAPES, and that is inherited rather than introduced: `trackedSources()`
+ * walks `git ls-files`, so a file carrying the plain form reads green until it is committed (`git add -N`
+ * is enough). Measured on this branch: 6/0 untracked, 5/1 after `git add -N`. Said here because a probe
+ * run before the first commit is green BY CONSTRUCTION and has misled a reviewer of this very file.
+ */
+const KNOWN_PLAIN_ENTRY_GUARDS: readonly string[] = Object.freeze([
+  "packages/cli/src/action/post-comment.ts",
+  "packages/cli/src/action/run.ts",
+  "packages/cli/src/scan/run-axe.ts",
+  "packages/control/src/fleet-discover.mjs",
+  "packages/control/src/fleet-playbook.mjs",
+  "packages/control/src/fleet-status.mjs",
+  "packages/control/src/fleet-wake.mjs",
+  "packages/control/src/lab-job.mjs",
+  "packages/control/src/lab-pipeline.mjs",
+  "packages/lab/scripts/audit-corpus-starvation.mjs",
+  "packages/lab/scripts/audit-corpus-urls.mjs",
+  "packages/lab/scripts/audit-observation-ambiguity.mjs",
+  "packages/lab/scripts/audit-rule-coverage.ts",
+  "packages/lab/scripts/audit-size-sensitivity.mjs",
+  "packages/lab/scripts/bench-capture.mjs",
+  "packages/lab/scripts/build-realism-tier.mjs",
+  "packages/lab/scripts/calibrate-abstention.mjs",
+  "packages/lab/scripts/check-dataset-distribution.mjs",
+  "packages/lab/scripts/check-real-page-findings.ts",
+  "packages/lab/scripts/check-rehearsal-currency.mjs",
+  "packages/lab/scripts/check-shipped-provenance.mjs",
+  "packages/lab/scripts/collect-promotion.mjs",
+  "packages/lab/scripts/compare-layers.mjs",
+  "packages/lab/scripts/corpus-backup.mjs",
+  "packages/lab/scripts/corpus-prune-orphans.mjs",
+  "packages/lab/scripts/corpus-release.mjs",
+  "packages/lab/scripts/corpus-snapshot.mjs",
+  "packages/lab/scripts/emit-grants-map.mjs",
+  "packages/lab/scripts/emit-unclosable-vetoes.mjs",
+  "packages/lab/scripts/everything-pipeline.mjs",
+  "packages/lab/scripts/evidence-check.mjs",
+  "packages/lab/scripts/explain-capture.mjs",
+  "packages/lab/scripts/explain-scorer.mjs",
+  "packages/lab/scripts/fleet-hours.mjs",
+  "packages/lab/scripts/gate-probe-order.mjs",
+  "packages/lab/scripts/generate-coverage-doc.ts",
+  "packages/lab/scripts/lab-inventory.mjs",
+  "packages/lab/scripts/promote-model.mjs",
+  "packages/lab/scripts/retrain-pipeline.mjs",
+  "packages/lab/scripts/score-rules.ts",
+  "packages/lab/scripts/stability-gate.mjs",
+  "packages/lab/scripts/verify-safetensors.mjs",
+  "packages/lab/src/eval/rules-check.ts",
+  "packages/lab/src/eval/run.ts",
+  "packages/lab/src/harnesses/assert-action-report.mjs",
+  "packages/lab/src/harnesses/capture-check.mjs",
+  "packages/lab/src/harnesses/capture-fixtures.mjs",
+  "packages/lab/src/harnesses/occurrence-verdict-stability.mjs",
+  "packages/lab/src/harnesses/page-identity-rate.mjs",
+  "packages/lab/src/harnesses/run-spike.ts",
+  "packages/lab/src/training/capture-real-pages.mjs",
+  "packages/lab/src/training/capture-screenreader-dataset.mjs",
+  "packages/lab/src/training/capture-status.mjs",
+  "packages/lab/src/training/check-signals.mjs",
+  "packages/lab/src/training/export-screenreader-dataset.mjs",
+  "packages/lab/src/training/generate-screenreader-acceptance.mjs",
+  "packages/lab/src/training/generate-screenreader-dataset.mjs",
+  "packages/lab/src/training/preflight-screenreader-dataset.mjs",
+  "packages/lab/src/training/repeat-capture.mjs",
+  "packages/lab/src/training/wait-for-capture.mjs",
+  "packages/nvda-worker/src/server.mjs",
+  "packages/worker-fleet/src/fleet-env.mjs",
+  "packages/worker-fleet/src/guest-run.mjs",
+  "packages/worker-fleet/src/normalise-fleet.mjs",
+  "scripts/carry-branch.mjs",
+  "scripts/changeset-precise.mjs",
+  "scripts/check-retired-heads.mjs",
+  "scripts/check-schema-migration.mjs",
+  "scripts/ci-changed.mjs",
+  "scripts/close-merged-rows.mjs",
+  "scripts/control-plane-hygiene.mjs",
+  "scripts/known-gaps-index.mjs",
+  "scripts/mark-primary-checkout.mjs",
+  "scripts/merge-queue.mjs",
+  "scripts/rescue-hunk.mjs",
+  "scripts/select-changed-tests.mjs",
+  "scripts/stale-dist-diagnosis.mjs",
+]);
+
+/** Every tracked source whose entry guard is the plain form, comment-stripped. */
+function plainEntryGuards(): string[] {
+  return trackedSources().filter((path) => guardIsPlain(executableSource(path))).sort();
+}
+
+/** Every tracked source whose entry guard realpaths first. */
+function realpathdEntryGuards(): string[] {
+  return trackedSources().filter((path) => guardIsRealpathd(executableSource(path))).sort();
+}
+
+test("#1086: the form this file RECOMMENDS is the form its own predicate accepts", () => {
+  // THE DEFECT THIS ROW IS ABOUT, IN ONE ASSERTION. The advice and the check were two facts with nothing
+  // comparing them, and the advice was the one that was wrong -- so a file could comply with the message
+  // and fail the machine. Judged by `guardIsRealpathd`, not by string equality with a copy.
+  assert.ok(guardIsRealpathd(RECOMMENDED_FORM),
+    `the form this file tells people to use does not pass its own check: ${RECOMMENDED_FORM}`);
+  assert.ok(guardIsPlain(SUPERSEDED_FORM),
+    "the superseded form must read as PLAIN, or the predicate has stopped distinguishing them and the "
+    + "assertion above passes for the wrong reason");
+  assert.ok(!guardIsRealpathd(SUPERSEDED_FORM), "and it must not read as realpath'd");
+});
+
+test("#1086: a guard form QUOTED IN A COMMENT is not a use — and the stripping is what makes that true", () => {
+  // THE MENTION-IS-NOT-A-USE RULE, HELD. Removing the comment stripping altogether was 0 RED before this
+  // test existed, which is a live guard with no test -- the shape worker-judge and I have each caught in
+  // the other's work today. The old hand-rolled filter dropped `//` lines and nothing else, so a JSDoc
+  // block quoting a form survived it; `stripComments` is the tested stripper this repository already owns.
+  //
+  // Latent rather than live today, and the trigger is this row's OWN CONSEQUENCE: the next person who
+  // sweeps a file writes a block comment explaining the new form, exactly as `install-git-hooks.mjs` did
+  // for the old one.
+  const quotedInJsDoc = [
+    "/**", ` * Do NOT use ${SUPERSEDED_FORM} here --`, " * it reads false through a symlink.", " */",
+    "export function noGuardAtAll() { return 1; }",
+  ].join("\n");
+
+  // DRIVEN THROUGH `executableSource` OVER AN INJECTED READ, not through `stripComments` directly. My
+  // first version of this test called the stripper itself and asserted on that -- so removing the
+  // stripping from `executableSource` stayed 0 RED. **A guard whose only input is a fixture proves the
+  // fixture**, committed inside the fix for that exact defect. The reader is injected because no tracked
+  // file quotes a guard form in a block comment today, which is what makes this latent.
+  assert.ok(guardIsPlain(quotedInJsDoc),
+    "the control: UNSTRIPPED, this source reads as declaring the plain form -- if it does not, the rest "
+    + "of this test passes because the fixture stopped resembling the thing");
+  assert.ok(!guardIsPlain(executableSource("/fake.mjs", () => quotedInJsDoc)),
+    "and through `executableSource` it declares nothing, because a form quoted in a block comment is a "
+    + "mention. A file explaining why it does not use a form must not be reported as using it");
+
+  const inCode = `if (${SUPERSEDED_FORM}) main();`;
+  assert.ok(guardIsPlain(executableSource("/fake.mjs", () => inCode)),
+    "and the same form in CODE still reads as a use -- otherwise the stripping has eaten the subject and "
+    + "every file reads clean");
+});
+
+test("#1086 RATCHET: the plain-form population may shrink and may not grow", () => {
+  const plain = plainEntryGuards();
+  const known = new Set(KNOWN_PLAIN_ENTRY_GUARDS);
+
+  const added = plain.filter((p) => !known.has(p));
+  assert.deepEqual(added, [],
+    `these declare an entry guard in the symlink-blind form and are not in the baseline:\n  ${added.join("\n  ")}\n`
+    + `Use ${RECOMMENDED_FORM} — reaching a file through a symlink (npm's .bin, npx's tmpdir staging, or `
+    + "macOS's /tmp -> /private/tmp) otherwise skips main() and exits 0, with no error and no output.");
+
+  const stale = [...known].filter((p) => !plain.includes(p)).sort();
+  assert.deepEqual(stale, [],
+    `these baseline entries no longer carry the plain form:\n  ${stale.join("\n  ")}\n`
+    + "Delete them from KNOWN_PLAIN_ENTRY_GUARDS in the same change that fixed them, or the list stops "
+    + "describing the tree and the ratchet starts protecting nothing.");
+});
+
+test("#1086: the two populations are counted SEPARATELY and must not overlap or lose a file", () => {
+  // WITHOUT THIS, A PATTERN THAT STOPS MATCHING READS AS "THE DEFECT IS GONE". Both derivations run over
+  // the same tracked sources but ask opposite questions, so a broken regex empties one and not the other.
+  const plain = plainEntryGuards();
+  const realpathd = realpathdEntryGuards();
+
+  const both = plain.filter((p) => realpathd.includes(p));
+  assert.deepEqual(both, [],
+    "a file cannot be counted in both populations -- one carrying BOTH forms is FIXED, once, because the "
+    + `realpath'd guard is the one that decides: ${both.join(", ")}`);
+
+  const declared = declaresAnEntryGuard()
+    .filter((p) => /import\.meta\.url === pathToFileURL\(\s*process\.argv\[1\]/.test(executableSource(p)));
+  assert.equal(plain.length + realpathd.length, declared.length,
+    `${plain.length} plain + ${realpathd.length} realpath'd should be every one of the ${declared.length} `
+    + "files whose guard compares against process.argv[1]. A gap means one of the three patterns has "
+    + "narrowed and some file is in none of them.");
+  assert.ok(realpathd.length > 0,
+    "no file reads as realpath'd, so that pattern matches nothing and the ratchet's 'may not grow' is "
+    + "being satisfied by a check that cannot see a fix");
+});
 
 test("every declared entry guard uses the exact comparison — no sources consulted", () => {
   const declared = declaresAnEntryGuard();
@@ -268,12 +506,12 @@ test("every declared entry guard uses the exact comparison — no sources consul
   // COLLECTED, NOT ASSERTED IN A LOOP: an assertion inside the walk stops at the first offender, and the
   // second then looks like a regression the next time somebody runs it.
   assert.deepEqual(suffixForm, [],
-    'these guard on a path suffix; use import.meta.url === pathToFileURL(process.argv[1] ?? "").href');
+    `these guard on a path suffix; use ${RECOMMENDED_FORM}`);
   assert.deepEqual(concatenated, [],
     "these build the guard by string concatenation, which does not percent-encode -- a path with a space "
     + "makes it silently never run, so the script exits 0 having done nothing. Measured in a directory "
     + 'named "dir with space": the template form matched false while pathToFileURL matched. Use '
-    + 'pathToFileURL(process.argv[1] ?? "").href');
+    + RECOMMENDED_FORM);
 });
 
 /**
