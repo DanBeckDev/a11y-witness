@@ -99,7 +99,7 @@ import { missingTemplateFields, wholeSuiteAcceptanceReason } from "./row-claim/t
 import { moveProjectStatus, filedByLine, fetchLabels as fetchIssueLabels, ensureLabelsExist } from "./row-claim.mjs";
 import { PROJECT_OWNER, PROJECT_NUMBER } from "./board-snapshot.mjs";
 import { REPO } from "./repo-identity.mjs";
-import { declaredRegionFiles, extractRegionSection } from "./region-paths.mjs";
+import { declaredRegionFiles, extractRegionSection, unrecognisedRegionPaths } from "./region-paths.mjs";
 import { loadLanes, inLane } from "./workflow-lane-check.mjs";
 
 /** @type {(cmd: string, args: string[]) => string} */
@@ -160,6 +160,29 @@ export function bodyFromArgv(argv) {
 }
 
 /**
+ * #1158: WHAT THE REGION LOOKS LIKE IT DECLARES AND DOES NOT — printed, never swallowed.
+ *
+ * A `.claude/` path declared inline reserved nothing while the same path fenced reserved normally, and
+ * **nothing said so**: `row-file` accepted the row, the author read their own path back out of the body,
+ * and B4 protected a file nobody had claimed. Deriving the prefix list fixes every directory that EXISTS;
+ * this covers the rest — a typo, a path from another repo, a file moved since the row was drafted.
+ *
+ * A WARNING rather than a refusal, deliberately. A Region may legitimately mention a path in prose that
+ * is not a declaration, and a refusal there would block a correct filing to prevent a possible mistake.
+ * The failure this row is about is SILENCE; a line on stderr ends it without taking the decision away.
+ *
+ * @param {string} body
+ * @returns {string | null}
+ */
+export function unrecognisedRegionWarning(body) {
+  const stray = unrecognisedRegionPaths(body);
+  if (stray.length === 0) return null;
+  return `WARNING -- the \`## Region\` section names ${stray.length} path-shaped item(s) that declare `
+    + `NOTHING: ${stray.join(", ")}. B4 will not reserve them and the lane labels will not see them. If `
+    + `one is a declaration, check its spelling; if it is prose, this line is the only cost.`;
+}
+
+/**
  * #1117: A REGION THAT NAMES NO PATH MUST SAY IT MEANS TO.
  *
  * THE ROW'S PREMISE WAS THAT SUCH A ROW CANNOT BE FILED. Measured: it can. `missingTemplateFields`
@@ -184,6 +207,7 @@ export function bodyFromArgv(argv) {
  * @param {string} body
  * @returns {string | null}
  */
+
 export function regionRefusalReason(body) {
   if ((declaredRegionFiles(body) ?? []).length > 0) return null;
   // SCOPED TO THE REGION SECTION, never to the whole body. The phrase appears in prose on rows that DO
@@ -631,6 +655,11 @@ export function createIssue(argv, deps = {}) {
     process.stderr.write(`${reason}\n`);
     return 1;
   }
+  // #1158: AFTER the refusals and BEFORE anything is filed. It does not stop the filing -- see
+  // `unrecognisedRegionWarning` for why a warning rather than a refusal -- but the author sees it while
+  // they still have the body in front of them, which is the only moment the line is cheap to act on.
+  const strayRegion = unrecognisedRegionWarning(/** @type {string} */ (body));
+  if (strayRegion) process.stderr.write(`row-file: ${strayRegion}\n`);
   // #883: THE LANE(S), DERIVED BEFORE ANYTHING IS FILED -- see `laneLabelsOrRefusal`'s own header for why
   // a missing/malformed `docs/lane-ownership.json` refuses here rather than guessing.
   const laneResult = laneLabelsOrRefusal(/** @type {string} */ (body), loadLanesConfig);
