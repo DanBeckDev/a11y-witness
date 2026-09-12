@@ -69,5 +69,8 @@ test("the counts the code computes are internally consistent", () => {
   // The positive half: whatever the number IS, the union must contain the scorer's heads.
   const assessed = new Set(assessedCriteria());
   const missing = SCORED_CRITERIA.filter((c) => !assessed.has(c));
+  assert.ok(SCORED_CRITERIA.length > 0,
+    "#1160: if `SCORED_CRITERIA` is empty this assertion passes having compared nothing -- "
+    + "the control belongs on the population, not on `missing`");
   assert.deepEqual(missing, [], "a criterion with a trained head must be reported as assessed");
 });

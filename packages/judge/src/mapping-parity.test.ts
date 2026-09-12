@@ -63,6 +63,9 @@ test("every criterion rules.ts ASSERTS is one act-rules.ts declares as asserting
   const declared = criteriaDeclaredAsserting();
 
   const undeclared = inCode.filter((c) => !declared.has(c));
+  assert.ok(inCode.length > 0,
+    "#1160: if `inCode` is empty this assertion passes having compared nothing -- "
+    + "the control belongs on the population, not on `undeclared`");
   assert.deepEqual(undeclared, [],
     `rules.ts emits mapping "conformance" for ${JSON.stringify(undeclared)} and act-rules.ts declares it `
     + "`secondary`. The code ASSERTS a conformance failure the declarations say we only refer. This is the "
