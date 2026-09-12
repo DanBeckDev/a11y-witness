@@ -1672,10 +1672,20 @@ const GUIDANCE_CLAIMS = [
  * The remedy when that happens is to re-sync the two copies, never to loosen a pattern -- the two saying it
  * the same way IS the property, since the row this came from is about two copies of one rule.
  *
- * The most fragile of the five is `["the spelling", /out of release, ready/i]`, which pins a RENDERING
- * rather than a rule: a comma becoming a slash moves it while nothing about the rule changes. It is kept
- * because it is the one claim that tells a filer what to DO, and its fragility is the same fragility the
- * whole check has -- named here so the next red is read correctly rather than treated as a defect.
+ * `["the spelling", /out of release, ready/i]` IS THE LEAST FRAGILE OF THE FIVE AND ITS RED IS THE MOST
+ * ACTIONABLE -- the opposite of what this comment said until worker-capture corrected their own objection
+ * to it, and the reason is visible in the two copies:
+ *
+ *   docs/row-filing.md      ...is spelled "out of release, ready" -- importance is said by...
+ *   milestone description   ...is spelled 'out of release, ready' -- importance is said by...
+ *
+ * **Both copies QUOTE it, and this pattern matches inside the quotes.** The two already disagree about the
+ * quote character and the pattern is immune to that by construction. The other four match RUNNING PROSE,
+ * which is exactly what an editorial pass rewrites; **a quoted string is the one thing a copy-editor leaves
+ * alone, because the quotation marks say it is being exhibited rather than written.**
+ *
+ * So a red on this one is not expected wear: it means somebody edited the literal a filer is meant to type.
+ * Act on it before any of the other four.
  *
  * `description` is `null` when the milestone could not be read. That is UNKNOWN and it is reported as
  * unreadable rather than as drift: a token without the scope, or a renamed milestone, must not read as "the
