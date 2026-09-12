@@ -208,7 +208,7 @@ export function firstFailingAssertion(runId, { repo, run = defaultRun }) {
 /**
  * THE QUEUE, AGGREGATED BY CONCLUSION -- never `head`, `tail` or `grep -v` and then a conclusion over the
  * remainder. That hid two failing rows on #900 and turned a partial read into an apparently exhaustive one.
- * @param {{ name: string, conclusion: string | null, status: string }[]} checks
+ * @param {{ name?: string, conclusion?: string | null, status?: string | null }[]} checks
  * @returns {Record<string, number>}
  */
 export function byConclusion(checks) {
@@ -218,10 +218,36 @@ export function byConclusion(checks) {
   /** @type {Record<string, number>} */
   const counts = {};
   for (const check of checks) {
-    const key = check.conclusion ?? check.status;
-    counts[key] = (counts[key] ?? 0) + 1;
+    counts[outcomeOf(check)] = (counts[outcomeOf(check)] ?? 0) + 1;
   }
   return counts;
+}
+
+/**
+ * One check's outcome, normalised -- because THE SAME QUESTION HAS THREE SPELLINGS ACROSS `gh`'s OWN
+ * SOURCES, measured 2026-09-12 against this repository:
+ *
+ * ```
+ * gh api .../check-runs        conclusion: null        status: "in_progress"   lower case
+ * gh run list --json           conclusion: ""          status: "in_progress"   lower case
+ * gh pr list statusCheckRollup conclusion: "SKIPPED"   status: "COMPLETED"     UPPER CASE
+ * ```
+ *
+ * Two traps, and this function exists for both. `??` falls back on `null` and **not** on `""`, so the
+ * middle row buckets under the empty string -- a count labelled with nothing, which reads as a category
+ * nobody recognises rather than as the pending run it is. And the third row makes `SUCCESS` and `success`
+ * two buckets of the same outcome, so a population split across sources sums correctly and reports wrongly.
+ *
+ * A counter whose whole job is "count the population by outcome" must not invent an outcome, and the
+ * empty-string bucket is exactly that. Lower-cased and emptiness-tolerant here, once, rather than at each
+ * of the three call sites this will grow.
+ * @param {{ conclusion?: string | null, status?: string | null }} check
+ * @returns {string}
+ */
+function outcomeOf({ conclusion, status }) {
+  const present = (/** @type {string | null | undefined} */ value) =>
+    (typeof value === "string" && value.trim() !== "" ? value.trim().toLowerCase() : null);
+  return present(conclusion) ?? present(status) ?? "unknown";
 }
 
 /**
