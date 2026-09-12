@@ -216,6 +216,16 @@ export function hostWorkflowFile(env) {
   if (typeof ref !== "string" || ref.trim() === "") return null;
   // The ref is `<owner>/<repo>/.github/workflows/<file>@<ref>` and the ref half may itself contain `/`
   // (`refs/heads/main`), so the `@` is cut FIRST and the basename taken from what is left.
+  //
+  // FIRST `@`, not last -- a BRANCH NAME may contain one. worker-capture drove `.../ci.yml@refs/heads/
+  // feature@2` through it: cutting at the last `@` takes `2` as the ref and leaves `ci.yml@refs/heads/
+  // feature` as the path, which the pattern below then rejects, turning a valid run into UNKNOWN. The
+  // three-red mutation on this line is that case.
+  //
+  // **A REUSABLE WORKFLOW RESOLVES TO THE CALLED FILE, NOT THE CALLER.** Inside `reusable-build-test.yml`
+  // invoked by `ci.yml`, this returns `reusable-build-test.yml`. That is right for this guard -- the run
+  // being reported on IS the reusable one -- and it is written down because a reader expecting the caller
+  // would read the correct answer as a bug.
   const path = ref.split("@")[0];
   const file = path.slice(path.lastIndexOf("/") + 1);
   return /^[\w.-]+\.ya?ml$/.test(file) ? file : null;
