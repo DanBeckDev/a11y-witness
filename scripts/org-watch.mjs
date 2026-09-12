@@ -163,7 +163,7 @@ export function totalCount(path, { repo, run = defaultRun }) {
  * @returns {{ readable: boolean, red: boolean, since: string | null, hours: number | null,
  *             atLeast: boolean, firstFailing: string | null, why: string | null,
  *             windows: { since: string, until: string | null, hours: number, open: boolean }[],
- *             examined: number }}
+ *             examined: number, pageBeginsMidRed: boolean }}
  */
 export function mainColour({ repo, workflow = "trunk-guard", now = new Date(), run = defaultRun }) {
   /** @type {{ conclusion: string | null, created_at: string, databaseId?: number, id?: number }[]} */
@@ -181,7 +181,7 @@ export function mainColour({ repo, workflow = "trunk-guard", now = new Date(), r
     // success.** A pinning test asserted the shape and could not separate them, because there was nothing
     // to separate: `assert.notDeepEqual(unreadable, green)` is the one line that would have caught it.
     return { readable: false, red: false, since: null, hours: null, atLeast: false, firstFailing: null,
-      windows: [], examined: 0,
+      windows: [], examined: 0, pageBeginsMidRed: false,
       why: `could not read ${workflow}'s runs: ${cause instanceof Error ? cause.message : String(cause)}` };
   }
   // #1047: THE SEQUENCE, from the list already fetched -- no extra call. `mainColour` answers "is main red
@@ -193,7 +193,7 @@ export function mainColour({ repo, workflow = "trunk-guard", now = new Date(), r
   // or a `branch=main` filter that matches nothing -- answers the question no more than a 502 does.
   if (newestFirst.length === 0) {
     return { readable: false, red: false, since: null, hours: null, atLeast: false, firstFailing: null,
-      windows: [], examined: 0,
+      windows: [], examined: 0, pageBeginsMidRed: false,
       why: `${workflow} reports no runs on main at all` };
   }
   if (newestFirst[0].conclusion !== "failure") {
@@ -323,7 +323,7 @@ function outcomeOf({ conclusion, status }) {
  * @param {{ conclusion?: string | null, created_at: string }[]} runs
  * @param {Date} now
  * @returns {{ windows: { since: string, until: string | null, hours: number, open: boolean }[],
- *             examined: number }}
+ *             examined: number, pageBeginsMidRed: boolean }}
  */
 export function redWindows(runs, now) {
   const settled = [...runs]
@@ -344,7 +344,27 @@ export function redWindows(runs, now) {
     windows.push({ since: openedAt, until: null, open: true,
       hours: hoursBetween(openedAt, now.toISOString()) });
   }
-  return { windows, examined: settled.length };
+  // #1049: A PAGE THAT BEGINS MID-RED CLIPS ITS FIRST WINDOW, and the clip is INVISIBLE in the numbers.
+  //
+  // `redWindows` opens at the first `failure` it can see. If the run that actually opened the window is off
+  // the end of `per_page=20`, the window starts at the page edge instead and its hours are understated.
+  // worker-capture drove one real history both ways through this function:
+  //
+  //     whole history    "15" hours, since 2026-09-11T14:00Z, 1 window across 4 settled runs
+  //     page-truncated    "5" hours, since 2026-09-12T00:00Z, 1 window across 2 settled runs
+  //
+  // **Three times understated, on a metric whose target is 0, in the direction that looks better** -- and
+  // the two notes differ only by a denominator no reader would read as a truncation warning, because
+  // "1 window across 2 settled runs" is exactly what a quiet week looks like.
+  //
+  // The bound is readable WITHOUT paginating: if the OLDEST settled run in the page is a `failure`, the
+  // page starts mid-red and that window's start is unknown. One bit, from the list already fetched, and
+  // the identical signal `mainColour` already carries for the streak.
+  // NAMED `pageBeginsMidRed`, not `atLeast`: `mainColour` already carries an `atLeast` meaning "no success
+  // appears in the page, so the STREAK may be older than it looks". Same cause, different claim, and one
+  // object cannot carry both under one name -- which typescript caught the moment they met.
+  const pageBeginsMidRed = settled.length > 0 && settled[0].conclusion === "failure";
+  return { windows, examined: settled.length, pageBeginsMidRed };
 }
 
 /** @param {string} from @param {string} to @returns {number} hours to one decimal */
@@ -361,12 +381,17 @@ function hoursBetween(from, to) {
  * @param {ReturnType<typeof redWindows>} read
  * @returns {{ value: string, note: string }}
  */
-export function redHoursFigure({ windows, examined }) {
+export function redHoursFigure({ windows, examined, pageBeginsMidRed = false }) {
   const total = Math.round(windows.reduce((sum, w) => sum + w.hours, 0) * 10) / 10;
   const stillOpen = windows.some((w) => w.open);
   return {
-    value: String(total),
+    // #1049: `at least` ON THE VALUE, not only in the note. A clipped window understates the figure
+    // threefold and a denominator is not a truncation warning -- the number itself has to say it is a
+    // bound, because the number is what gets quoted.
+    value: pageBeginsMidRed ? `at least ${total}` : String(total),
     note: `${windows.length} window(s) across ${examined} settled run(s) examined`
+      + (pageBeginsMidRed ? "; the page BEGINS MID-RED, so the first window's start is unknown and this is a "
+        + "lower bound" : "")
       + (stillOpen ? "; THE LAST IS STILL OPEN at the read" : ""),
   };
 }
