@@ -1199,7 +1199,10 @@ function renderStatus(issueNumber, title, status, { body, recorded }) {
  *
  * @param {string[] | null} myFiles this row's declared Region, or null when it could not be read
  * @param {{ number: number, files: string[] }[] | null} otherPrFiles every other open PR, or null
- * @returns {string[]} lines to print -- empty only when B4 genuinely found no overlap
+ * @returns {string[]} lines to print -- NEVER empty. Three states, three sentences: refused,
+ *   could-not-ask, clear. It said "empty only when B4 genuinely found no overlap" until #1085's review,
+ *   which is the shape this repo records most: a doc line two lines above the function, stating what the
+ *   code used to do, in the place it will be believed.
  */
 export function b4Lines(myFiles, otherPrFiles) {
   if (myFiles === null || otherPrFiles === null) {
@@ -1242,8 +1245,11 @@ export function reportB4(issueNumber, deps = {}) {
   const write = deps.write ?? ((/** @type {string} */ text) => process.stdout.write(text));
   const mine = deps.mine ?? lookupMyRegionFiles;
   const others = deps.others ?? lookupOpenPrFiles;
-  const lines = b4Lines(mine(issueNumber), others());
-  if (lines.length > 0) write(`${lines.join("\n")}\n`);
+  // NO EMPTINESS GUARD, because `b4Lines` is never empty -- and a dead guard reads as a live one. It was
+  // here until #1085's review: the `reportB4 never writes` mutation was 1 red and this `if` is what that
+  // red would have been credited to, so the next person mutating here would conclude the empty case was
+  // covered by a branch that can no longer be taken.
+  write(`${b4Lines(mine(issueNumber), others()).join("\n")}\n`);
 }
 
 /** @param {number} issueNumber */
