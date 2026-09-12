@@ -91,6 +91,40 @@ export function directoryReservations(body, countUnder = trackedFilesUnder) {
 }
 
 /**
+ * #1193: A DIRECTORY DECLARED WITHOUT ITS TRAILING SLASH RESERVES NOTHING, AND NOTHING SAYS SO.
+ *
+ * `directoryReservations` keys on the slash, because that is what `regionCovers` keys on -- so
+ * `packages/lab/src/training` is declared, reserves NOTHING, and is not reported stray either, since
+ * `declaredRegionFiles` did take it. **Both guards are satisfied and the author reserved nothing.**
+ *
+ * It is the spelling an author reaches by FOLLOWING THE OTHER WARNING. Before #1193 the stray check
+ * reported the slash-less form of every declared directory; the obvious way to satisfy *"declares
+ * NOTHING: packages/lab"* is to drop the slash, which lands on the one cell with no witness at all.
+ * A refusal that is followable and wrong to follow is worse than one that is merely unclear.
+ *
+ * Not folded into `unrecognisedRegionPaths`: that answers "nothing took this", and something did.
+ * The two failures are different and a caller may want one without the other.
+ *
+ * @param {string} body a row body
+ * @param {(entry: string) => boolean} [isDirectory] does this entry name a tracked directory
+ * @returns {string[]} declared entries that name a directory but do not end in `/`
+ */
+export function slashlessDirectoryEntries(body, isDirectory = namesTrackedDirectory) {
+  return (declaredRegionFiles(body) ?? []).filter(
+    (entry) => !entry.endsWith("/") && isDirectory(entry),
+  );
+}
+
+/**
+ * Does `entry` name a tracked DIRECTORY rather than a file? Asked as "are there tracked files beneath
+ * it", so a path that is itself a tracked file answers false -- `scripts/row-file.mjs/` holds nothing.
+ * @param {string} entry @returns {boolean}
+ */
+function namesTrackedDirectory(entry) {
+  return trackedFilesUnder(`${entry}/`) > 0;
+}
+
+/**
  * How many tracked files sit under `prefix`. Injected in tests so the count is not a corpus read.
  * @param {string} prefix @returns {number}
  */
@@ -127,6 +161,16 @@ export function unrecognisedRegionPaths(body) {
   const out = [];
   for (const [, token] of shaped) {
     if (declared.has(token)) continue;
+    // #1193: THE TOKEN IS THE DECLARED DIRECTORY, MINUS ITS SLASH. The shape above ends each path at a
+    // path SEGMENT (`\/[A-Za-z0-9_.-]+`), so it cannot capture a trailing slash: `packages/lab/` is read
+    // out as `packages/lab`. That is a different string from the declaration, so neither test below saw
+    // it -- `startsWith` fails because the token is SHORTER than the prefix -- and every directory Region
+    // that reserved anything was also told it declared nothing. Measured at the time: 13 of 15 open rows.
+    //
+    // Only the eight tracked top-level names escaped, and not by being handled: `docs/` has no segment
+    // after the slash, so the shape never matched it at all. The two cells that looked correct were the
+    // two the instrument could not see.
+    if (declared.has(`${token}/`)) continue;
     if ([...declared].some((d) => d.endsWith("/") && token.startsWith(d))) continue;
     if (!out.includes(token)) out.push(token);
   }
