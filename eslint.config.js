@@ -16,6 +16,7 @@ import { builtinRules } from "eslint/use-at-your-own-risk";
 // their headers, and the third's reasoning is longer than the rule. Imported by RELATIVE path for the
 // reason `isolation-gate.mjs` states: a package specifier here dies before any install has run.
 import { derivedLocalRule } from "./scripts/uncontrolled-emptiness.mjs";
+import { gitSpawnScrubbed } from "./scripts/git-spawn-scrubbed.mjs";
 
 // ESLint's OWN `max-lines-per-function`, registered a second time under a local name so it can run with
 // different options beside the first (#908). A rule takes one set of options per name, and the two budgets
@@ -102,6 +103,7 @@ const local = { rules: {
   "max-physical-lines-per-function": maxLinesPerFunction,
   "bounded-window-reads": boundedWindowReads,
   "uncontrolled-emptiness": derivedLocalRule,
+  "git-spawn-scrubbed": gitSpawnScrubbed,
 } };
 
 export default tseslint.config(
@@ -158,6 +160,10 @@ export default tseslint.config(
       // "Controlled by a guard this rule cannot see" and "the vacuity is the point" are different claims,
       // and a single reason carrying both makes the list unreadable -- which is the failure an exemption
       // list exists to prevent. A third kind of reason is a ROW, not a third entry.
+      // #1185: converted from `git-spawn-classification.test.ts` (#908). EMPTY OPTION BY MEASUREMENT --
+      // 79 of 79 files spawning git already import and call a canonical helper, so this holds a line
+      // rather than finding gaps, and the lint run passing IS that measurement.
+      "local/git-spawn-scrubbed": ["error", { dataNotASpawn: [] }],
       "local/uncontrolled-emptiness": ["error", { exempt: {
         // The naive check reproduced on purpose -- "0 checked, 0 missing" -- to show that examining
         // nothing and finding nothing produce the same sentence. A demonstration of this rule's defect,
