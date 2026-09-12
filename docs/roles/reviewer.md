@@ -64,6 +64,13 @@ For each PR, in order:
 5. **Ask the three shapes this repo pays for most:** a fact stated twice with nothing comparing the copies;
    a fix at one call site when the behaviour is reachable from several; a guard satisfied by prose,
    comments or its own fixture (a "guaranteed absent" literal must be constructed, never spelled).
+6. **Of every assertion that something is empty, ask where its positive control lives — and make the
+   author point at it, not describe it.** `assert.deepEqual(offenders, [])` passes when the population
+   is empty, so the assertion means nothing until something says the population is not. **An emptiness
+   assertion names where its positive control lives.** Accept a line you can read; refuse "the walk
+   obviously finds files". For a locally derived population `local/uncontrolled-emptiness` answers this
+   for you, so the question is really about the **64 call-derived** ones (`f().filter(…)`), which no rule
+   can trace — there, you are the check.
 
 ## The verdict, verbatim
 
