@@ -17,9 +17,14 @@
 import { execFileSync } from "node:child_process";
 import { REPO } from "../repo-identity.mjs";
 import { sandboxGitEnv } from "../git-env.mjs";
+import { assertNoLeakInArgv } from "../../packages/lab/src/packaging/leak-patterns.mjs";
 
 /** @param {string[]} args */
-export const gh = (args) => execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+export const gh = (args) => {
+  // #1053: `trunk-revert` reaches GitHub through this, and so does anything else that imports it.
+  assertNoLeakInArgv("gh", args);
+  return execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+};
 
 /**
  * Each lookup returns null on failure rather than an empty answer -- the distinction every rule needs.
