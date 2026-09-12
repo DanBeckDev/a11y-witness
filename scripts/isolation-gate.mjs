@@ -113,6 +113,52 @@ const siblingDir = (packageDir, dependency) =>
 
 
 /**
+ * The names `npm` will put on a consumer's PATH, for either spelling of `bin`.
+ *
+ * The string shorthand (`"bin": "./cli.mjs"`) links ONE name — the package name with any scope dropped —
+ * so `@a11ign/worker-fleet` would link `worker-fleet`. Reading only the object form would report a package
+ * with the shorthand as declaring no bins at all, which is the same "an absence reads as a pass" shape the
+ * missing-smoke-test branch above exists to refuse.
+ *
+ * @param {{ name?: string, bin?: string | Record<string, string> }} manifest
+ * @returns {string[]}
+ */
+export function declaredBins(manifest) {
+  if (!manifest.bin) return [];
+  if (typeof manifest.bin === "string") return [(manifest.name ?? "").split("/").pop() ?? ""];
+  return Object.keys(manifest.bin);
+}
+
+/**
+ * Declared bins the consumer did NOT get — read from the consumer's own `node_modules/.bin`, never from
+ * the manifest or the tarball listing.
+ *
+ * **`npm install` creates a shim only for a bin whose target it actually received, and creates NOTHING,
+ * silently, for one it did not.** Measured 2026-09-12 against a throwaway package declaring two bins, one
+ * packed and one not: the install printed no warning and exited 0, and `.bin` simply held one entry.
+ * Every field in the manifest was correct; the consumer's failure is `command not found` at first use.
+ *
+ * That is why this asks the consumer rather than comparing `bin` against `packedFiles`. The tarball
+ * listing would answer a NEIGHBOURING question — "is the file in the archive" — and npm's linking rules
+ * (the shorthand above, a scope dropped from the name, a target outside the package root) sit between
+ * that answer and the one a consumer lives with. `existsSync` on a dangling symlink is false, so a shim
+ * npm created pointing at nothing counts as missing here too, which is the right answer for both.
+ *
+ * **This says the bin is REACHABLE, not that it WORKS.** Running them is not available to this gate as a
+ * blanket rule: `a11ign-nvda-worker` starts a server and `a11ign-worker-ctl` drives a VM, so a gate that
+ * executed every declared bin would be a gate nobody could run offline. A package that wants its bin
+ * EXECUTED says so in its own `isolation-smoke.mjs`, which `packages/cli`'s already does — through the
+ * `.bin` shim, for the documented reason that a realpath'd path misses the symlink case.
+ *
+ * @param {string} consumer the throwaway install directory
+ * @param {{ name?: string, bin?: string | Record<string, string> }} manifest
+ * @returns {string[]}
+ */
+export function missingBinShims(consumer, manifest) {
+  return declaredBins(manifest).filter((binName) => !existsSync(join(consumer, "node_modules", ".bin", binName)));
+}
+
+/**
  * What `npm pack --dry-run` actually ships for one package, as a `Set` of paths relative to the package
  * root. This is this repo's one real answer to "can a consumer install this" / "does this reach a
  * consumer", and `scripts/ci-changed.mjs`'s changeset gate imports it directly rather than carrying a
@@ -196,6 +242,37 @@ function packedButUntracked(dir) {
 }
 
 /**
+ * The bin half of a verdict, or `null` when every declared bin reached the consumer.
+ *
+ * Its own function because `checkIsolation` reads as a top-down narrative and this is one step of it --
+ * and because the lint ceiling said so, which is the Stepdown Rule arriving as an error message.
+ *
+ * @param {string} consumer
+ * @param {{ name?: string, bin?: string | Record<string, string> }} manifest
+ * @param {string} name
+ */
+function unreachableBinVerdict(consumer, manifest, name) {
+  const unreachable = missingBinShims(consumer, manifest);
+  if (!unreachable.length) return null;
+  return { ok: false, stage: "bin", name,
+    detail: `installs, but ${unreachable.length} of ${declaredBins(manifest).length} declared bin(s) never `
+      + `reach the consumer's PATH: ${unreachable.join(", ")} — npm links a shim only for a bin whose `
+      + `target it received, and says nothing about one it did not` };
+}
+
+/**
+ * What the PASS line says about bins, announced for the reason the private-package skip is announced
+ * rather than silent: "no bins declared" and "every declared bin is reachable" are different facts, and a
+ * verdict that renders them identically is a gate quietly covering less than its reader thinks.
+ *
+ * @param {{ name?: string, bin?: string | Record<string, string> }} manifest
+ */
+function binNote(manifest) {
+  const declared = declaredBins(manifest);
+  return declared.length ? `; ${declared.length} bin(s) on PATH` : "; no bins declared";
+}
+
+/**
  * Pack, install outside the repo, run the smoke test. Returns a verdict rather than throwing, because the
  * caller needs to report every package rather than stop at the first bad one.
  * @param {string} packageDir
@@ -235,6 +312,13 @@ export function checkIsolation(packageDir) {
     // which is a Fast/Repeatable failure for no coverage in return. A package that genuinely NEEDS a dependency
     // must declare it as a dependency, and this gate exists to catch exactly that mistake.
     runNpm(["install", "--silent", "--no-workspaces", "--omit=optional", ...tarballs], consumer);
+    // BEFORE the smoke test, because a bin a consumer cannot reach is a packaging defect whether or not
+    // the library half works — and because most smoke tests import the package rather than spawning it,
+    // so a green smoke run says nothing about `bin` at all. Measured on this repo the day the check was
+    // written: pointing all five of `@a11ign/worker-fleet`'s bins at a file that does not exist left the
+    // gate reporting `ok: true`.
+    const binProblem = unreachableBinVerdict(consumer, manifest, name);
+    if (binProblem) return binProblem;
     copyFileSync(smoke, join(consumer, SMOKE));
     // `A11Y_ISOLATION_CONSUMER_DIR` carries the RAW `consumer` path — never realpath'd — because both
     // `execFileSync`'s `cwd` option and `require.resolve()` resolve symlinks, so a smoke test cannot
@@ -256,7 +340,8 @@ export function checkIsolation(packageDir) {
           + `published build would not contain them: ${untracked.slice(0, 5).join(", ")}`
           + (untracked.length > 5 ? ` (+${untracked.length - 5} more)` : "") };
     }
-    return { ok: true, stage: "smoke", name, detail: output.trim().split("\n").slice(-1)[0] ?? "" };
+    return { ok: true, stage: "smoke", name,
+      detail: (output.trim().split("\n").slice(-1)[0] ?? "") + binNote(manifest) };
   } catch (error) {
     const e = /** @type {{ stderr?: string, stdout?: string, message?: string, status?: number }} */ (error);
     const stderr = String(e.stderr ?? e.stdout ?? e.message);
