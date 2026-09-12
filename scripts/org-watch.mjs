@@ -28,6 +28,31 @@ export const EXIT = { QUIET: 0, ATTENTION: 1, CANNOT_ASK: 2 };
 /** @param {string[]} args */
 const defaultRun = (args) => execFileSync("gh", args, { encoding: "utf8" }).trim();
 
+// #1154: how far main's tip may lead the newest run before the run list is treated as STOPPED rather than
+// quiet.
+//
+// **THE NUMBER IS BOUNDED BY THE FIELD, NOT TUNED AGAINST A QUEUE.** My first reason here was a
+// cost-asymmetry argument, which is true and leaves the two looking arbitrary. worker-capture's reading is
+// better and it is about `created_at`: GitHub stamps it when the run is REGISTERED, not when it finishes or
+// starts, so a backed-up runner pool cannot inflate this lag. Measured over the five most recent `trunk`
+// runs on main, `created_at` minus the commit's own committer date:
+//
+//   9941bef4  3s     464c22e1  3s     88920fe8  3s     51c125b7  3s     2f6b21cf  3s
+//
+// So a lag above two hours does not mean a slow queue -- it means **no run was CREATED while main moved**,
+// which is the defect itself. Two hours is three orders of magnitude of headroom over the observed 3s and
+// could come down a long way; there is no reason to, because nothing legitimate accumulates in the window.
+//
+// (Stated exactly: all five runs show `created_at === run_started_at`, so no queueing OCCURRED in the
+// sample. What rules queueing out is that they are separate fields with separate meanings, not that these
+// five agree. A queued run would move `run_started_at` and leave `created_at` where it is.)
+//
+// **THE ONE LEGITIMATE FOREVER-LAG, and it is not this workflow.** A workflow with a `paths:` or branch
+// filter can sit un-run across many pushes by design, and this metric would call it stopped. `trunk` runs
+// on every push to main, unfiltered, which is what makes the comparison sound here. A filtered workflow
+// needs a different question, not a bigger number.
+const STOPPED_AFTER_LAG_HOURS = 2;
+
 /**
  * THE TABLE'S ROWS, DECLARED ONCE -- the baseline, the target, and which direction is better.
  *
@@ -156,6 +181,47 @@ export function totalCount(path, { repo, run = defaultRun }) {
 }
 
 /**
+ * HOW STALE IS THIS RUN LIST, measured against a source the workflow cannot freeze -- `null` when unknown.
+ *
+ * #1154. The comparison is main's own TIP COMMIT, not a clock. A threshold on age alone cries wolf on a
+ * genuinely quiet weekend, because `trunk` runs on merges and a repo with no merges truthfully has no new
+ * runs. Main's tip moving without the workflow running is a different statement and it is the true one:
+ * **this workflow is not seeing main any more.** It is silent in a quiet period by construction, and it
+ * does not need to know that a rename ever happened -- which is the property both fixes before it lacked.
+ *
+ * The two facts come from different GitHub subsystems (git data and Actions), so the frozen-entity failure
+ * cannot produce both halves. A shared source would only prove the source agrees with itself.
+ *
+ * @param {{ newestRunAt: string, mainTipAt: string | null, lagHours?: number }} args
+ * @returns {boolean | null} `null` when main's tip could not be read -- unknown is not "fine"
+ */
+export function runsHaveStopped({ newestRunAt, mainTipAt, lagHours = STOPPED_AFTER_LAG_HOURS }) {
+  if (!mainTipAt) return null;
+  const lag = (Date.parse(mainTipAt) - Date.parse(newestRunAt)) / 3_600_000;
+  return Number.isFinite(lag) ? lag > lagHours : null;
+}
+
+/**
+ * WHEN MAIN'S TIP COMMIT LANDED, or `null` when it could not be read.
+ *
+ * A failed read must not be reported as "not stale": the caller treats `null` as unknown rather than as
+ * a pass, because #912's finding on this very file is that an unreadable main and a green main must never
+ * return the same thing.
+ *
+ * @param {string} repo
+ * @param {typeof defaultRun} run
+ * @returns {string | null}
+ */
+function mainTipCommittedAt(repo, run) {
+  try {
+    const at = run(["api", `repos/${repo}/commits/main`, "--jq", ".commit.committer.date"]);
+    return typeof at === "string" && at.trim() !== "" ? at.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * MAIN'S COLOUR, and how long since the last success -- the read #928 existed for.
  *
  * RED OVER AN HOUR REPORTS WITH THE FIRST FAILING TEST NAMED, never the job name: in #928 both `docs` and
@@ -167,8 +233,20 @@ export function totalCount(path, { repo, run = defaultRun }) {
  *             windows: { since: string, until: string | null, hours: number, open: boolean }[],
  *             examined: number, pageBeginsMidRed: boolean }}
  */
-// #909 (2026-09-12): the trunk workflow file is `trunk.yml` (it was `trunk-guard.yml`); a default naming the old
-// file reads `no runs on main at all` from a 404 and turns every hourly watch into a CANNOT_ASK.
+
+// #909/#1154 (2026-09-12): the trunk workflow file is `trunk.yml` (it was `trunk-guard.yml`), and the
+// failure a stale default produces is NOT the one #1150 was filed with. Measured live that afternoon:
+//
+//   actions/workflows/trunk-guard.yml/runs   200   total_count=409   newest 15:07:32Z  (frozen)
+//   mainColour({ workflow: "trunk-guard" })  ->  { red: false, examined: 20, why: null }
+//   mainColour({ workflow: "trunk"       })  ->  { red: false, examined: 4,  why: null }
+//
+// It does not 404 and it is not a CANNOT_ASK. GitHub keeps a deleted or renamed workflow's entity
+// addressable by its old path for ever, so the old name returns a CONFIDENT GREEN off a run history that
+// stopped when the rename landed -- and `examined: 20` against the true read's `examined: 4` means **the
+// wrong answer carries the larger sample**. The `catch` above would have caught a 404; the empty-list
+// guard below would have caught an empty page. The case GitHub actually produces is the one neither
+// covers, which is why the staleness check exists rather than a better default alone.
 export function mainColour({ repo, workflow = "trunk", now = new Date(), run = defaultRun }) {
   /** @type {{ conclusion: string | null, created_at: string, databaseId?: number, id?: number }[]} */
   let runs;
@@ -199,6 +277,18 @@ export function mainColour({ repo, workflow = "trunk", now = new Date(), run = d
     return { readable: false, red: false, since: null, hours: null, atLeast: false, firstFailing: null,
       windows: [], examined: 0, pageBeginsMidRed: false,
       why: `${workflow} reports no runs on main at all` };
+  }
+  // #1154: A LIST THAT STOPPED IS NOT A GREEN MAIN EITHER -- the third member of the family above, and
+  // the only one GitHub actually produced. Unknown (`null`) is NOT treated as fine here, but it is not
+  // treated as stale either: it means main's tip could not be read, so this guard declines to speak and
+  // the run list is used as it stands. Saying more than that would be inventing the thing this row is about.
+  const stopped = runsHaveStopped({ newestRunAt: newestFirst[0].created_at,
+    mainTipAt: mainTipCommittedAt(repo, run) });
+  if (stopped === true) {
+    return { readable: false, red: false, since: null, hours: null, atLeast: false, firstFailing: null,
+      windows: [], examined: 0, pageBeginsMidRed: false,
+      why: `${workflow}'s newest run on main is older than main's own tip commit, so it has stopped `
+        + `seeing main -- a renamed or deleted workflow still answers with its frozen history (#1154)` };
   }
   if (newestFirst[0].conclusion !== "failure") {
     return { readable: true, red: false, since: null, hours: null, atLeast: false, firstFailing: null,
