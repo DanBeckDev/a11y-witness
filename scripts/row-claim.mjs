@@ -1150,6 +1150,10 @@ function renderStatus(issueNumber, title, status, { body, recorded }) {
     process.stdout.write(`UNCLAIMED -- #${issueNumber} "${title}" -- Filed-by: ${filedBy}\n`);
     process.exitCode = 0;
     const reachability = reportReachability(issueNumber);
+    // #1063: and B4, read-only. Printed AFTER reachability because it is the narrower question: the
+    // reachability report is about whether the work can start at all, this is about whether the claim
+    // will be allowed.
+    reportB4(issueNumber);
     recordCheckSafely({ issueNumber, claimed: false, started: false, sessions: [], reachability });
     return;
   }
@@ -1167,6 +1171,70 @@ function renderStatus(issueNumber, title, status, { body, recorded }) {
   process.exitCode = 1;
   recordCheckSafely({ issueNumber, claimed: true, started: status.started, sessions: status.sessions,
     reachability: null });
+}
+
+/**
+ * #1063: B4'S OWN VERDICT, ON THE READ PATH -- pure, so both outcomes are drivable.
+ *
+ * `check` used to say "IT DOES NOT RUN B4" and mean it: the overlap rule lived only on the claim path, so
+ * the command an agent runs to DECIDE whether to claim did not run the rule that decides whether the
+ * claim is allowed. #1054 closed the half that could be closed honestly -- `check` reads the same declared
+ * Region B4 reads, and its verdict NAMED the rule it was not running. This runs it.
+ *
+ * WHY THE PREDICTION WAS NOT ENOUGH. #1056's line inferred the refusal from "an OPEN PR holds a file".
+ * B4 itself excludes `.changeset/` on both sides, surfaces an OPEN PR whose file list reads empty as a
+ * diagnostic rather than folding it into "no conflict", and names the PR and the exact files. A reader got
+ * a weaker, hand-derived answer from the command they run FIRST and the real one only by attempting the
+ * write.
+ *
+ * READ-ONLY IS THE WHOLE CONSTRAINT. `fileOverlapReason` is pure over two lists; `lookupOpenPrFiles` is
+ * one `gh pr list --json number,files`. Neither writes. This is the READ standing in for the write, which
+ * is the thing #1054 exists because it was not.
+ *
+ * A FAILED LOOKUP IS INCONCLUSIVE, NEVER "NO OVERLAP" -- `lookupOpenPrFiles` and `lookupMyRegionFiles`
+ * both return `null` when they could not ask, and a null read here would otherwise print the same silence
+ * as a clean one. That conflation is the defect this file's own `startability` refuses one level up.
+ *
+ * @param {string[] | null} myFiles this row's declared Region, or null when it could not be read
+ * @param {{ number: number, files: string[] }[] | null} otherPrFiles every other open PR, or null
+ * @returns {string[]} lines to print -- empty only when B4 genuinely found no overlap
+ */
+export function b4Lines(myFiles, otherPrFiles) {
+  if (myFiles === null || otherPrFiles === null) {
+    return ["B4 COULD NOT BE ASKED: the open pull requests or this row's Region could not be read. "
+      + "INCONCLUSIVE, not clear -- `row-claim claim` asks again and may refuse."];
+  }
+  const { reason, emptyOtherPrs } = fileOverlapReason(myFiles, otherPrFiles);
+  const lines = [];
+  if (reason) lines.push(`B4 REFUSES THIS CLAIM: ${reason}`);
+  if (emptyOtherPrs.length > 0) {
+    lines.push(`  NOTE: #${emptyOtherPrs.join(", #")} read as touching NO files. An open PR with an empty `
+      + "file list is a stale reading, not a clean one -- B4's own #462 finding.");
+  }
+  return lines;
+}
+
+/**
+ * #1063: the lookup, the verdict and the printing, in one exported unit -- because MUTATION FOUND THE
+ * WIRING UNHELD. `b4Lines` was covered four ways and `if (b4.length > 0) process.stdout.write(...)` at the
+ * call site was **0 red**: the function could be perfect and never reached.
+ *
+ * That is the shape this session has now hit three times in its own work -- the seam driven, the call site
+ * not -- so the printing moved in here where a spy can hold it. **What remains unheld is one line**:
+ * `renderStatus`'s call to this function. Each extraction moves the unheld surface up one level rather
+ * than removing it, and saying which line is left is the honest end of that regress.
+ *
+ * @param {number} issueNumber
+ * @param {{ write?: (s: string) => void,
+ *   mine?: (n: number) => string[] | null,
+ *   others?: () => { number: number, files: string[] }[] | null }} [deps]
+ */
+export function reportB4(issueNumber, deps = {}) {
+  const write = deps.write ?? ((/** @type {string} */ text) => process.stdout.write(text));
+  const mine = deps.mine ?? lookupMyRegionFiles;
+  const others = deps.others ?? lookupOpenPrFiles;
+  const lines = b4Lines(mine(issueNumber), others());
+  if (lines.length > 0) write(`${lines.join("\n")}\n`);
 }
 
 /** @param {number} issueNumber */
