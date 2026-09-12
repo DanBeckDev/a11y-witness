@@ -34,3 +34,17 @@ whether they are followed.
   from ceo.
 - A product PR opens as a DRAFT and is marked ready only when the reviewer writes "convinced";
   docs-and-tests PRs open ready. Nobody merges by hand.
+
+## Assertions
+
+- **An emptiness assertion names where its positive control lives.** `assert.deepEqual(offenders, [])`
+  passes when the population is empty, so somewhere there must be an assertion that it is not — and the
+  writer has to be able to point at it. A control you believe in is not one you can point at.
+- **Where the population comes from decides whether a machine can help you.** Measured over 236 such
+  assertions, 2026-09-12: 64 derive from a local collection (`const xs = ys.filter(…)`), and
+  `local/uncontrolled-emptiness` refuses those unpinned — **64 derive from a CALL** (`f().filter(…)`),
+  where no rule can trace the source without guessing at what `f()` returns, so those have **only this
+  line**. 73 are accumulators and 17 unclassified, both with their own rows.
+- **This is a habit and this repository loses habits**; the reason it stays one is that the alternative
+  is a rule that infers intent, which is the defect this family is about one level up. A habit that
+  decays beats a guard that guesses, and #1157 records the trade rather than pretending it is not one.
