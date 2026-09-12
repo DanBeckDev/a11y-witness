@@ -62,13 +62,30 @@ export const gitSpawnScrubbed = {
     // and reads as safe to anyone grepping for the import.
     const imported = source.ast.body.some((n) => n.type === "ImportDeclaration"
       && CANONICAL_HELPER_BASENAMES.some((b) => String(n.source.value).endsWith(b)));
+    // THE SPAWNER MUST COME FROM `node:child_process`, NOT MERELY BE CALLED ONE. Matching by callee NAME
+    // collides with any local helper: this rule's own fixture builder in `lint-rules.test.ts` is named
+    // `spawn` and takes `"git"` as its first argument, and the rule reported it six times. A name is a
+    // rendering; the import is the rule. Found by the rule firing on the tests written for it.
+    const fromChildProcess = new Set();
+    for (const n of source.ast.body) {
+      if (n.type !== "ImportDeclaration" || !/^(node:)?child_process$/.test(String(n.source.value))) continue;
+      for (const spec of n.specifiers) {
+        if (spec.type === "ImportSpecifier" && SPAWNERS.has(spec.imported.name)) fromChildProcess.add(spec.local.name);
+        if (spec.type === "ImportDefaultSpecifier" || spec.type === "ImportNamespaceSpecifier") {
+          fromChildProcess.add(spec.local.name);
+        }
+      }
+    }
     let called = false;
     const spawns = [];
     return {
       CallExpression(node) {
         const name = calleeName(node);
         if (name && HELPER_CALLS.has(name)) called = true;
+        const viaNamespace = node.callee?.type === "MemberExpression"
+          && node.callee.object?.type === "Identifier" && fromChildProcess.has(node.callee.object.name);
         if (!name || !SPAWNERS.has(name)) return;
+        if (!fromChildProcess.has(name) && !viaNamespace) return;
         const first = node.arguments[0];
         if (first?.type === "Literal" && first.value === "git") spawns.push(node);
       },
