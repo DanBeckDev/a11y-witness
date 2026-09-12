@@ -48,7 +48,14 @@ export const METRICS = [
   { key: "wallTime", label: "`ci` wall time on a pull request", baseline: "~2 min", target: "<= 5 min", better: "down" },
   { key: "repoReadingTests", label: "test files that read the repo rather than the product", baseline: "207", target: "<= 20", better: "down" },
   { key: "workflows", label: "workflows", baseline: "19", target: "10", better: "down" },
-  { key: "redHours", label: "`main` red for N hours, unattended", baseline: "27.8", target: "0", better: "down" },
+  // #912: THE WORD `unattended` IS GONE FROM THE LABEL, and the baseline is not. worker-capture's finding:
+  // the value is raw red-hours from `mainColour`, which reads `trunk-guard` conclusions and knows nothing
+  // about who was looking -- and the separating case is 2026-09-12's own incident, where 03:52Z-04:15Z had
+  // nobody knowing and the minutes after had two sessions on it. **`redHours` scores those identically.**
+  // A metric that cannot tell them apart must not carry the word in its name; the note beneath it was
+  // honest and the note is not the label, and the label is the half that travels. 27.8 stays as the
+  // baseline because it is the same measurement. Measuring attendance for real is a row, not a line.
+  { key: "redHours", label: "`main` red for N hours", baseline: "27.8", target: "0", better: "down" },
 ];
 
 /**
@@ -153,7 +160,8 @@ export function totalCount(path, { repo, run = defaultRun }) {
  * `ts` reported "fail" and the answer was two assertions from #903, which no job name could have told
  * anyone. The assertion comes from the run's own failing log.
  * @param {{ repo: string, workflow?: string, now?: Date, run?: typeof defaultRun }} deps
- * @returns {{ red: boolean, since: string | null, hours: number | null, firstFailing: string | null }}
+ * @returns {{ readable: boolean, red: boolean, since: string | null, hours: number | null,
+ *             atLeast: boolean, firstFailing: string | null, why: string | null }}
  */
 export function mainColour({ repo, workflow = "trunk-guard", now = new Date(), run = defaultRun }) {
   /** @type {{ conclusion: string | null, created_at: string, databaseId?: number, id?: number }[]} */
@@ -162,25 +170,49 @@ export function mainColour({ repo, workflow = "trunk-guard", now = new Date(), r
     runs = JSON.parse(run(["api",
       `repos/${repo}/actions/workflows/${workflow}.yml/runs?branch=main&per_page=20`])).workflow_runs ?? [];
   } catch (cause) {
-    void cause;
-    return { red: false, since: null, hours: null, firstFailing: null };
+    // #912: AN UNREADABLE MAIN IS NOT A GREEN ONE, AND MUST NOT RETURN THE SAME OBJECT.
+    //
+    // worker-capture's finding, and it was the worst thing in this file. This used to return the green
+    // shape field for field, so `gh: HTTP 502` and a healthy main were INDISTINGUISHABLE -- and composed
+    // with `watchReport`'s silence-when-clean, six hours of `gh` failing were six quiet hours at exit 0,
+    // with `redHours` reporting 0 for the window. **The clock's only failure mode looked exactly like its
+    // success.** A pinning test asserted the shape and could not separate them, because there was nothing
+    // to separate: `assert.notDeepEqual(unreadable, green)` is the one line that would have caught it.
+    return { readable: false, red: false, since: null, hours: null, atLeast: false, firstFailing: null,
+      why: `could not read ${workflow}'s runs: ${cause instanceof Error ? cause.message : String(cause)}` };
   }
   const newestFirst = [...runs].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
-  if (newestFirst.length === 0 || newestFirst[0].conclusion !== "failure") {
-    return { red: false, since: null, hours: null, firstFailing: null };
+  // AN EMPTY LIST IS ALSO NOT A GREEN MAIN. A workflow with no runs at all -- renamed, never triggered,
+  // or a `branch=main` filter that matches nothing -- answers the question no more than a 502 does.
+  if (newestFirst.length === 0) {
+    return { readable: false, red: false, since: null, hours: null, atLeast: false, firstFailing: null,
+      why: `${workflow} reports no runs on main at all` };
+  }
+  if (newestFirst[0].conclusion !== "failure") {
+    return { readable: true, red: false, since: null, hours: null, atLeast: false, firstFailing: null,
+      why: null };
   }
   // THE FIRST failure AFTER THE LAST success -- not the newest failure, which understates every streak
   // longer than one run. #928 was 8 runs over 27.8 hours and the newest-failure reading would have said 0.
+  //
+  // `lastSuccess === -1` means NO success appears in the page at all, so the oldest run here is a PAGE
+  // BOUNDARY rather than the start of the streak, and the figure is a LOWER BOUND. `atLeast` carries that
+  // to the caller rather than letting a bound be printed as an exact number -- the shape #928's own table
+  // is about. worker-capture's finding; the fixture reached everything except this branch.
   const lastSuccess = newestFirst.findIndex((r) => r.conclusion === "success");
-  const streak = lastSuccess === -1 ? newestFirst : newestFirst.slice(0, lastSuccess);
+  const atLeast = lastSuccess === -1;
+  const streak = atLeast ? newestFirst : newestFirst.slice(0, lastSuccess);
   const oldest = streak[streak.length - 1];
   const hours = (now.getTime() - Date.parse(oldest.created_at)) / 3_600_000;
   const id = oldest.databaseId ?? oldest.id;
   return {
+    readable: true,
     red: true,
     since: oldest.created_at,
     hours: Math.round(hours * 10) / 10,
+    atLeast,
     firstFailing: id === undefined ? null : firstFailingAssertion(id, { repo, run }),
+    why: null,
   };
 }
 
@@ -329,9 +361,18 @@ function parseArgs() {
  */
 export function watchReport({ colour }) {
   const lines = [];
+  // #912: A CLOCK THAT CANNOT READ ITS SOURCE SAYS SO. Silence is reserved for a main that is genuinely
+  // green; an unreadable one is the loudest thing this script can be wrong about, because nothing else in
+  // the org is looking.
+  if (!colour.readable) {
+    lines.push(`CANNOT ASK: main's colour is unknown -- ${colour.why}. `
+      + "This watch has not reported on main; treat its silence elsewhere as unverified too.");
+    return lines;
+  }
   if (colour.red) {
-    lines.push(`MAIN IS RED for ${colour.hours}h since ${colour.since} -- `
-      + `${colour.firstFailing ?? "the failing log named no assertion"}`);
+    const bound = colour.atLeast ? "at least " : "";
+    lines.push(`MAIN IS RED for ${bound}${colour.hours}h since ${bound === "" ? "" : "at least "}`
+      + `${colour.since} -- ${colour.firstFailing ?? "the failing log named no assertion"}`);
   }
   return lines;
 }
@@ -346,7 +387,7 @@ function main() {
         value: colour.red && colour.hours !== null ? String(colour.hours) : "0",
         examined: colour.red ? 1 : 0,
         window: "since the last trunk-guard success",
-        note: "the ATTENDANCE half is not measured -- this is raw red-hours (#912)",
+        note: "raw red-hours; attendance is not measured and is no longer implied by the label (#912)",
       }),
     })}\n`);
     process.exitCode = EXIT.QUIET;
