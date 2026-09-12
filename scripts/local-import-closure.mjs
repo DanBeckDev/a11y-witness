@@ -37,9 +37,24 @@ import { dirname, join, resolve } from "node:path";
  * @returns {string}
  */
 export function stripComments(text) {
+  // LINE COMMENTS FIRST, AND THE ORDER IS THE WHOLE FIX -- #1019.
+  //
+  // With the block pass first, a `//` comment CONTAINING `/*` -- a glob in prose, `--branches='agent/*'`,
+  // `@a11ign/*` -- opened a block-comment match that closed at the next `*/` ANYWHERE LATER IN THE FILE,
+  // blanking every line between, real code included. Measured across the tree the night this was found:
+  // 10 of 89 `scripts/*.mjs` with relative imports derived NONE, `scripts/row-claim.mjs` among them --
+  // twelve real imports, zero visible -- and with them `select-changed-tests.mjs` and `ci-changed.mjs`,
+  // which decide what CI runs.
+  //
+  // IT NEEDED BOTH HALVES, which is why it survived a test written for exactly this class (#725): the
+  // `//`-embedded `/*` AND a later block comment to close against. #725's fixture had the opener and no
+  // closer, so the regex never matched and the case passed.
+  //
+  // Blanking the line comments first removes the opener before anything looks for a block, and a real
+  // block comment is still found afterwards because nothing inside it was touched.
   return text
-    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
-    .replace(/\/\/[^\n]*/g, (m) => " ".repeat(m.length));
+    .replace(/\/\/[^\n]*/g, (m) => " ".repeat(m.length))
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "));
 }
 
 /**
