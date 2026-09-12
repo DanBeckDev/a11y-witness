@@ -1652,6 +1652,31 @@ const GUIDANCE_CLAIMS = [
  * WHICH CLAIMS EACH COPY IS MISSING -- pure, so the live fetch is the caller's problem and this is testable
  * with the description injected.
  *
+ * **THIS IS A DELETION DETECTOR, NOT A DRIFT DETECTOR, and the difference is not pedantic.** worker-capture
+ * measured both columns on review, by this repo's own way of testing a text guard -- keep the text, change
+ * the meaning -- and its mirror:
+ *
+ *   a rule DELETED from one copy      caught          <- the risk this exists for
+ *   a rule REWORDED in one copy       false RED       <- reported as deleted
+ *   a rule INVERTED in one copy       NOT caught      <- "it is false that ... does not mean unimportant"
+ *                                                       keeps every phrase and passes clean
+ *
+ * A substring test can only behave this way; tightening the patterns worsens the reworded column and
+ * loosening worsens the inverted one, and the only thing that fixes both is comparing meaning, which is not
+ * available. **So the fix is the name rather than the regexes.** Called a drift detector, a reader trusts it
+ * for the inversion case, which it cannot do at all.
+ *
+ * THE FALSE RED IS A REAL COST AND IT IS STATED RATHER THAN DISCOVERED: `findings > 0` sets
+ * `process.exitCode = 1`, so an editorial pass on either copy reddens the nightly audit until someone
+ * re-syncs the phrase. **A check that goes red for reasons nobody caused is how a check stops being read.**
+ * The remedy when that happens is to re-sync the two copies, never to loosen a pattern -- the two saying it
+ * the same way IS the property, since the row this came from is about two copies of one rule.
+ *
+ * The most fragile of the five is `["the spelling", /out of release, ready/i]`, which pins a RENDERING
+ * rather than a rule: a comma becoming a slash moves it while nothing about the rule changes. It is kept
+ * because it is the one claim that tells a filer what to DO, and its fragility is the same fragility the
+ * whole check has -- named here so the next red is read correctly rather than treated as a defect.
+ *
  * `description` is `null` when the milestone could not be read. That is UNKNOWN and it is reported as
  * unreadable rather than as drift: a token without the scope, or a renamed milestone, must not read as "the
  * description dropped the rule", which is a different fault with a different fix.
