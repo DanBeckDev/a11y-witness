@@ -42,7 +42,7 @@ than re-derives:
 
 ## Why it runs on push to `main`, never on a schedule
 
-The watchdog is a `continue-on-error` step in `.github/workflows/trunk-guard.yml`'s `watchdogs` job (#901;
+The watchdog is a `continue-on-error` step in `.github/workflows/trunk.yml`'s `watchdogs` job (#901;
 until 2026-09-10 it was a workflow of its own), which triggers on `push: branches: [main]`, the same choice
 `board-liveness.yml` and `npm-token-liveness.yml` already made and for the identical reason: a watchdog
 that is itself scheduled has the disease it is watching for. GitHub disables a scheduled workflow after

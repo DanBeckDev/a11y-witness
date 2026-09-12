@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // @ts-check
-// command: a backstop sweep for close-rows.yml, which fires for some merges and silently not others
-// #394: A BACKSTOP FOR close-rows.yml, WHICH FIRES FOR SOME MERGES AND NOT OTHERS AND NOBODY KNOWS WHY.
+// command: close the rows every PR merged in the window declared, riding trunk.yml's push and nightly's hourly cron
+// #394: A BACKSTOP FOR THE CLOSE-ROWS PATH, WHICH FIRED FOR SOME MERGES AND NOT OTHERS AND NOBODY KNEW WHY.
+// #909 (2026-09-12): this is now ALSO the primary path, as trunk.yml's `closeRows` job on every push to main,
+// because since #416 merges are PAT merges and fire push; the hourly run in nightly.yml is the backstop.
 //
 // Measured 2026-09-07: two PRs met every condition `close-rows.yml` needs -- bot merge, base `main`, the
 // workflow present in the head, a `Closes #N` GitHub itself resolved, the row open -- and NO run of that
@@ -9,10 +11,10 @@
 // measurement, not reasoning (see the issue). `ceo`'s ruling: do not chase the cause, remove the single
 // point of failure.
 //
-// THIS RIDES `trunk-guard.yml`'s EXISTING `push: main` RUN (unit 3), as a second entry into the SAME
+// THIS RIDES `trunk.yml`'s EXISTING `push: main` RUN (unit 3), as a second entry into the SAME
 // `closurePlan` decision `close-rows-for-merged-pr.mjs` already drives -- imported, never re-derived,
 // because a second copy of that decision is the exact "fact stated twice" shape this repo keeps paying
-// for. A push to `main` happens on every merge (that IS what triggers `trunk-guard.yml`), which is also
+// for. A push to `main` happens on every merge (that IS what triggers `trunk.yml`), which is also
 // why this cannot be the ONLY path: the row exists because a trigger cannot be trusted, and `push` is a
 // trigger too. Not a schedule, deliberately -- GitHub disables scheduled workflows repository-wide after
 // 60 days of inactivity, and a backstop that fails by going quiet has the disease it treats.

@@ -55,7 +55,7 @@
 //
 // ## RIDES trunkGate, NOT A NEW JOB -- ceo's ruling: REVERT, never warn
 //
-// This runs as an added STEP inside `trunk-guard.yml`'s existing `trunkGate` job, never a separate one.
+// This runs as an added STEP inside `trunk.yml`'s existing `trunkGate` job, never a separate one.
 // A refusal here fails that job exactly like a failing test would, which is what makes `decideRevert`
 // (`if: needs.trunkGate.result == 'failure'`) fire and drive `trunk-revert.mjs` -- the EXISTING revert
 // machinery, unmodified. Unit 3 already reverts a push that fails `gate`; this is the identical class,
@@ -194,7 +194,7 @@ function main() {
   for (const p of unexplained) console.error(`  ${p}`);
   console.error("Content reverts without a matching deletion are out of scope for this check -- see the "
     + "script's own header.");
-  console.error("#655: this is NOT auto-reverted -- trunk-guard.yml's decideRevert deliberately treats a "
+  console.error("#655: this is NOT auto-reverted -- trunk.yml's decideRevert deliberately treats a "
     + "trunkGate-only failure as a question this merge's own two parents cannot answer by re-running a "
     + "suite, so it always records `pass` there and takes no automatic action. A human decides: read the "
     + "paths above against what this merge actually resolved. If the deletion was accidental (the #232 "
