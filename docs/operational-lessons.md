@@ -777,6 +777,20 @@ pattern compared against the file raw and against the same file with comments bl
 #852 row-claim.mjs              4 matches raw,  2 in code  ->  2 in comments
 ```
 
+**That table is what was FOUND. All four were amended the same day** (#1027), and each amendment carries
+its own measurement on its own row — so the remedy is the cheap half of this entry, not the expensive one.
+**#32 is the whole argument in one row:** `grep -n 'forms' real-page-corpus.mjs` answered *"the word forms
+appears in this file"*, which it always will, because most of the matches are URLs
+(`.../tutorials/forms/labels/`). It now imports the module and asks whether any of the 109 shipped pages
+carries a `probeForms` key. Same question, one that can actually change.
+
+**And #34's check carried a wrong word that the grep could never have surfaced.** It read
+`grep -n '2.4.6' criterion-coverage.ts # still partial`; that entry's `status` is `"assessed"` and has
+never been `partial`. The row's substance was right — 2.4.6 covers headings while the criterion says
+*headings AND labels* — but the overstatement lives in its `channels`, and anyone reading the check for
+the row's condition would have gone looking for a field value that does not exist. **A text check cannot
+be wrong about the field it does not read.**
+
 **The rule: a check must read the behaviour, not the file.** In order of preference — call the function
 and read its answer; read an exported value; count something only code can produce. `#968`'s
 `grep -c '^export const OUT'` is the cheap correct form: `^export` is a shape a comment cannot have.
