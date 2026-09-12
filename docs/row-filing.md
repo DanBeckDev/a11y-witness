@@ -70,7 +70,7 @@ the person who had closed #762 for it two hours earlier.
 
 **AND `git show <ref>:<path>` IS THE READ. `git checkout <ref> -- <path>` IS A WRITE TO THE INDEX.** It
 copies the ref's whole tree into the working tree and stages it, so running it to *look at* a file on
-`main` staged fifteen files across a `pm/` branch — including `.github/workflows/trunk-guard.yml`, which
+`main` staged fifteen files across a `pm/` branch — including `.github/workflows/trunk.yml`, which
 that branch may not touch, and other sessions' in-flight work. Nothing was committed; a later
 `git checkout` to another branch aborted, which is the only reason it was noticed. CLAUDE.md already
 carries `git checkout --` as the command that destroyed release-eligible weights; **this is the same
