@@ -99,7 +99,7 @@ import { missingTemplateFields, wholeSuiteAcceptanceReason } from "./row-claim/t
 import { moveProjectStatus, filedByLine, fetchLabels as fetchIssueLabels, ensureLabelsExist } from "./row-claim.mjs";
 import { PROJECT_OWNER, PROJECT_NUMBER } from "./board-snapshot.mjs";
 import { REPO } from "./repo-identity.mjs";
-import { declaredRegionFiles } from "./region-paths.mjs";
+import { declaredRegionFiles, extractRegionSection } from "./region-paths.mjs";
 import { loadLanes, inLane } from "./workflow-lane-check.mjs";
 
 /** @type {(cmd: string, args: string[]) => string} */
@@ -177,8 +177,9 @@ export function bodyFromArgv(argv) {
  * measurement posted on the row"* — and refused otherwise. **The clock and the filer now describe the
  * same category with the same sentence** instead of one inferring it from absence.
  *
- * NOT A SECOND REGION PARSER: `declaredRegionFiles` is the same function B4 and the lane labels read, so
- * "names no path" here means exactly what it means there.
+ * NOT A SECOND REGION PARSER, and that has to hold for the SECTION as well as the paths:
+ * `declaredRegionFiles` and `extractRegionSection` are both the functions B4 and the lane labels read, so
+ * "names no path" and "inside the Region section" mean here exactly what they mean there.
  *
  * @param {string} body
  * @returns {string | null}
@@ -188,8 +189,15 @@ export function regionRefusalReason(body) {
   // SCOPED TO THE REGION SECTION, never to the whole body. The phrase appears in prose on rows that DO
   // change files -- this row's own body says it twice -- and a declaration that can be made accidentally
   // somewhere else is the easy path past the check this refusal exists to close.
-  const section = /^##\s+Region\s*$([\s\S]*?)(?=^##\s|$(?![\s\S]))/m.exec(body);
-  if (section && NOT_A_COMMIT.test(section[1])) return null;
+  //
+  // THROUGH `extractRegionSection`, NOT A REGEX. My first version wrote its own, and worker-judge found
+  // it disagrees with the shared one BOTH WAYS: the inline form (`Region: ...`) was invisible to mine, so
+  // a row using it could not make the declaration at all; and a `###` sub-heading ENDS the section
+  // everywhere else (#170's recorded shape) while mine ran past it, so a declaration under `### Why`
+  // would have been accepted here and ignored by B4. **The section half is where all of this row's logic
+  // lives, so "the same function B4 reads" has to be true of the section, not only of the paths.**
+  const section = extractRegionSection(body);
+  if (section !== null && NOT_A_COMMIT.test(section)) return null;
   return "REFUSING to file -- the `## Region` section names no file, and nothing says that is deliberate. "
     + "A Region naming no path reserves nothing under B4, so a row that simply FORGOT its paths is "
     + "indistinguishable from one that has none, and nobody can route around it. Either name the files "
