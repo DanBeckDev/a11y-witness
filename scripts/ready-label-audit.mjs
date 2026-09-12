@@ -1627,6 +1627,90 @@ function reportReleaseDrift() {
 const OUT_OF_RELEASE_MILESTONE_NAME = "Out of release";
 
 /**
+ * #1163: THE CLAIMS SENTENCE 2 IS MADE OF, MATCHED AGAINST BOTH COPIES rather than either spelled twice.
+ *
+ * `docs/row-filing.md` and the `Out of release` milestone's description both carry the rule that the label
+ * answers one question and says nothing about importance. **Two copies of one rule with nothing comparing
+ * them is the defect that produced five incidents in one day**, and a page stating that rule while being a
+ * second unpinned copy of it would be refuting itself.
+ *
+ * MATCHED BY LOAD-BEARING PART, NEVER AS A FROZEN SENTENCE. The two texts already differ in ways that mean
+ * nothing -- `ANSWERS ONE QUESTION ONLY` against `answers ONE question`, `'out of release, ready'` against
+ * `"out of release, ready"` -- so a whole-sentence comparison would fail on a comma and teach the next
+ * person to edit the check rather than the copy that drifted.
+ */
+/** @type {[string, RegExp][]} annotated for the reason the `CHECKS` annotation below states, one row down. */
+const GUIDANCE_CLAIMS = [
+  ["one question", /answers one question/i],
+  ["the question itself", /does this block the 20 september publish/i],
+  ["not unimportant", /does not mean unimportant/i],
+  ["the spelling", /out of release, ready/i],
+  ["where importance is said", /importance is said by the ready order/i],
+];
+
+/**
+ * WHICH CLAIMS EACH COPY IS MISSING -- pure, so the live fetch is the caller's problem and this is testable
+ * with the description injected.
+ *
+ * `description` is `null` when the milestone could not be read. That is UNKNOWN and it is reported as
+ * unreadable rather than as drift: a token without the scope, or a renamed milestone, must not read as "the
+ * description dropped the rule", which is a different fault with a different fix.
+ *
+ * @param {string} doc `docs/row-filing.md`'s text
+ * @param {string | null} description the `Out of release` milestone's description
+ * @returns {{ readable: boolean, missingFromDoc: string[], missingFromMilestone: string[] }}
+ */
+export function guidanceDrift(doc, description) {
+  // WHITESPACE COLLAPSED BEFORE MATCHING, and this check found that out by failing on its own doc. Markdown
+  // wraps at 110 characters, so `does not mean\nunimportant` is one claim split across two lines and every
+  // pattern spanning a wrap silently misses. The milestone description is a single unwrapped line, so the
+  // two copies disagree about line breaks by construction and about nothing else.
+  const flat = (/** @type {string} */ text) => text.replace(/\s+/g, " ");
+  const missing = (/** @type {string} */ text) =>
+    GUIDANCE_CLAIMS.filter(([, pattern]) => !pattern.test(flat(text))).map(([name]) => String(name));
+  // ONE TEST FOR PRESENT, USED TWICE. The first version asked `trim() !== ""` for `readable` and only
+  // `typeof === "string"` for the claims, so a description of `""` reported unreadable AND missing all five
+  // -- "the milestone dropped every part of the rule" for a milestone nobody managed to read. `gh` spells
+  // absent three ways and the empty string is the one `??` walks straight past.
+  const present = typeof description === "string" && description.trim() !== "";
+  return {
+    readable: present,
+    missingFromDoc: missing(doc),
+    missingFromMilestone: present ? missing(String(description)) : [],
+  };
+}
+
+const ROW_FILING_DOC = "docs/row-filing.md";
+
+/** The live half: read both copies, compare them through `guidanceDrift`, print what drifted. */
+function reportGuidanceDrift() {
+  const doc = readFileSync(new URL(`../${ROW_FILING_DOC}`, import.meta.url), "utf8");
+  let description = null;
+  try {
+    const milestones = JSON.parse(defaultRun("gh",
+      ["api", `repos/${REPO}/milestones?state=all`, "--jq", "[.[]|{title,description}]"]));
+    description = milestones.find((/** @type {{title: string}} */ m) => m.title === "Out of release")
+      ?.description ?? null;
+  } catch (cause) {
+    void cause;
+  }
+  const drift = guidanceDrift(doc, description);
+  if (!drift.readable) {
+    process.stdout.write(`  the \`Out of release\` milestone description could not be read, so whether it `
+      + `still carries ${ROW_FILING_DOC}'s rule is UNKNOWN -- not the same as agreeing with it\n`);
+    return 1;
+  }
+  for (const [where, gone] of [[ROW_FILING_DOC, drift.missingFromDoc],
+    ["the `Out of release` milestone description", drift.missingFromMilestone]]) {
+    for (const claim of gone) {
+      process.stdout.write(`  ${where} no longer states "${claim}" -- the other copy still does, so one of `
+        + `them has drifted and ${ROW_FILING_DOC} is the one a filer reads\n`);
+    }
+  }
+  return drift.missingFromDoc.length + drift.missingFromMilestone.length;
+}
+
+/**
  * @type {[string, () => number][]}  annotated rather than inferred: adding the twelfth entry
  * changed the inferred element type and the destructure at the call site stopped narrowing.
  */
@@ -1643,6 +1727,7 @@ export const CHECKS = [
   ["closing PR never merged", reportSoleUnmergedCloser],
   ["coverage vs tracker", reportCoverageTrackerDisagreement],
   ["release declaration", reportReleaseDrift],
+  ["filing guidance", reportGuidanceDrift],
 ];
 
 /**
