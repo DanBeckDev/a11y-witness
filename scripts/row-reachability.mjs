@@ -168,8 +168,9 @@ function contendedVerdict(row, heldRegions) {
   const paths = contested.map(({ path }) => `\`${path}\``).join(", ");
   return [`#${row}'s subject is on \`main\`, but ${paths} ${contested.length === 1 ? "is" : "are"} held `
     + "by an OPEN pull request.",
-  "  EXPECT `row-claim claim` TO REFUSE THIS. B4 -- no two open pull requests touch the same file -- runs",
-  "  on the claim path, not here, and it reads the same declared Region this line does.",
+  "  EXPECT `row-claim claim` TO REFUSE THIS. B4 -- no two open pull requests touch the same file -- is",
+  "  PREDICTED here from the OPEN PR above, and RUN by `row-claim check`, which prints its own refusal",
+  "  below this block (#1063). Run standalone, this script gives you the prediction and not the rule.",
   "  Sequence with that PR's author. Narrowing the Region to route around it is not a remedy."];
 }
 
@@ -201,8 +202,9 @@ function startableLines(row, examined) {
     ...unsearchedPopulationNote(examined.refs ?? 0),
     ...unreadRegionNote(examined.region),
     "  This checks SYMBOLS, this row's DECLARED region against unmerged branches, and the `blocked`",
-    "  label. IT DOES NOT RUN B4 -- whether an OPEN PR already touches one of these files. `row-claim",
-    "  claim` does, and refuses on it, so this can read STARTABLE where the claim is refused.",
+    "  label. It does NOT run B4 -- whether an OPEN PR already touches one of these files. `row-claim",
+    "  check` runs that separately (#1063) and prints its refusal beside this verdict; run through",
+    "  `row-claim`, not this script directly, or the B4 half is missing.",
     "  A row can still be blocked by something none of these express -- an unstated dependency, a "
       + "decision",
     "  nobody has taken -- so STARTABLE means \"nothing I can see\", never \"nothing blocks this\".",
