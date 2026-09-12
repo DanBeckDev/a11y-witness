@@ -273,16 +273,17 @@ function unmergedRefs() {
 }
 
 /** @param {string} path */
-const onMain = (path) => {
+/** @param {string} path @param {{ run?: (args: string[]) => string }} [deps] @returns {boolean} */
+export const onMain = (path, deps) => {
   // #772: `cat-file -e` RETURNS 128 FOR BOTH "no such path" AND "no such revision", measured against this
   // repository — so the `status === 1` test that fixes `symbolOnMain` and `refsCarryingSymbol` cannot fix
   // this one. The revision has to be proved readable SEPARATELY, and then a 128 is genuinely about the path.
   //
   // Without that, a checkout whose `origin/main` is missing reports every declared path as absent, which
   // reads as "none of this row's Region has landed" -- a confident answer from a question never asked.
-  assertOriginMainReadable();
+  assertOriginMainReadable(deps);
   try {
-    git(["cat-file", "-e", `origin/main:${path}`]);
+    (deps?.run ?? git)(["cat-file", "-e", `origin/main:${path}`]);
     return true;
   } catch {
     return false; // `origin/main` resolves, so this is about the PATH
@@ -292,22 +293,34 @@ const onMain = (path) => {
 /** @type {boolean | null} Proved once per process: the ref either resolves here or nothing below can ask. */
 let originMainProved = null;
 
-/** Throws so `main()`'s CANNOT_ASK path reports it, rather than every path reading as absent. */
-function assertOriginMainReadable({ run = git } = {}) {
+/**
+ * Throws so `main()`'s CANNOT_ASK path reports it, rather than every path reading as absent.
+ * @param {{ run?: (args: string[]) => string }} [deps]
+ */
+function assertOriginMainReadable({ run } = /** @type {{ run?: (args: string[]) => string }} */ ({})) {
+  // THE MEMO IS FOR THE REAL GIT ONLY. A caller that injects `run` is asking about a different world, so
+  // it must neither read the cache nor fill it -- the same discipline `rootFilesOnMain`'s `repoRoot` seam
+  // keeps (#995). Without it the first real call in a process proves the ref and every later injected one
+  // returns early without calling the stub at all, which is a test that cannot fail.
+  if (run) { run(["rev-parse", "--verify", "--quiet", "origin/main^{commit}"]); return; }
   if (originMainProved) return;
-  run(["rev-parse", "--verify", "--quiet", "origin/main^{commit}"]);
+  git(["rev-parse", "--verify", "--quiet", "origin/main^{commit}"]);
   originMainProved = true;
 }
 
 /**
- * #772: the seam exists so the FAILURE can be driven, and the stub is the whole fixture. A source-text
+ * #772: NO PRODUCTION CALLER — this exists only so `assertOriginMainReadable`'s own failure can be driven
+ * in isolation. `onMain` is the production caller and takes the same `deps`, which is what holds the CALL
+ * SITE; this holds the function. Neither alone is enough: asserting the call on the source misses a
+ * swallowed failure inside, and driving the function misses the call being deleted.
+ *
+ * The seam exists so the FAILURE can be driven, and the stub is the whole fixture. A source-text
  * assertion that this function is CALLED catches its deletion and misses a swallowing `try` inside it --
  * still called, still named, unable to fail. That is the proof that proves nothing, which is the shape
  * this row exists to end, so the test drives a `run` that throws rather than reading the source.
  * @param {{ run?: (args: string[]) => string }} [deps] @returns {void}
  */
 export function proveOriginMainReadable(deps) {
-  originMainProved = null;
   assertOriginMainReadable(deps);
 }
 
@@ -403,7 +416,7 @@ export function subjectAndRegionFacts(body) {
   // other ref, means the row's subject has not landed -- which no region check can see, because nobody is
   // editing the file it is missing from. #719: this used to ask the question of the row's own named files
   // rather than of `main` itself -- see `symbolOnMain`'s own header for why that is a different question.
-  const present = paths.filter(onMain);
+  const present = paths.filter((path) => onMain(path));
   const subjectsMissing = [];
   for (const name of symbols) {
     if (symbolOnMain(name)) continue;
