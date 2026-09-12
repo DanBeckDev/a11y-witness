@@ -293,10 +293,22 @@ const onMain = (path) => {
 let originMainProved = null;
 
 /** Throws so `main()`'s CANNOT_ASK path reports it, rather than every path reading as absent. */
-function assertOriginMainReadable() {
+function assertOriginMainReadable({ run = git } = {}) {
   if (originMainProved) return;
-  git(["rev-parse", "--verify", "--quiet", "origin/main^{commit}"]);
+  run(["rev-parse", "--verify", "--quiet", "origin/main^{commit}"]);
   originMainProved = true;
+}
+
+/**
+ * #772: the seam exists so the FAILURE can be driven, and the stub is the whole fixture. A source-text
+ * assertion that this function is CALLED catches its deletion and misses a swallowing `try` inside it --
+ * still called, still named, unable to fail. That is the proof that proves nothing, which is the shape
+ * this row exists to end, so the test drives a `run` that throws rather than reading the source.
+ * @param {{ run?: (args: string[]) => string }} [deps] @returns {void}
+ */
+export function proveOriginMainReadable(deps) {
+  originMainProved = null;
+  assertOriginMainReadable(deps);
 }
 
 /**
