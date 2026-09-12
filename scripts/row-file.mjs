@@ -99,7 +99,7 @@ import { missingTemplateFields, wholeSuiteAcceptanceReason } from "./row-claim/t
 import { moveProjectStatus, filedByLine, fetchLabels as fetchIssueLabels, ensureLabelsExist } from "./row-claim.mjs";
 import { PROJECT_OWNER, PROJECT_NUMBER } from "./board-snapshot.mjs";
 import { REPO } from "./repo-identity.mjs";
-import { declaredRegionFiles, extractRegionSection, unrecognisedRegionPaths } from "./region-paths.mjs";
+import { declaredRegionFiles, extractLabeledSection, extractRegionSection, unrecognisedRegionPaths } from "./region-paths.mjs";
 import { loadLanes, inLane } from "./workflow-lane-check.mjs";
 
 /** @type {(cmd: string, args: string[]) => string} */
@@ -241,11 +241,77 @@ export function regionRefusalReason(body) {
 const NOT_A_COMMIT = /its deliverable is not a commit/i;
 
 /**
+ * A sentence in an Open-check that ASSERTS what the command prints. `Prints \`0\` today`, `returns 3`,
+ * `reads 7`, `-> 0`. Deliberately about CLAIMS rather than about output: clause 4 of #1174 -- some rows'
+ * checks are a command whose meaning the reader judges, and mandating output would refuse those.
+ */
+const ASSERTS_AN_OUTPUT = /\b(?:prints?|returns?|reads?|outputs?|gives?|yields?)\b[^.\n]{0,40}?[`'"]?-?\d/i;
+
+/** A line that looks like something being RUN rather than something it printed. */
+const LOOKS_LIKE_A_COMMAND = /^\s*(?:\$\s+)?(?:npx|npm|node|git|gh|grep|rg|sed|awk|cat|ls|find|python3?|bash|sh)\b/;
+
+/**
+ * Is there a transcript in `section` whose OUTPUT sits directly under its COMMAND?
+ *
+ * #1174 clause 2, and the clause that carries the row: **adjacency is the property.** A check asking only
+ * whether a command and a number both appear in the block would bless exactly the bodies this rule exists
+ * to catch -- a command at the top and an unrelated figure pasted at the bottom, which is what a
+ * reconstructed transcript looks like. My own #1161 was that shape: `Run at <sha>` above a block printing
+ * a number the command cannot produce.
+ *
+ * @param {string} section @returns {boolean}
+ */
+function hasAdjacentTranscript(section) {
+  for (const fence of section.match(/```[\s\S]*?```/g) ?? []) {
+    const lines = fence.split("\n").slice(1, -1).filter((l) => l.trim() !== "");
+    for (let i = 0; i < lines.length - 1; i += 1) {
+      // A command with a NON-command line straight after it, inside one fence. Two commands in a row are
+      // two commands; a command as the last line of a fence printed nothing here.
+      if (LOOKS_LIKE_A_COMMAND.test(lines[i]) && !LOOKS_LIKE_A_COMMAND.test(lines[i + 1])) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * #1174: AN OPEN-CHECK THAT ASSERTS AN OUTPUT MUST SHOW ONE, ADJACENT TO THE COMMAND.
+ *
+ * Eleven instances between two engineers in one day, of which three were open-checks written from belief:
+ * `Prints \`0\` today -- I ran it` against a command that prints 7, with the file refuting the row among
+ * the seven; and my own, `Run at <sha>` above a block that returns 0 and exits 1, in a row whose subject
+ * was a command nobody executed.
+ *
+ * **A pasted transcript is only a transcript if it was pasted from a run** -- and that clause is what the
+ * refusal has to be built on, because without it any plausible-looking block satisfies the rule, which is
+ * the entire family. Adjacency is the closest machine-checkable proxy: a figure that came from the run
+ * sits under the command, and one reconstructed from belief usually does not.
+ *
+ * WHAT THIS CANNOT DO, stated rather than implied: it cannot tell a real transcript from a fabricated
+ * adjacent one. Someone who invents both lines passes. The defect it removes is the one that actually
+ * happened eleven times -- an assertion with no transcript at all, or with one pasted somewhere else.
+ *
+ * @param {string} body @returns {string | null}
+ */
+export function openCheckTranscriptRefusal(body) {
+  const section = extractLabeledSection(body, "Open-check");
+  if (section === null) return null;
+  const prose = section.replace(/```[\s\S]*?```/g, " ");
+  if (!ASSERTS_AN_OUTPUT.test(prose)) return null;
+  if (hasAdjacentTranscript(section)) return null;
+  return "REFUSING to file -- the `## Open-check` section ASSERTS what the command prints, and no "
+    + "transcript in it shows a command with its output directly underneath. Paste the run: the command "
+    + "on one line and what it printed on the next, in one fenced block. A transcript is only a "
+    + "transcript if it was pasted FROM A RUN -- a claim reconstructed from what you expect the command "
+    + "to say is the defect this refuses, and it has cost this repo eleven rows in one day.";
+}
+
+/**
  * THE VERDICT, PURE -- `null` means proceed. Reuses #707's `missingTemplateFields` outright rather than
  * re-deriving it; see this file's header for why that matters here specifically.
  * @param {string | null} body
  * @returns {string | null}
  */
+
 export function fileRefusalReason(body) {
   if (body === null) {
     return "row-file: no --body or --body-file (or --body-file -) found in these arguments -- this tool "
@@ -267,6 +333,8 @@ export function fileRefusalReason(body) {
   }
   const region = regionRefusalReason(body);
   if (region) return `row-file: ${region}`;
+  const openCheck = openCheckTranscriptRefusal(body);
+  if (openCheck) return `row-file: ${openCheck}`;
   // PRESENCE FIRST, THEN CONTENT. A row with no Acceptance section is refused above for that reason; a
   // row whose Acceptance names the whole suite has the section and cannot be run from it, and the two
   // refusals must not be collapsed -- the fix for each is different, which is the same argument
