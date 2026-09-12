@@ -103,6 +103,9 @@ test("THE EMITTED LISTS MATCH A REAL CAPTURE, not just each other", () => {
   const capture = (raw.capture ?? raw) as { structure?: object; interaction?: object };
   const onTheWire = Object.keys(capture.structure ?? {});
   const undeclared = onTheWire.filter((key) => !EMITTED_STRUCTURE.includes(key));
+  assert.ok(onTheWire.length > 0,
+    "#1160: if `onTheWire` is empty this assertion passes having compared nothing -- "
+    + "the control belongs on the population, not on `undeclared`");
   assert.deepEqual(undeclared, [],
     `a real capture carries a structure key the published type does not name: ${undeclared.join(", ")}`);
 
@@ -183,6 +186,9 @@ test("Capture is a SUBSET of the published CaptureResult — server.mjs adds tas
   const source = readFileSync(CAPTURE_CORE_PATH, "utf8");
   const captureFields = typedefFields(source, "Capture");
   const undeclared = captureFields.filter((field) => !EMITTED_RESULT.includes(field));
+  assert.ok(captureFields.length > 0,
+    "#1160: if `captureFields` is empty this assertion passes having compared nothing -- "
+    + "the control belongs on the population, not on `undeclared`");
   assert.deepEqual(undeclared, [],
     "capture-core.mjs's Capture typedef carries a field @a11ign/evidence's CaptureResult does not "
     + `name: ${undeclared.join(", ")}`);

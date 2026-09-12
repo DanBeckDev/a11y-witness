@@ -41,6 +41,9 @@ test("THE PROSE NO LONGER ENUMERATES, because the enumeration went stale", () =>
   const stale = ["1.1.1:generic-alt", "1.3.1:fake-heading", "3.3.1:validation-error-silent",
     "4.1.3:form-activation-silent"];
   const found = stale.filter((subtype) => source.includes(subtype));
+  assert.ok(stale.length > 0,
+    "#1160: if `stale` is empty this assertion passes having compared nothing -- "
+    + "the control belongs on the population, not on `found`");
   assert.deepEqual(found, [],
     "criterion-coverage.ts must not list subtype owners — rule-ownership.json declares them, and the "
     + "last copy of that list named subtypes which had moved to the rules");
