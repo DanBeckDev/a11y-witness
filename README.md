@@ -1,6 +1,6 @@
 # a11ign
 
-**[a11ign.com](https://a11ign.com)**
+**[github.com/a11ign/a11ign](https://github.com/a11ign/a11ign)**
 
 *(formerly a11y-witness — renamed 2026-09-07, before the transfer to the `a11ign` organisation; see #66.
 Nothing had been published under the old name, so this is a rename, not a migration.)*
