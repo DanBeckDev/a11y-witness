@@ -47,9 +47,11 @@ export const METRICS = [
   { key: "nonProductRed", label: "red PRs whose failing job is NOT a product test", baseline: "2 in 3", target: "0", better: "down" },
   { key: "wallTime", label: "`ci` wall time on a pull request", baseline: "~2 min", target: "<= 5 min", better: "down" },
   { key: "repoReadingTests", label: "test files that read the repo rather than the product", baseline: "207", target: "<= 20", better: "down" },
-  { key: "workflows", label: "workflows", baseline: "19", target: "10", better: "down" },
+  // #909 (2026-09-12): the end state is 13, not the plan's 10 -- ceo ruled the two board workflows stay (#901) and
+  // auto-arm.yml stays (drafts cannot be armed; it hosts the update-branch train), measured on the tree.
+  { key: "workflows", label: "workflows", baseline: "19", target: "13", better: "down" },
   // #912: THE WORD `unattended` IS GONE FROM THE LABEL, and the baseline is not. worker-capture's finding:
-  // the value is raw red-hours from `mainColour`, which reads `trunk-guard` conclusions and knows nothing
+  // the value is raw red-hours from `mainColour`, which reads `trunk` (trunk.yml) conclusions and knows nothing
   // about who was looking -- and the separating case is 2026-09-12's own incident, where 03:52Z-04:15Z had
   // nobody knowing and the minutes after had two sessions on it. **`redHours` scores those identically.**
   // A metric that cannot tell them apart must not carry the word in its name; the note beneath it was
@@ -165,7 +167,9 @@ export function totalCount(path, { repo, run = defaultRun }) {
  *             windows: { since: string, until: string | null, hours: number, open: boolean }[],
  *             examined: number, pageBeginsMidRed: boolean }}
  */
-export function mainColour({ repo, workflow = "trunk-guard", now = new Date(), run = defaultRun }) {
+// #909 (2026-09-12): the trunk workflow file is `trunk.yml` (it was `trunk-guard.yml`); a default naming the old
+// file reads `no runs on main at all` from a 404 and turns every hourly watch into a CANNOT_ASK.
+export function mainColour({ repo, workflow = "trunk", now = new Date(), run = defaultRun }) {
   /** @type {{ conclusion: string | null, created_at: string, databaseId?: number, id?: number }[]} */
   let runs;
   try {
@@ -315,7 +319,7 @@ function outcomeOf({ conclusion, status }) {
  *   contributes nothing or is dropped for having no close, so **the worst state reports as the best**.
  * - **A run still IN FLIGHT neither opens nor closes a window.** It is not a failure and it is not a
  *   success, and treating it as either invents an edge.
- * - **A GAP IN THE RUNS IS NOT GREEN.** `trunk-guard` runs on merges, so six hours with no merge is six
+ * - **A GAP IN THE RUNS IS NOT GREEN.** `trunk` runs on merges, so six hours with no merge is six
  *   hours of UNKNOWN -- no evidence either way. `examined` is returned so a caller can say "N windows
  *   across M runs examined" rather than reporting a clean sheet it did not earn. A field empty by
  *   construction is not evidence of absence.
@@ -500,7 +504,7 @@ function main() {
       redHours: figure({
         value: colour.red && colour.hours !== null ? String(colour.hours) : "0",
         examined: colour.red ? 1 : 0,
-        window: "since the last trunk-guard success",
+        window: "since the last trunk success",
         note: "raw red-hours; attendance is not measured and is no longer implied by the label (#912)",
       }),
     })}\n`);
