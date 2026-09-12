@@ -167,6 +167,12 @@ export function bodyFromArgv(argv) {
  * and B4 protected a file nobody had claimed. Deriving the prefix list fixes every directory that EXISTS;
  * this covers the rest — a typo, a path from another repo, a file moved since the row was drafted.
  *
+ * **A PATH THIS CANNOT PLACE IS EITHER A TYPO OR A DIRECTORY THAT DOES NOT EXIST YET, and the two want
+ * opposite responses.** The derivation reads `git ls-files`, so it sees only what is already TRACKED: a
+ * greenfield row creating a new top-level directory reads exactly like a misspelling. That case is the
+ * one where the author most wants B4 to reserve something and where nothing is reserved, so the message
+ * has to name it -- a warning that reads as "you made a typo" is dismissed by the author who did not.
+ *
  * A WARNING rather than a refusal, deliberately. A Region may legitimately mention a path in prose that
  * is not a declaration, and a refusal there would block a correct filing to prevent a possible mistake.
  * The failure this row is about is SILENCE; a line on stderr ends it without taking the decision away.
@@ -179,7 +185,8 @@ export function unrecognisedRegionWarning(body) {
   if (stray.length === 0) return null;
   return `WARNING -- the \`## Region\` section names ${stray.length} path-shaped item(s) that declare `
     + `NOTHING: ${stray.join(", ")}. B4 will not reserve them and the lane labels will not see them. If `
-    + `one is a declaration, check its spelling; if it is prose, this line is the only cost.`;
+    + `one is a declaration, check its spelling -- or, if it names a directory this row will CREATE, note `
+    + `that nothing reserves it until it is tracked. If it is prose, this line is the only cost.`;
 }
 
 /**
