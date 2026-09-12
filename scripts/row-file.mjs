@@ -99,7 +99,7 @@ import { missingTemplateFields, wholeSuiteAcceptanceReason } from "./row-claim/t
 import { moveProjectStatus, filedByLine, fetchLabels as fetchIssueLabels, ensureLabelsExist } from "./row-claim.mjs";
 import { PROJECT_OWNER, PROJECT_NUMBER } from "./board-snapshot.mjs";
 import { REPO } from "./repo-identity.mjs";
-import { declaredRegionFiles, extractLabeledSection, extractRegionSection, unrecognisedRegionPaths } from "./region-paths.mjs";
+import { declaredRegionFiles, directoryReservations, extractLabeledSection, extractRegionSection, unrecognisedRegionPaths } from "./region-paths.mjs";
 import { loadLanes, inLane } from "./workflow-lane-check.mjs";
 
 /** @type {(cmd: string, args: string[]) => string} */
@@ -157,6 +157,30 @@ export function bodyFromArgv(argv) {
     }
   }
   return null;
+}
+
+/**
+ * #1186: HOW MANY FILES EACH DIRECTORY IN THE REGION RESERVES.
+ *
+ * A `/`-terminated entry claims every file beneath it -- B4 uses `regionCovers`, which has a directory
+ * branch, per #941 and on purpose. So the author who writes `packages/` has reserved the package tree
+ * against everyone until their row closes, and nothing told them the size of it.
+ *
+ * **The COUNT is the message.** Saying "this is a directory" tells them what they typed; saying it
+ * reserves 1031 files tells them what they did. A warning rather than a refusal for #1158's reason: a
+ * directory Region is sometimes exactly right, and blocking a correct filing to prevent a possible
+ * mistake is the wrong trade for a failure whose mode is silence.
+ *
+ * @param {string} body @returns {string | null}
+ */
+export function directoryRegionWarning(body) {
+  const dirs = directoryReservations(body);
+  if (dirs.length === 0) return null;
+  const named = dirs.map(({ entry, files }) => `${entry} (${files} file(s))`).join(", ");
+  return `WARNING -- the \`## Region\` section declares ${dirs.length} DIRECTORY entr(ies): ${named}. `
+    + "Each reserves EVERY file beneath it against every other row until this one closes -- a one-line "
+    + "Region that reserves a thousand files looks exactly like one that reserves one. If that is what "
+    + "you mean, nothing to do; otherwise name the files, or say the exclusion in words.";
 }
 
 /**
@@ -735,6 +759,8 @@ export function createIssue(argv, deps = {}) {
   // they still have the body in front of them, which is the only moment the line is cheap to act on.
   const strayRegion = unrecognisedRegionWarning(/** @type {string} */ (body));
   if (strayRegion) process.stderr.write(`row-file: ${strayRegion}\n`);
+  const dirRegion = directoryRegionWarning(/** @type {string} */ (body));
+  if (dirRegion) process.stderr.write(`row-file: ${dirRegion}\n`);
   // #883: THE LANE(S), DERIVED BEFORE ANYTHING IS FILED -- see `laneLabelsOrRefusal`'s own header for why
   // a missing/malformed `docs/lane-ownership.json` refuses here rather than guessing.
   const laneResult = laneLabelsOrRefusal(/** @type {string} */ (body), loadLanesConfig);
