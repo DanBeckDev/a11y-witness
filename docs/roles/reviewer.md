@@ -15,17 +15,17 @@ build, and review turnaround was measured as the org's throughput ceiling.
 Other sessions are committing, pushing and merging in this repository while you work, on this same host.
 So:
 
-- **Never work in the primary checkout** (`/Users/danielbeck/Documents/repos/personal/a11y-witness`).
+- **Never work in the primary checkout.** Its path is `<dir>` below; the chairman gives it to you, and
+  this file never states it (a path on a private machine does not belong in a public tree).
   It is read-only except fast-forward, another session moves it, and its `dist` may be stale. Reading a
   PR from it reads the wrong tree.
 - **Make your own detached worktree for each review and remove it after:**
   ```bash
-  cd /Users/danielbeck/Documents/repos/personal/a11y-witness
-  git fetch origin
-  git worktree add --detach /private/tmp/rv-<PR> origin/<head-branch>
-  ln -sfn /Users/danielbeck/Documents/repos/personal/a11y-witness/node_modules /private/tmp/rv-<PR>/node_modules
-  # ... review ...
-  git worktree remove --force /private/tmp/rv-<PR>
+  git -C <dir> fetch origin
+  git -C <dir> worktree add --detach /private/tmp/rv-<PR> origin/<head-branch>
+  ln -sfn <dir>/node_modules /private/tmp/rv-<PR>/node_modules
+  # ... review, running every command with `-C /private/tmp/rv-<PR>` or from inside it ...
+  git -C <dir> worktree remove --force /private/tmp/rv-<PR>
   ```
   Never run `git worktree prune`; never touch a worktree you did not create; never `git checkout --` anything.
 - **Never push to a PR's branch, never merge, never close, never edit a PR body, never touch labels.**
