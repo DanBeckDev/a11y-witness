@@ -215,6 +215,91 @@ export function fetchOpenIssuesChecked(
 }
 
 /**
+ * The most this walk will ask for before refusing to call a full page a total (#1090). A CEILING rather
+ * than a cap: it is reached only by doubling, and reaching it is REPORTED as a lower bound rather than
+ * treated as an answer -- which is the whole difference between this and the 500 it replaces.
+ */
+const MAX_ISSUE_FETCH = 8000;
+
+/**
+ * Where a walk starts asking. Not a bound on anything: too low costs an extra round trip and too high
+ * costs a larger first response, and neither can make the answer wrong, because only a SHORT page ends
+ * the walk. Stated once so no caller has to pick a number that looks load-bearing and is not.
+ */
+const FIRST_ASK = 500;
+
+/**
+ * How many asks it takes to double from `first` to the ceiling, inclusive -- DERIVED, so it cannot drift
+ * from the two constants it is about.
+ *
+ * #1098 (worker-capture): the loop terminated because TWO expressions agreed -- `Math.min(limit * 2,
+ * MAX_ISSUE_FETCH)` stopped growing and `limit >= MAX_ISSUE_FETCH` threw. Change that `>=` to `>` and it
+ * asks for 8000 for ever: measured, `exit 124`, no output at all.
+ *
+ * **A hang is not a refusal.** This whole walk exists so a partial count is never reported as a total,
+ * and a hang reports neither -- in the nightly it is a stuck job rather than a failing one, which is the
+ * quietest of the three. So the iteration count is bounded independently of the value comparison, and
+ * exhausting it throws and names itself. I had already met this shape and re-spelled the MUTATION around
+ * it, which made the measurement possible and left the code able to hang.
+ *
+ * @param {number} first
+ * @returns {number}
+ */
+function asksToCeiling(first) {
+  return Math.ceil(Math.log2(MAX_ISSUE_FETCH / Math.max(first, 1))) + 1;
+}
+
+/**
+ * #1090: ASK FOR MORE UNTIL THE ANSWER IS SHORT -- the shared walk behind every list in this file.
+ *
+ * The two closed-list reads below had **no truncation guard at all**: a hand-set `--limit 1000` and no
+ * check that the answer was shorter than it. Measured 2026-09-12, 555 closed PRs and 472 closed issues --
+ * so they are under the cap today and will pass it silently, which is worse than the 500 cap that went
+ * dark LOUDLY by refusing. **A guarded cap fails closed; an unguarded one fails quiet.**
+ *
+ * @param {{ run: typeof defaultRun, argv: (limit: number) => string[], what: string,
+ *           first?: number }} spec
+ * @returns {unknown[]}
+ */
+function listUntilShort({ run, argv, what, first = FIRST_ASK }) {
+  const maxAsks = asksToCeiling(first);
+  for (let limit = first, asks = 1; ; limit = Math.min(limit * 2, MAX_ISSUE_FETCH), asks++) {
+    if (asks > maxAsks) {
+      throw new Error(`ready-label-audit: asked gh for ${what} ${asks - 1} times without `
+        + `reaching either a short page or the ${MAX_ISSUE_FETCH} ceiling. That cannot happen `
+        + `while the doubling and the ceiling check agree, so one of them has been changed -- `
+        + `refusing to loop. A hang reports no count at all, which is worse than refusing.`);
+    }
+    /** @type {string} */
+    let raw;
+    try {
+      raw = run("gh", argv(limit));
+    } catch (cause) {
+      throw new Error(`ready-label-audit: could not list ${what} from ${REPO} -- refusing to guess. `
+        + `${/** @type {Error} */ (cause).message}`, { cause });
+    }
+    /** @type {unknown} */
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (cause) {
+      throw new Error(`ready-label-audit: gh's ${what} response was not JSON -- refusing to guess. `
+        + `First 200 chars: ${raw.slice(0, 200)}`, { cause });
+    }
+    if (!Array.isArray(parsed)) {
+      throw new Error(`ready-label-audit: gh's ${what} response was not a list -- refusing to guess. `
+        + `Got: ${JSON.stringify(parsed).slice(0, 300)}`);
+    }
+    if (parsed.length < limit) return parsed;
+    if (limit >= MAX_ISSUE_FETCH) {
+      throw new Error(`ready-label-audit: gh returned exactly ${limit} ${what}, the ceiling this walk `
+        + `will ask for. That is indistinguishable from a truncated result and the count is a LOWER `
+        + `BOUND, not a total -- refusing to report it as one.`);
+    }
+  }
+}
+
+/**
  * Reads issues from the real board, at the given `--state`. Shared by `fetchOpenIssues` (unchanged
  * behaviour: `--state open`, limit 200, still exactly what the mutex check reads) and `fetchAllIssues`
  * (`--state all`, the population #378 exists to make visible). `gh` failing, answering with a shape this
@@ -225,33 +310,25 @@ export function fetchOpenIssuesChecked(
  * @param {{ run?: typeof defaultRun, state: "open" | "all", limit?: number }} args
  * @returns {(LabelledIssue & { state?: "OPEN" | "CLOSED" })[]}
  */
-export function fetchIssues({ run = defaultRun, state, limit = 500 }) {
-  /** @type {string} */
-  let raw;
-  try {
-    raw = run("gh", ["issue", "list", "--repo", REPO, "--state", state, "--limit", String(limit),
-      "--json", "number,title,labels,state"]);
-  } catch (cause) {
-    throw new Error(`ready-label-audit: could not list ${state} issues from ${REPO} -- refusing to guess. `
-      + `${/** @type {Error} */ (cause).message}`, { cause });
-  }
-  /** @type {unknown} */
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (cause) {
-    throw new Error(`ready-label-audit: gh's response was not JSON -- refusing to guess. `
-      + `First 200 chars: ${raw.slice(0, 200)}`, { cause });
-  }
-  if (!Array.isArray(parsed)) {
-    throw new Error(`ready-label-audit: gh's response was not a list -- refusing to guess. `
-      + `Got: ${JSON.stringify(parsed).slice(0, 300)}`);
-  }
-  if (parsed.length === limit) {
-    throw new Error(`ready-label-audit: gh returned exactly the requested limit (${limit}) of ${state} `
-      + `issues -- this is indistinguishable from a truncated result, refusing to report a partial count `
-      + `as a complete one. Raise the limit.`);
-  }
+export function fetchIssues({ run = defaultRun, state, limit = FIRST_ASK }) {
+  // #1090: THE REFUSAL WAS RIGHT AND "RAISE THE LIMIT" WAS NOT A FIX.
+  //
+  // A hand-set cap goes stale silently the day the population passes it -- measured 2026-09-12: 472
+  // closed + 59 open = 531 against a 500 cap, so this check had gone dark and correctly refused rather
+  // than reporting a partial count as a complete one. Raising it to 1000 defers the same defect by a
+  // few months and leaves nothing to notice the next time.
+  //
+  // A PAGINATION WALK ENDS ON A SHORT PAGE -- a positive statement of having reached the end -- never on
+  // a count compared against a literal. `gh issue list --limit N` is a TOTAL rather than a page, so the
+  // walk is expressed by ASKING FOR MORE until the answer is short.
+  //
+  // ONE WALK, NOT THREE. This routes through `listUntilShort` rather than carrying its own copy: the row
+  // names the three hand-set caps in this file as the SAME defect, and a fix reaching one call site when
+  // the behaviour reaches three is this repository's most expensive recurring shape. `limit` survives as
+  // a parameter only because `fetchOpenIssues` starts its walk lower.
+  const parsed = listUntilShort({ run, first: limit, what: `${state} issues`,
+    argv: (ask) => ["issue", "list", "--repo", REPO, "--state", state, "--limit", String(ask),
+      "--json", "number,title,labels,state"] });
   return parsed.map((/** @type {unknown} */ entry, /** @type {number} */ i) => {
     const obj = /** @type {{ number?: unknown, title?: unknown, labels?: unknown, state?: unknown }} */ (entry);
     if (typeof obj?.number !== "number" || typeof obj?.title !== "string" || !Array.isArray(obj?.labels)) {
@@ -904,10 +981,15 @@ export function fetchClaimActivity(numbers, { run = defaultRun } = {}) {
   const lastCommentMinutes = new Map();
   if (numbers.length === 0) return { hasOpenPr, lastPushMinutes, claimedMinutes, lastCommentMinutes };
 
-  const open = run("gh", ["pr", "list", "--repo", REPO, "--state", "open", "--limit", "100",
-    "--json", "number,body,headRefName"]);
+  // #1090: THE FOURTH HAND-SET CAP, and the row named three. It was `--limit 100` with NO truncation
+  // guard -- so unlike the 500 below it would not have gone dark, it would have silently stopped seeing
+  // open pull requests past the hundredth and reported every row behind them as having none in flight.
+  // "This row has no open PR" is what `claimsNobodyIsWorking` acts on, so a quiet under-read here does
+  // not refuse; it RELEASES a claim somebody is working. Same walk as the other three.
   /** @type {{number: number, body: string, headRefName: string}[]} */
-  const prs = JSON.parse(open);
+  const prs = /** @type {any} */ (listUntilShort({ run, what: "open PRs",
+    argv: (ask) => ["pr", "list", "--repo", REPO, "--state", "open", "--limit", String(ask),
+      "--json", "number,body,headRefName"] }));
   for (const n of numbers) {
     // `Closes #N` in an OPEN PR is work in flight. Matching the row number anywhere in the body would
     // count a passing mention, which is the distinction #446 is about.
@@ -1163,27 +1245,9 @@ function reportProvenanceOf(gated) {
  * @returns {ClosedPr[]}
  */
 export function fetchClosedUnmergedPrs({ run = defaultRun } = {}) {
-  /** @type {string} */
-  let raw;
-  try {
-    raw = run("gh", ["pr", "list", "--repo", REPO, "--state", "closed", "--limit", "1000",
-      "--json", "number,mergedAt"]);
-  } catch (cause) {
-    throw new Error(`ready-label-audit: could not list closed PRs from ${REPO} -- refusing to guess. `
-      + `${/** @type {Error} */ (cause).message}`, { cause });
-  }
-  /** @type {unknown} */
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (cause) {
-    throw new Error(`ready-label-audit: gh's closed-PR response was not JSON -- refusing to guess. `
-      + `First 200 chars: ${raw.slice(0, 200)}`, { cause });
-  }
-  if (!Array.isArray(parsed)) {
-    throw new Error(`ready-label-audit: gh's closed-PR response was not a list -- refusing to guess. `
-      + `Got: ${JSON.stringify(parsed).slice(0, 300)}`);
-  }
+  const parsed = listUntilShort({ run, what: "closed PRs",
+    argv: (ask) => ["pr", "list", "--repo", REPO, "--state", "closed", "--limit", String(ask),
+      "--json", "number,mergedAt"] });
   return parsed
     .map((/** @type {any} */ p) => ({ number: p.number, mergedAt: p.mergedAt ?? null }))
     .filter((p) => p.mergedAt === null);
@@ -1440,27 +1504,9 @@ export function reachableCriteriaWithoutRow(statuses, closedIssues) {
  * @returns {ClosedIssue[]}
  */
 export function fetchClosedCompletedIssues({ run = defaultRun } = {}) {
-  /** @type {string} */
-  let raw;
-  try {
-    raw = run("gh", ["issue", "list", "--repo", REPO, "--state", "closed", "--limit", "1000",
-      "--json", "number,title,closedAt,stateReason"]);
-  } catch (cause) {
-    throw new Error(`ready-label-audit: could not list closed issues from ${REPO} -- refusing to guess. `
-      + `${/** @type {Error} */ (cause).message}`, { cause });
-  }
-  /** @type {unknown} */
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (cause) {
-    throw new Error(`ready-label-audit: gh's closed-issue response was not JSON -- refusing to guess. `
-      + `First 200 chars: ${raw.slice(0, 200)}`, { cause });
-  }
-  if (!Array.isArray(parsed)) {
-    throw new Error(`ready-label-audit: gh's closed-issue response was not a list -- refusing to guess. `
-      + `Got: ${JSON.stringify(parsed).slice(0, 300)}`);
-  }
+  const parsed = listUntilShort({ run, what: "closed issues",
+    argv: (ask) => ["issue", "list", "--repo", REPO, "--state", "closed", "--limit", String(ask),
+      "--json", "number,title,closedAt,stateReason"] });
   return parsed.map((/** @type {any} */ i) =>
     ({ number: i.number, title: i.title, closedAt: i.closedAt, stateReason: i.stateReason ?? null }));
 }

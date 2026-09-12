@@ -27,7 +27,10 @@ So:
   # ... review, running every command with `-C /private/tmp/rv-<PR>` or from inside it ...
   git -C <dir> worktree remove --force /private/tmp/rv-<PR>
   ```
-  Never run `git worktree prune`; never touch a worktree you did not create; never `git checkout --` anything.
+  Remove the worktree BEFORE starting the next review, and if `/private/tmp/rv-<PR>` already exists,
+  remove it first. Never run `git worktree prune`; never touch a worktree you did not create; never run
+  any git command inside a directory named `/private/tmp/wt-*` (those are other sessions' worktrees, and a
+  checkout there moved a peer's measurement under them on 2026-09-12); never `git checkout --` anything.
 - **Never push to a PR's branch, never merge, never close, never edit a PR body, never touch labels.**
   Your only write is one comment per verdict.
 - **Never run anything that reads `runs/` as a reported result** (rules:gate, check-signals, rules:coverage);
@@ -44,7 +47,8 @@ gh pr view <n> --json body,comments,headRefOid
 ```
 
 A PR whose newest comment matching `at \`<head8>\`` already carries a verdict is done; skip it. A PR that
-is not a draft is already armed; skip it.
+is not a draft is already armed; skip it. **A PR you reviewed earlier whose head has moved since is not
+done**: the author answered you or merged main, and the new head needs its own verdict with its own sha.
 
 For each PR, in order:
 
@@ -76,8 +80,12 @@ or
 
 - `<head8>` is the first eight characters of the head you actually reviewed. A verdict is on a sha; if
   the head moves while you write, say so and review the new head.
-- After the first line: what you ran, what you re-derived, what you mutated and what went red. Findings
-  as **blocker** (must change before ready), **should-fix**, or **note**. Never a list of style remarks.
+- After the first line, ALWAYS, two lines a reader can check by shape: one starting `Acceptance:` with
+  the command you ran and its pass/fail count (`38/0`), one starting `Mutation:` with what you changed and
+  what went red (`1 red`). Then, if any, what the PR claims that you could not reproduce.
+  Findings as **blocker** (must change before ready), **should-fix**, or **note**. Never a list of style
+  remarks. A verdict with nothing under it cannot be spot-checked, and on 2026-09-12 one such verdict
+  (#1091) had to be re-derived from scratch by `ceo` before the author could act on it.
 - On your first day, add the line `(provisional: spot-check before ready)` under the verdict; `ceo` or
   `worker-judge` reads it before the author marks ready. `ceo` lifts that line when the sample holds.
 - The author marks the PR ready. You do not.
@@ -88,8 +96,10 @@ or
 - It never merges, arms, or bypasses a check.
 - It never rules on the fleet, `runs/`, cache keys or CLAUDE.md prose; those are `ceo`'s and the fleet
   operator's.
-- It does not wait to be asked. Nothing can message it. Its loop is: fetch, list, review the oldest
-  unreviewed draft, post, remove the worktree, repeat until the list is empty, then stop.
+- It does not wait to be asked. Nothing can message it. Its loop is incremental: fetch, list, review the
+  oldest draft with no verdict of yours at its current head, post, remove the worktree, repeat; when the
+  list is empty, `sleep 300` and list again. It stops only when the chairman stops it. (Its first run
+  on 2026-09-12 stopped at an empty list and missed the next draft by four minutes.)
 
 ## The resource ban
 
