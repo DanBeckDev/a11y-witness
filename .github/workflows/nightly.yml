@@ -100,6 +100,30 @@ jobs:
             --run-url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}")
           gh issue comment 169 --body "$BODY"
 
+  # #1135: THE NIGHTLY-ONLY TEST POPULATION. `npm test` (the PR path) and `npm run coverage` (above) resolve
+  # the SAME glob, `packages/*/src/**/*.test.ts`, and the runner accepts no exclusion -- so until this job
+  # existed there was nowhere a guard could go that the PR path did not also pay for, and #908's plan to
+  # move a converted guard's run-property residual (its vacuity check and exemption table) off the PR path
+  # had no destination. `packages/*/nightly/**/*.test.ts` is that destination: outside `src/`, so the PR
+  # glob cannot see it by construction, typechecked by tsconfig, run here with the same floor-checked runner.
+  # A SEPARATE JOB, not a step in `coverage`, so a nightly-only failure is its own red and never classified
+  # by #169's coverage classifier as a coverage miss. No `continue-on-error`: a residual that lands where the
+  # run ignores it is worse than one left on the PR path, and `nightly-only-path.test.ts` pins that.
+  nightly-only:
+    if: github.event.schedule != '37 * * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main, fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - name: Run every test in the nightly-only population, refusing an empty one
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: npm run test:nightly
+
   ready-audit:
     if: github.event.schedule != '37 * * * *'
     runs-on: ubuntu-latest
