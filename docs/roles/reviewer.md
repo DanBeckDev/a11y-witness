@@ -80,8 +80,9 @@ or
 
 - `<head8>` is the first eight characters of the head you actually reviewed. A verdict is on a sha; if
   the head moves while you write, say so and review the new head.
-- After the first line, ALWAYS, two to six lines: the Acceptance command you ran and its pass/fail count,
-  the Mutation you ran and what went red, and anything the PR claims that you could not reproduce.
+- After the first line, ALWAYS, two lines a reader can check by shape: one starting `Acceptance:` with
+  the command you ran and its pass/fail count (`38/0`), one starting `Mutation:` with what you changed and
+  what went red (`1 red`). Then, if any, what the PR claims that you could not reproduce.
   Findings as **blocker** (must change before ready), **should-fix**, or **note**. Never a list of style
   remarks. A verdict with nothing under it cannot be spot-checked, and on 2026-09-12 one such verdict
   (#1091) had to be re-derived from scratch by `ceo` before the author could act on it.
