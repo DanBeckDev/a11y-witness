@@ -26,6 +26,7 @@ import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 import { collect, readSetIsNotMain, ROOT, REPO, MILESTONE, HOURS_MS, issues, outOfRelease, unclassified, achievementsWhoseWorldMoved,
   realPageCaptureAge, worstVerdict } from "./board-data.mjs";
 import { toHtml } from "./board-markdown.mjs";
+import { productHome, PRODUCT_HOME_SOURCE } from "./product-home.mjs";
 
 // Module scope, not inside main(): `section5` reads it, and `document()` is exported for the renderer
 // test, which builds a real document without ever calling main().
@@ -341,7 +342,20 @@ function section5(d) {
   L.push("");
   L.push("**The architect's two findings are planned in; the appendix says what was done with each.**");
   L.push("");
-  L.push("**The product has a name and a home: a11ign, at a11ign.com**, and the board has decided it is "
+  // #1113: THE HOME IS READ, NOT WRITTEN. This line used to carry the domain as a LITERAL, and it was
+  // the EIGHTH place the homepage was stated -- the only one outside `homepage-agreement.test.ts`'s
+  // population, and the one the BOARD reads. The domain did not resolve, so the document told the
+  // chairman the product had a home it did not have, and every guard was green.
+  //
+  // Editing the literal would have closed that on one day and rebuilt the trap for whoever changes the
+  // value next -- which, with the transfer on the 15th and the domain unbought, is plausibly this week.
+  const home = productHome();
+  if (home === null) {
+    throw new Error(`board-document: ${PRODUCT_HOME_SOURCE} states no \`homepage\`, so this document `
+      + "cannot say where the product lives. REFUSING to render rather than inventing one or dropping the "
+      + "sentence: a board document that quietly stops making a claim reads as the claim being withdrawn.");
+  }
+  L.push(`**The product has a name and a home: a11ign, at ${home}**, and the board has decided it is `
     + "an all-in-one accessibility tool rather than a screen-reader one — so its parts are renamed "
     + "around that **before** publication. The appendix says what that costs.");
   return L.join("\n");
