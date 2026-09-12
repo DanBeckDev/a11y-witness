@@ -280,7 +280,7 @@ export function nonSuccessByName(merged) {
 export function trunkState() {
   const sha = ask(() => gh(["api", `repos/${REPO}/commits/main`, "--jq", ".sha"]).trim());
   if (!sha) return null;
-  const runs = ask(() => JSON.parse(gh(["run", "list", "--workflow=trunk-guard.yml", "--limit", "20",
+  const runs = ask(() => JSON.parse(gh(["run", "list", "--workflow=trunk.yml", "--limit", "20",
     "--json", "headSha,conclusion,status,databaseId"])));
   if (!Array.isArray(runs)) return { sha, runId: "?", conclusion: "?", status: "?" };
   const mine = runs.find((/** @type {{headSha: string}} */ r) => r.headSha === sha);
