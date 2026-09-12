@@ -47,7 +47,7 @@
     "url": "git+https://github.com/a11ign/a11ign.git",
     "directory": "packages/cli"
   },
-  "homepage": "https://a11ign.com",
+  "homepage": "https://github.com/a11ign/a11ign",
   "keywords": [
     "accessibility",
     "a11y",
