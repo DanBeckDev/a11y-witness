@@ -190,6 +190,101 @@ export function labelArmedPr({ number, repo, prBody, run = defaultRun }) {
   return { refused: false };
 }
 
+/** #1022: the PR states in which there is nothing left to arm. Neither is a fault. */
+const SETTLED_STATES = ["MERGED", "CLOSED"];
+
+/** How long to keep asking after a refused merge, and how often. Measured on #1020: `gh pr merge` was
+ * refused at 01:15:33.05Z and the PR's own `mergedAt` is 01:15:33Z -- the SAME SECOND -- so the window
+ * between "already in progress" and a readable `MERGED` is sub-second there. Five reads two seconds apart
+ * is ten seconds of budget against a window measured in one, which is slack rather than a guess. */
+const SETTLE_ATTEMPTS = 5;
+const SETTLE_INTERVAL_MS = 2_000;
+
+/** @param {number} ms */
+const defaultSleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
+/**
+ * Pure: is there anything left to arm on a PR in this state?
+ *
+ * #1022: A PR THAT HAS ALREADY MERGED IS THE SUCCESS STATE, and `arm-pr` used to go red on it. Marking
+ * #1020 ready fired this workflow while `gate` was already green, so GitHub merged the PR immediately and
+ * `gh pr merge --auto` answered `GraphQL: Merge already in progress`; every non-zero `gh` exit throws, so
+ * the step failed on a PR that had merged correctly seconds earlier.
+ *
+ * `null` is not a settled state and never reads as one -- an unreadable PR must not resolve to "nothing to
+ * do", which is the shape `armDecision` above already refuses for labels.
+ * @param {string | null} state
+ * @returns {string | null} a reason there is nothing to arm, or `null` to go ahead
+ */
+export function settledReason(state) {
+  if (state === null) return null;
+  return SETTLED_STATES.includes(state) ? `it is already ${state.toLowerCase()}` : null;
+}
+
+/**
+ * The PR's `state` right now, or `null` if it cannot be read -- never a guess, and never a default.
+ * @param {{ number: string, repo: string, run?: typeof defaultRun }} args
+ * @returns {string | null}
+ */
+export function prState({ number, repo, run = defaultRun }) {
+  try {
+    const state = JSON.parse(gh(["pr", "view", number, "--repo", repo, "--json", "state"], run)).state;
+    return typeof state === "string" ? state : null;
+  } catch (cause) {
+    console.error(`arm-pr: could not read #${number}'s state: ${/** @type {Error} */ (cause).message}`);
+    return null;
+  }
+}
+
+/**
+ * #1022: keeps asking until the PR reaches a SETTLED state, or the budget runs out.
+ *
+ * WAITS ON A POSITIVE VERDICT, never on the absence of one. `OPEN` right after a refused merge is also
+ * what a genuinely un-armable PR looks like, so a single read cannot tell "merging, half a second from
+ * MERGED" from "not merging at all" -- and answering on the first read would trade this row's false RED
+ * for a false GREEN, which is the worse direction. The loop ends the moment the answer is positive; the
+ * budget only bounds how long a negative one takes to become final.
+ * @param {{ number: string, repo: string }} pr
+ * @param {{ run?: typeof defaultRun, sleep?: typeof defaultSleep, attempts?: number, intervalMs?: number }} [deps]
+ * @returns {string | null} the settled state, or `null` if it never settled
+ */
+export function waitForSettled({ number, repo },
+  { run = defaultRun, sleep = defaultSleep, attempts = SETTLE_ATTEMPTS, intervalMs = SETTLE_INTERVAL_MS } = {}) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (attempt > 0) sleep(intervalMs);
+    const state = prState({ number, repo, run });
+    if (state !== null && SETTLED_STATES.includes(state)) return state;
+  }
+  return null;
+}
+
+/**
+ * Enable auto-merge -- AND VERIFY THE OUTCOME FROM THE PR'S STATE, NEVER FROM `gh`'s EXIT CODE (#1022).
+ *
+ * This file's own tests already pin the mirror of this for DISARMING: *"`gh pr merge --disable-auto`
+ * returns success on a PR that is already merging, having changed nothing"* -- so disarming is read from
+ * the state because the exit code lies about SUCCESS. Arming was still read from the exit code, which lies
+ * about FAILURE. One half of the class was fixed and the other was not, and the unfixed half is what made
+ * a correctly merged PR carry a red check.
+ *
+ * A failure on a PR that is demonstrably still OPEN is re-thrown unchanged: an un-armed PR nobody merged
+ * is a real fault, and swallowing it would turn this row's fix into "ignore the error".
+ * @param {{ number: string, repo: string }} pr
+ * @param {{ run?: typeof defaultRun, sleep?: typeof defaultSleep, attempts?: number, intervalMs?: number }} [deps]
+ * @returns {{ armed: boolean, reason: string }}
+ */
+export function armMerge({ number, repo }, deps = {}) {
+  const { run = defaultRun } = deps;
+  try {
+    gh(["pr", "merge", "--auto", "--merge", number, "--repo", repo], run);
+    return { armed: true, reason: "auto-merge enabled" };
+  } catch (cause) {
+    const settled = waitForSettled({ number, repo }, deps);
+    if (settled === null) throw cause;
+    return { armed: false, reason: `${settledReason(settled)} -- nothing was left to arm` };
+  }
+}
+
 function main() {
   refuseUnknownFlags(["--pr=", "--repo="], { entry: import.meta.url, command: "node scripts/arm-pr.mjs" });
   const number = flagValue(process.argv, "pr");
@@ -204,10 +299,15 @@ function main() {
   let labels = null;
   /** @type {string | null} */
   let prBody = null;
+  /** @type {string | null} */
+  let state = null;
   try {
-    const view = JSON.parse(gh(["pr", "view", number, "--repo", repo, "--json", "labels,body"]));
+    // #1022: `state` rides along on the read that was already happening -- no extra `gh` call for the
+    // common case, where the PR is plainly OPEN and this costs nothing.
+    const view = JSON.parse(gh(["pr", "view", number, "--repo", repo, "--json", "labels,body,state"]));
     labels = view.labels.map((/** @type {{name: string}} */ l) => l.name);
     prBody = view.body;
+    state = typeof view.state === "string" ? view.state : null;
   } catch (cause) {
     console.error(`arm-pr: could not read #${number}'s labels: ${/** @type {Error} */ (cause).message}`);
   }
@@ -221,11 +321,21 @@ function main() {
     console.log(`arm-pr: NOT arming #${number} -- ${verdict.reason}`);
     return;
   }
-  gh(["pr", "merge", "--auto", "--merge", number, "--repo", repo]);
+  // #1022: A PR THAT HAS ALREADY SETTLED IS NOT A FAILURE. Checked BEFORE the merge from the state this
+  // run already read, so the ordinary "it merged before the workflow got here" case costs no call and no
+  // wait at all -- `armMerge`'s poll is only reached when the merge is genuinely refused.
+  const already = settledReason(state);
+  if (already) {
+    console.log(`arm-pr: NOT arming #${number} -- ${already}, so there is nothing left to arm`);
+    return;
+  }
+  const outcome = armMerge({ number, repo });
   // #1000: `main` owns the exit code. A retired session label refuses the arm, and the workflow step
   // running this must go red rather than reporting a PR labelled with a session that does not exist.
   if (labelArmedPr({ number, repo, prBody }).refused) process.exitCode = 1;
-  console.log(`arm-pr: armed #${number} -- ${verdict.reason}`);
+  console.log(outcome.armed
+    ? `arm-pr: armed #${number} -- ${verdict.reason}`
+    : `arm-pr: did not need to arm #${number} -- ${outcome.reason}`);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) main();
