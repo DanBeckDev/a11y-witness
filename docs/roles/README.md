@@ -23,7 +23,7 @@ product claims and structural questions only. `orchestrator` (platform: fleet, l
 `dispatcher` (pipeline owner: workflows, trunk health, the Ready queue, briefing) and `product-manager`
 (product owner: Ready's contents, the release date, the board document) report to `ceo`. Workers pull from
 Ready and report to nobody; the merge is the report. `tracker-auditor` reports to `product-manager`.
-The `reviewer` role existed for one morning and was retired the same day when review became a job.
+The `reviewer` role existed for one morning on 2026-09-07, was retired when review became a job, and was revived on 2026-09-12 when review became the throughput ceiling; see its file for why it cannot be messaged.
 Nobody messages the chairman; a question only the chairman can answer goes up the chain to `ceo`, who asks.
 
 ---
@@ -72,7 +72,7 @@ the direction where being wrong costs more.
 | Pipeline owner | `dispatcher` | [`worker-loop-orchestrator.md`](./worker-loop-orchestrator.md) | `ceo` |
 | Product loop | `product-manager` | [`product-manager.md`](./product-manager.md) | `ceo` |
 | Tracker audit | `tracker-auditor` | [`tracker-auditor.md`](./tracker-auditor.md) | `product-manager` |
-| First-pass review (RETIRED 2026-09-07) | `reviewer` | [`reviewer.md`](./reviewer.md) | — |
+| Reviewer (revived 2026-09-12; external tool, GitHub is its inbox) | `reviewer` | [`reviewer.md`](./reviewer.md) | `ceo` |
 | Worker | `worker-audit` | [`worker-audit.md`](./worker-audit.md) | `dispatcher` |
 | Worker | `worker-capture` | [`worker-capture.md`](./worker-capture.md) | `dispatcher` |
 | Worker | `worker-config` | [`worker-config.md`](./worker-config.md) | `dispatcher` |
@@ -333,6 +333,22 @@ printed. Conditions: declared in the table with which PRs were held and why; nev
 own PRs without saying so in the same message; never pre-emptively, because a remedy used before its
 condition is met is how a remedy stops being believed. The merge queue at the org transfer (#156) must
 test the queued group once and merge without re-carrying each PR, or this loop survives under a new name.
+
+## Review verdicts — the convention every session parses
+
+A review is a comment on the pull request whose first line is exactly one of:
+
+```
+**Review of #<n> at `<head8>`, by <session>: convinced.**
+**Review of #<n> at `<head8>`, by <session>: not convinced — <one sentence naming the blocker>.**
+```
+
+`<head8>` is the first eight characters of the head the reviewer actually read. **The sha is there because
+a verdict is on a head, never on a PR:** a commit pushed after the verdict returns the PR to unreviewed,
+and the author's timer, the org clock and `ceo`'s heartbeat all decide "reviewed or not" by matching the
+current head's sha and the verdict word, never the opening phrase. The author marks the PR ready on
+`convinced`; a reviewer never arms or merges. Recorded here on 2026-09-12 (#1096) because until then the
+convention lived only in session cron prompts and #912 comments, which a new session cannot read.
 
 ## The contingency drill
 
