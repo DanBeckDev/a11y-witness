@@ -91,6 +91,9 @@ test("CaptureRequest declares every field server.mjs's POST /capture actually ac
   // required to appear on the wire side — see the file header — so this checks one direction only.
   const wireFields = [...ROUTE_LEVEL_FIELDS, ...probeFlagsFromSource(), ...captureOptionsLiteralFields()];
   const undeclared = wireFields.filter((field) => !declaredFields.has(field));
+  assert.ok(wireFields.length > 0,
+    "#1160: if `wireFields` is empty this assertion passes having compared nothing -- "
+    + "the control belongs on the population, not on `undeclared`");
   assert.deepEqual(undeclared, [],
     `server.mjs accepts a request field CaptureRequest does not name: ${undeclared.join(", ")}`);
 });
