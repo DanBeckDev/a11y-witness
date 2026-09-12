@@ -1218,6 +1218,20 @@ function commandLinesAfter(lines, headerIndex) {
       break;
     }
     if (/^#{1,6}\s/.test(trimmed)) break;
+    // #1035: `History: full` IS A DECLARATION, NOT A COMMAND, wherever it sits. It is read from the WHOLE
+    // body by `hasFullHistoryDeclaration`, so a line inside a section is still honoured -- but this loop
+    // used to take it as a command AND, being followed by a blank line, terminate on the next one, so the
+    // fenced block below it was never reached. Measured:
+    //
+    //     INSIDE  the section:  commands = ["History: full"]     <- the prose line, and nothing else
+    //     OUTSIDE the section:  commands = ["npx tsx --test …"]
+    //
+    // The tool then reported "every command above was refused" (true, of a command the author never wrote
+    // as one) and "`History: full` is declared, but no named test file declares `// requires: history`"
+    // (the named file declares it on line 13) -- one placement, two messages, neither naming it. Skipping
+    // rather than refusing, because the declaration is position-independent by design and honouring it
+    // wherever it lands is the behaviour the author already expects.
+    if (HISTORY_FULL_PATTERN.test(trimmed)) continue;
     // #438: stops on ANY of the three known section headers, not just Mutation:, so a bare (non-heading)
     // `Refutation:` line ends an in-progress Acceptance: block instead of being read as one more command.
     if (SECTION_FIELD_NAMES.some((name) => new RegExp(`^(?:\\*\\*|__)?${name}:(?:\\*\\*|__)?`, "i").test(trimmed))) break;
