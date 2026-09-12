@@ -107,13 +107,23 @@ export const LIVE_SESSIONS = ["ceo", "product-manager", "orchestrator", "worker-
 export const RETIRED_SESSIONS = ["dispatcher", "worker-audit", "worker-config", "worker-contracts"];
 
 /**
- * Pure: which of these labels name a session that no longer exists. **Named, never dropped** -- a silent
- * drop and a correct run produce identical output, which is the failure shape this repository has the
- * longest record of.
- * @param {string[]} sessionLabels @returns {string[]}
+ * Pure: which of these labels name a session that is not live, AND WHICH KIND OF NOT-LIVE -- retired by
+ * #913, or unknown to this repository at all. **Named, never dropped**: a silent drop and a correct run
+ * produce identical output, which is the failure shape this repository has the longest record of.
+ *
+ * THE TWO CASES NEED DIFFERENT SENTENCES, and getting that wrong was worker-capture's second finding on
+ * #1020. Filtering on "not in LIVE_SESSIONS" alone refuses all three of `session:dispatcher`,
+ * `session:worker-captur` (a typo) and `session:brand-new-role` -- correct, because failing closed is
+ * right -- but told all three they were RETIRED BY THE ORG RESET, which is false about a typo and about a
+ * session created next week, and sends that reader to a row with nothing to do with their problem.
+ * Consulting `RETIRED_SESSIONS` also makes that export load-bearing rather than decorative, which is what
+ * stops it drifting.
+ * @param {string[]} sessionLabels @returns {{ label: string, retired: boolean }[]}
  */
-export function retiredSessionLabels(sessionLabels) {
-  return sessionLabels.filter((l) => !LIVE_SESSIONS.includes(l.slice("session:".length)));
+export function unknownSessionLabels(sessionLabels) {
+  return sessionLabels
+    .filter((l) => !LIVE_SESSIONS.includes(l.slice("session:".length)))
+    .map((label) => ({ label, retired: RETIRED_SESSIONS.includes(label.slice("session:".length)) }));
 }
 
 /**
@@ -160,14 +170,16 @@ export function labelArmedPr({ number, repo, prBody, run = defaultRun }) {
   // the attribution record that no live session can answer for, and a reader of `attributionFor` would get
   // a verdict naming a session that does not exist. Nothing is applied -- not even the live labels beside
   // it -- because a partial arm is the state nobody can tell from a complete one.
-  const retired = retiredSessionLabels(sessionLabels);
-  if (retired.length > 0) {
-    console.error(`arm-pr: REFUSING to label #${number} with ${retired.join(", ")} -- `
-      + `${retired.length === 1 ? "that session is" : "those sessions are"} RETIRED (#913, the Org Reset of `
-      + "2026-09-10). The label still exists because merged PRs carry it as attribution, but nothing new "
-      + `may be given it. The five live sessions are ${LIVE_SESSIONS.join(", ")}.\n`
-      + `  Fix the ROW's own label first: \`gh issue edit <row> --remove-label ${retired[0]} --add-label `
-      + "session:<a live session>`, then re-run this.");
+  const notLive = unknownSessionLabels(sessionLabels);
+  if (notLive.length > 0) {
+    const why = notLive.map(({ label, retired }) => (retired
+      ? `${label} is RETIRED (#913, the Org Reset of 2026-09-10) -- the label still exists because merged `
+        + "PRs carry it as attribution, but nothing new may be given it"
+      : `${label} is not a session this repository knows`)).join("; ");
+    console.error(`arm-pr: REFUSING to label #${number} -- ${why}.\n`
+      + `  The five live sessions are ${LIVE_SESSIONS.join(", ")}.\n`
+      + `  Fix the ROW's own label first: \`gh issue edit <row> --remove-label ${notLive[0].label} `
+      + "--add-label session:<a live session>`, then re-run this.");
     // RETURNED, NEVER `process.exitCode` FROM IN HERE: setting the exit code inside a library function
     // fails its CALLER's whole process -- caught by this row's own test file, where every named test
     // passed and the FILE failed. `main` owns the exit code; this owns the verdict.
