@@ -75,6 +75,7 @@ import { inBuildReason, lookupHeldRows } from "./row-claim/own-pr-health-rule.mj
 import { resolveBlockedByOverride, blockedByExceptionNote } from "./row-claim/blocked-by-rule.mjs";
 import { fileOverlapReason, lookupMyRegionFiles, lookupOpenPrFiles } from "./row-claim/file-overlap-rule.mjs";
 import { templateFieldsReason, lookupIssueBody } from "./row-claim/template-fields-rule.mjs";
+import { staleRuleReason } from "./row-claim/stale-rule-guard.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
 import { CLAIM_LABEL, STARTED_LABEL } from "./claim-labels.mjs";
 
@@ -1351,6 +1352,21 @@ async function main() {
   // thing it protects.
   refuseUnknownFlags(["--session", "--row=", "--found=", "--blocked=", "--branch=", "--worktree=",
     "--blocked-by="], { entry: import.meta.url, command: "node scripts/row-claim.mjs" });
+  // #1014: BEFORE ANY VERDICT, ask whether this checkout's copy of the rule is the current one. A refusal
+  // printed from a retired rule names a policy the org no longer has, and nothing in the message says which
+  // version produced it -- measured 2026-09-12, when BOTH halves of one refusal described rules replaced
+  // four minutes apart. `COULD NOT DETERMINE` and exit 2 deliberately, not a new prefix: this is the
+  // existing "could not determine at all" outcome, and every consumer already classifies it.
+  //
+  // AT THE ONE CHOKE POINT, not per mode. `check` prints the same rule-derived verdict `claim` does, so a
+  // guard on the claim path alone would leave the read that people quote unheld -- this repository's most
+  // expensive recurring shape is a remedy applied at one call site when the behaviour reaches several.
+  const stale = staleRuleReason();
+  if (stale) {
+    process.stderr.write(`COULD NOT DETERMINE: ${stale}\n`);
+    process.exitCode = 2;
+    return;
+  }
   const argv = process.argv.slice(2);
   const rowFlag = argv.find((a) => a.startsWith("--row="));
 
