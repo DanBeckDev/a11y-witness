@@ -12,6 +12,10 @@ import js from "@eslint/js";
 import tseslint from "typescript-eslint";
 import globals from "globals";
 import { builtinRules } from "eslint/use-at-your-own-risk";
+// #1155: the rule lives in its own module rather than inline -- this config already carries two rules and
+// their headers, and the third's reasoning is longer than the rule. Imported by RELATIVE path for the
+// reason `isolation-gate.mjs` states: a package specifier here dies before any install has run.
+import { derivedLocalRule } from "./scripts/uncontrolled-emptiness.mjs";
 
 // ESLint's OWN `max-lines-per-function`, registered a second time under a local name so it can run with
 // different options beside the first (#908). A rule takes one set of options per name, and the two budgets
@@ -97,6 +101,7 @@ const boundedWindowReads = {
 const local = { rules: {
   "max-physical-lines-per-function": maxLinesPerFunction,
   "bounded-window-reads": boundedWindowReads,
+  "uncontrolled-emptiness": derivedLocalRule,
 } };
 
 export default tseslint.config(
@@ -143,6 +148,26 @@ export default tseslint.config(
       // wrapped, or lint would be red. The list exists so a reader that genuinely does not need the newest
       // answer is CLASSIFIED rather than made to adopt a predicate it has no use for.
       "local/bounded-window-reads": ["error", { wideWindowIsHarmless: [] }],
+      // #1155: EXEMPT BY NAME, with the reason here rather than inferred by the rule. That file
+      // reproduces the naive check -- "0 checked, 0 missing" -- to demonstrate that a check which
+      // examined nothing and a check which examined everything produce the same sentence. It is a
+      // DEMONSTRATION of this rule's defect, inside the guard file for this rule's defect, and it must
+      // stay vacuous. A rule clever enough to recognise a demonstration is one that will excuse a real
+      // defect: the recognition would key on something a real defect can also carry.
+      // #1155: EXEMPT BY NAME WITH ONE OF TWO REASONS, never one option doing both jobs (ceo's ruling).
+      // "Controlled by a guard this rule cannot see" and "the vacuity is the point" are different claims,
+      // and a single reason carrying both makes the list unreadable -- which is the failure an exemption
+      // list exists to prevent. A third kind of reason is a ROW, not a third entry.
+      "local/uncontrolled-emptiness": ["error", { exempt: {
+        // The naive check reproduced on purpose -- "0 checked, 0 missing" -- to show that examining
+        // nothing and finding nothing produce the same sentence. A demonstration of this rule's defect,
+        // inside the guard file for this rule's defect, and it must stay vacuous.
+        "packages/lab/src/packaging/git-population-vacuity.test.ts": "demonstration",
+        // `CORPUS_GUARD` is DERIVED from `samples.length > 0` and consumed as an early return, so the
+        // assertion is unreachable with an empty population. The control was already there; pinning it
+        // again would turn an honest skip into a failure on a checkout with no corpus.
+        "packages/lab/src/capture/verify.corpus.test.ts": "guarded-by labCorpusReadable",
+      } }],
       "complexity": ["error", 15], // "do one thing": decision points (stricter than ESLint's default 20)
       "max-depth": ["error", 3], // "indent level should not be greater than one or two"
       "max-params": ["error", 4], // flag/polyadic args -> use an argument object
