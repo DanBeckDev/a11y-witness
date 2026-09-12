@@ -12,7 +12,7 @@ Three shorter documents came first for a reason, and they are not duplicated her
 |---|---|
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | the 60-second orientation, and the question that decides everything: **does your change need a Windows worker?** Most of the repo does not. |
 | [`SECURITY.md`](SECURITY.md) | what this tool does that somebody must know before running it — `probeForms` presses buttons, the worker has no authentication, `A11Y_PYTHON` is executable |
-| [`docs/README.md`](docs/README.md) | the index to every guide and runbook, grouped by task, with [`docs/adr/README.md`](docs/adr/README.md) for the 37 decision records |
+| [`docs/README.md`](docs/README.md) | the index to every guide and runbook, grouped by task, with [`docs/adr/README.md`](docs/adr/README.md) for the decision records |
 | [`docs/backlog.md`](docs/backlog.md) | **The RECORD of what was found and what it cost.** [GitHub Issues](https://github.com/DanBeckDev/a11y-witness/issues) answers "what is open" — `ready` is pickable, `in-progress` plus a `session:` label is claimed. This file, `known-gaps.md` and `not-working.md` hold the measurement, the wrong turn and the command that settles it: the half an issue is bad at |
 | [`docs/known-gaps.md`](docs/known-gaps.md) | **what this project does NOT do, or does not yet know** — each with what it would cost and what would tell you it is fixed. Read it before claiming a thing is finished; "all gates pass" and "everything is validated" are different claims |
 
@@ -54,9 +54,9 @@ We follow the applicable subset of *Clean Code* (Martin). It has two halves, enf
 
 ## Working on a Mac (the usual case)
 
-> **THE LOCAL UTM WORKER VMs ARE DEPRECATED. Capture on the bare-metal fleet.** TEN boxes
-> (`a11y-worker-2` … `-11`, in `inventory.yml`; `-1` is retired and its number is never reused.
-> [`-10` rejoined 2026-09-09 →](docs/operational-lessons.md#a11y-worker-10-withdrawn-2026-09-07-rejoined-2026-09-09)) serve
+> **THE LOCAL UTM WORKER VMs ARE DEPRECATED. Capture on the bare-metal fleet.** Every box
+> `inventory.yml` lists (`a11y-worker-2` upward; `-1` is retired and its number is never reused.
+> [`-10` rejoined 2026-09-09 →](docs/operational-lessons.md#a11y-worker-10-withdrawn-2026-09-07-rejoined-2026-09-09)) serves
 > `/health` without a laptop in the path, and `npm run fleet:status` is the one command that says
 > so. Deploy with **`npm run fleet:deploy`**, never `worker:deploy` — that one is `utmctl file push` to a
 > VM UUID and cannot reach a physical box.
@@ -129,7 +129,7 @@ why not an `/admin/update` route (the worker has no auth and binds all interface
 gotchas that otherwise cost an afternoon — `administrators_authorized_keys` and OpenSSH's `DefaultShell`.
 The fleet is defined **once**, in `inventory.yml`.
 
-A new bare-metal box needs no console visit — PXE + `autounattend.xml` plants the account and key. Deploy pushes every hashed file (27 now, defined once in `packages/nvda-worker/src/worker-files.mjs`) and reboots each guest, since `utmctl exec` cannot be trusted to restart the worker. Roll back by checking out the ref and redeploying — git is the source of truth. `worker:deploy` refuses a `CAPTURE_PROTOCOL_VERSION` change without `--allow-protocol-change` (it invalidates the whole cache). [Full detail →](docs/operational-lessons.md#a-new-box-needs-no-console-visit-and-the-protocol-version-trap)
+A new bare-metal box needs no console visit — PXE + `autounattend.xml` plants the account and key. Deploy pushes every hashed file (defined once in `packages/nvda-worker/src/worker-files.mjs`) and reboots each guest, since `utmctl exec` cannot be trusted to restart the worker. Roll back by checking out the ref and redeploying — git is the source of truth. `worker:deploy` refuses a `CAPTURE_PROTOCOL_VERSION` change without `--allow-protocol-change` (it invalidates the whole cache). [Full detail →](docs/operational-lessons.md#a-new-box-needs-no-console-visit-and-the-protocol-version-trap)
 
 Five more `utmctl`/local-VM quirks that have each cost real time — do not restart with `utmctl exec` and believe it, verify through `/health` not `exec`, this shell is zsh (no scalar word-splitting), `utmctl` needs the UTM app running, and `utmctl exec`/SSH land in session 0 and cannot run a capture. [Full detail →](docs/local-worker-vm.md#five-utmctl-quirks-moved-from-claudemd-458).
 
@@ -145,9 +145,9 @@ npm run doctor -- --json        # same, machine-readable, with a next_command fi
 **Read `next_command` and do that.** `doctor` exits 0 when a run can proceed, which is not the
 same as everything already running:
 
-> **Stopped worker VMs are the correct resting state.** A run starts what it needs and releases
-> it afterwards. `all stopped` is a READY state, not a fault. Do not go looking for another
-> worker, and do not open the UTM GUI — just run the capture.
+> **A stopped worker VM is the correct resting state, not a fault.** A run starts what it needs and
+> releases it when it is done, so `all stopped` means ready rather than broken. Do not hunt for
+> another worker and do not open the UTM GUI — just run the capture.
 
 The only worker states that are actually broken: a VM running but not answering `/health`, or no VM registered at all. `doctor` answers VM state, worker health, page server, judge backend and whether a run was left mid-flight. For local-VM pooling (multiple UTM guests on this Mac, deprecated in favour of the bare-metal fleet) — `training:capture`, `worker:ctl -- pool`, `A11Y_WORKERS`/`A11Y_VM_AFTER`/`A11Y_LOCAL_VM` — see [the pool commands](docs/local-worker-vm.md#for-a-long-run-use-more-than-one-worker-moved-from-claudemd-458).
 
@@ -160,7 +160,7 @@ once swept up 19 files, 16 of them another agent's half-finished work, and pushe
 
 - **Commit explicit paths.** `git add -A` cannot tell your edits from someone else's.
 - A **pre-commit hook** (`scripts/git-hooks/pre-commit`, wired via `core.hooksPath`) refuses a
-  commit containing files nobody has touched in 30 minutes, or more than 12 files at once, and
+  commit containing files nobody has touched recently, or too many at once, and
   names the offenders with their ages. In a shared tree, an 8-hour-old staged file is someone
   else's work.
 - If the block is a false positive — long debugging session, files genuinely yours — check
