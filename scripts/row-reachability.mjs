@@ -347,9 +347,13 @@ export function refsCarryingSymbol(symbol, refs) {
       // #772: "no match" AND "could not read this ref" ARE NOT THE SAME ANSWER, and the comment that used
       // to sit here said "either way, it does not carry it" -- which is the conflation, written down.
       //
-      // In a checkout with no remote branches fetched, every ref is unreadable and every symbol reads as
-      // carried by nothing, so `subjectsMissing` comes back empty and the row reports STARTABLE. That is
-      // the direction that looks like success: a clean answer from a question never asked.
+      // A ref this checkout cannot read is not a ref that lacks the symbol. The 128 paths are real and
+      // ordinary: a ref deleted between the listing and the grep, a partial or shallow clone, object
+      // corruption. Each one silently shortened the carrier list.
+      //
+      // NOT the empty-checkout case, and the first version of this comment said it was: with nothing
+      // fetched, `unmergedRefs()` returns ZERO refs and this loop never runs at all. That symptom is an
+      // empty POPULATION, which `unsearchedPopulationNote` reports instead -- see its own header.
       //
       // `symbolOnMain`, THIRTY LINES ABOVE, ALREADY DRAWS THIS LINE -- exit 1 is git grep's own "no match",
       // a real no; anything else (128 for an unreadable revision) is a failure that must reach `main()`'s
