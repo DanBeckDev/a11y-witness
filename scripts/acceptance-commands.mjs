@@ -64,6 +64,7 @@
 import { execSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { existsSync, globSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { createRequire } from "node:module";
 import { basename, delimiter, join } from "node:path";
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { localImports, importedNamesFor, stripComments } from "./local-import-closure.mjs";
@@ -318,6 +319,108 @@ function writeDeclarationHolds(codeOnly, writesPath) {
 /** @param {string} a @param {string} b @returns {string} */
 const fingerprint = (a, b) => a + b;
 
+/**
+ * #967: A MODULE'S TOP LEVEL IS WHAT AN IMPORT EXECUTES -- everything else runs only when called.
+ *
+ * The closure walk scanned every imported file's whole text, so `dataset-paths.mjs` was charged `corpus`
+ * by any test that imported it, including one importing `REPO_ROOT` and nothing else. Measured before the
+ * fix: the hit was its `export function runsRoot() {` DEFINITION at :93, and removing the definition from
+ * the pattern only moved the hit to :116 -- the file calls `runsRoot()` five times (116, 178, 188, 203,
+ * 246) and every one is inside a function body. Its top level is two constants, so importing it runs none
+ * of them and reads nothing. **Three pull requests moved code into new corpus-free modules to get around
+ * this** (#943, #955, #966), which is an import rule shaping the code's structure.
+ *
+ * PARSED, NOT BRACE-MATCHED. `typescript` is a declared devDependency and this script runs after `npm ci`
+ * in `reusable-acceptance.yml`, so the module's own statements come from `ts.createSourceFile`. A
+ * hand-rolled brace matcher would have to survive template literals and regex literals containing braces,
+ * and a wrong one fails in the direction that looks like success -- the #731 trap, one layer over.
+ *
+ * OFFSETS ARE PRESERVED: a body is replaced by spaces of the same length, keeping newlines, exactly as
+ * `stripComments` does. So `lineNumberOf` still reports the real line of whatever survives.
+ *
+ * WHAT THE IMPORTER ACTUALLY IMPORTED IS KEPT TOO, and leaving it out was a defect this file's own #731
+ * boundary test caught: `corpus-settled.mjs` imports `datasetRoot` from `dataset-paths.mjs` and CALLS it,
+ * so it genuinely needs the corpus — while its own text names `runsRoot` only in a comment. A rule of
+ * "top level only" reported it as needing nothing. So the kept span is the module's top level PLUS the
+ * bodies of the declarations whose names this importer names, which is the same question #827 asks for
+ * tokens: charge for the export a caller actually imports, not for every spawn anywhere in the file.
+ *
+ * @param {string} codeOnly the file's text, comments already stripped
+ * @param {string} fileName for the parser's diagnostics only
+ * @param {Set<string>} imported the names the importing file took from this module
+ * @returns {string} the same text with unreachable bodies blanked
+ */
+/**
+ * `typescript`, LOADED ONLY WHEN A CLOSURE IS ACTUALLY SCANNED -- and this is not a style choice.
+ *
+ * A STATIC import breaks two pre-install entries, and `pre-install-import-graph.test.ts` said so by name
+ * rather than my assuming the CI ordering held everywhere: `arm-pr.mjs` and `workflow-run-liveness.mjs`
+ * both reach this module for `extractClosesDeclaration` -- one function that touches none of this -- and
+ * both run before `npm ci`, where a package specifier dies with ERR_MODULE_NOT_FOUND. The acceptance job
+ * itself runs after `npm ci --ignore-scripts` and `npm run build`, so the parser is there when needed.
+ *
+ * AND WHEN IT IS NOT, THE FALLBACK OVER-CHARGES RATHER THAN UNDER-CHARGES: no parser means the old
+ * full-text scan, which refuses more than it should. That is the safe direction for a guard whose other
+ * failure would be a test running in CI with no corpus and reading `runs/`. Stated here because a silent
+ * fallback to a DIFFERENT answer is the shape this repository keeps finding in its own tooling.
+ *
+ * `acorn` was the alternative and is deliberately not used: it resolves here only as another package's
+ * transitive dependency, which would make this guard hostage to somebody else's tree.
+ * @type {typeof import("typescript") | null | undefined}
+ */
+let typescriptModule = undefined;
+
+/** @returns {typeof import("typescript") | null} */
+function loadTypescript() {
+  if (typescriptModule !== undefined) return typescriptModule;
+  try {
+    typescriptModule = /** @type {typeof import("typescript")} */ (createRequire(import.meta.url)("typescript"));
+  } catch (error) {
+    void error; // pre-install: the caller falls back to the full-text scan, which over-charges
+    typescriptModule = null;
+  }
+  return typescriptModule;
+}
+
+function topLevelCode(/** @type {string} */ codeOnly, /** @type {string} */ fileName,
+  /** @type {Set<string>} */ imported = new Set()) {
+  const ts = loadTypescript();
+  if (ts === null) return codeOnly; // no parser: scan everything, which refuses more, never less
+  const source = ts.createSourceFile(fileName, codeOnly, ts.ScriptTarget.Latest, true);
+  /** @type {[number, number][]} */
+  const bodies = [];
+  /** @param {import("typescript").Node} node */
+  const visit = (node) => {
+    const body = /** @type {{ body?: import("typescript").Node }} */ (node).body;
+    // A DECLARATION IS BLANKED WHOLE, SIGNATURE INCLUDED. `export function runsRoot() {` is top-level text
+    // and matches a call-shaped pattern exactly as a real call does -- measured: blanking bodies alone left
+    // the constant-only import charged at `dataset-paths.mjs:93`, the definition line. Nothing in a function
+    // declaration executes at import beyond binding the name, so none of it belongs in this scan.
+    if (body && (ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node)
+      || ts.isConstructorDeclaration(node) || ts.isGetAccessorDeclaration(node)
+      || ts.isSetAccessorDeclaration(node))) {
+      // KEPT when the importer named it: calling an imported function runs its body, so its requirements
+      // are the caller's. Blanked otherwise -- an import does not execute what nobody asked for.
+      const named = ts.isFunctionDeclaration(node) && node.name && imported.has(node.name.text);
+      if (!named) bodies.push([node.getStart(source), node.getEnd()]);
+      return;
+    }
+    // An expression's BODY only: what surrounds it may be top-level code that really does run, as in
+    // `const root = runsRoot();` or `export const x = (() => runsRoot())();`.
+    if (body && (ts.isFunctionExpression(node) || ts.isArrowFunction(node))) {
+      bodies.push([body.getStart(source), body.getEnd()]);
+      return; // a nested function inside a blanked body needs no separate blanking
+    }
+    ts.forEachChild(node, visit);
+  };
+  ts.forEachChild(source, visit);
+  const chars = [...codeOnly];
+  for (const [start, end] of bodies) {
+    for (let i = start; i < end; i += 1) if (chars[i] !== "\n") chars[i] = " ";
+  }
+  return chars.join("");
+}
+
 const CLOSURE_REQUIREMENT_PATTERNS =
   /** @type {[RegExp, "token" | "corpus" | "history"][]} */ ([
     // A `gh` invocation (the same fingerprint gh-token-jobs.test.ts's own SPAWNS_GH uses) or a direct read
@@ -434,24 +537,51 @@ export function deriveClosureRequirements(entry) {
       }
     }
   }
+  /**
+   * One match, classified and recorded -- extracted from the walk so that loop stays readable (#967: it
+   * crossed the complexity budget when the top-level scope was added, which is the budget doing its job).
+   * A `corpus` hit is checked against the file's own `// writes:` declaration first: verified, it exempts
+   * the WHOLE closure (#731); claimed but not borne out, it is recorded as a wrong declaration rather than
+   * silently trusted or silently overridden.
+   * @param {{ requirement: "token" | "corpus" | "history", file: string, text: string, codeOnly: string,
+   *           match: RegExpExecArray, chain: string[] }} found_
+   */
+  const recordHit = ({ requirement, file, text, codeOnly, match, chain }) => {
+    const hit = { requirement, file, line: lineNumberOf(text, match.index), chain };
+    if (requirement !== "corpus") { found.set(requirement, hit); return; }
+    const writesPath = declaredWritePath(text);
+    if (writesPath === null) { found.set(requirement, hit); return; }
+    if (writeDeclarationHolds(codeOnly, writesPath)) { exemptCorpus = true; return; }
+    found.set(requirement, { ...hit, wrongDeclaration: true });
+  };
   /** @param {string} file @param {string[]} chain @param {Set<string>} seen */
   const walk = (file, chain, seen) => {
     if (seen.has(file) || !existsSync(file)) return;
     seen.add(file);
     const text = readFileSync(file, "utf8");
     const codeOnly = stripComments(text);
+    // #967: THE ENTRY IS SCANNED WHOLE; AN IMPORTED MODULE ONLY AT ITS TOP LEVEL.
+    //
+    // The two are different questions and conflating them is the defect. The ENTRY is the command about to
+    // run: its own `runsRoot()` call sits inside a `test(...)` callback, the runner invokes it, and it
+    // genuinely needs the corpus -- so the whole file counts, and `dataset-paths.test.ts:149` and
+    // `lab-fetch-paths.test.ts:66` are still refused, measured. An IMPORTED module is only executed as far
+    // as its top level, so charging it for what its function bodies would do if called is charging the
+    // import for the call. That is what made three pull requests move code into new modules.
+    //
+    // CORPUS ONLY, deliberately. `token` has the identical over-charge and `// no-token:` (#827) is the
+    // declaration written to work around it -- two of them were added tonight. Widening this to `token`
+    // would make those declarations no-ops and change two merged pull requests' behaviour, which is a
+    // second row, not a quiet extra in this one.
+    const corpusScope = file === entry
+      ? codeOnly
+      : topLevelCode(codeOnly, file, new Set(importedNamesFor(chain[chain.length - 1], file)));
     const hereChain = [...chain, file];
     for (const [pattern, requirement] of CLOSURE_REQUIREMENT_PATTERNS) {
       if (found.has(requirement) || (requirement === "corpus" && exemptCorpus)
         || (requirement === "token" && exemptToken)) continue;
-      const match = pattern.exec(codeOnly);
-      if (!match) continue;
-      const hit = { requirement, file, line: lineNumberOf(text, match.index), chain: hereChain };
-      if (requirement !== "corpus") { found.set(requirement, hit); continue; }
-      const writesPath = declaredWritePath(text);
-      if (writesPath === null) { found.set(requirement, hit); continue; }
-      if (writeDeclarationHolds(codeOnly, writesPath)) { exemptCorpus = true; continue; }
-      found.set(requirement, { ...hit, wrongDeclaration: true });
+      const match = pattern.exec(requirement === "corpus" ? corpusScope : codeOnly);
+      if (match) recordHit({ requirement, file, text, codeOnly, match, chain: hereChain });
     }
     for (const next of localImports(file)) walk(next, hereChain, seen);
   };
