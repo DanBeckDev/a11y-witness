@@ -1187,8 +1187,10 @@ function renderStatus(issueNumber, title, status, { body, recorded }) {
  * a weaker, hand-derived answer from the command they run FIRST and the real one only by attempting the
  * write.
  *
- * READ-ONLY IS THE WHOLE CONSTRAINT. `fileOverlapReason` is pure over two lists; `lookupOpenPrFiles` is
- * one `gh pr list --json number,files`. Neither writes. This is the READ standing in for the write, which
+ * READ-ONLY IS THE WHOLE CONSTRAINT, AND IT IS HELD BY CONSTRUCTION RATHER THAN BY ASSERTION -- said here
+ * so the next reader does not go looking for the test. `fileOverlapReason` is pure over two lists;
+ * `lookupOpenPrFiles` is one `gh pr list --json number,files`. Neither writes, and neither can: there is
+ * no write path in this function's import closure to assert the absence of. This is the READ standing in for the write, which
  * is the thing #1054 exists because it was not.
  *
  * A FAILED LOOKUP IS INCONCLUSIVE, NEVER "NO OVERLAP" -- `lookupOpenPrFiles` and `lookupMyRegionFiles`
@@ -1206,7 +1208,14 @@ export function b4Lines(myFiles, otherPrFiles) {
   }
   const { reason, emptyOtherPrs } = fileOverlapReason(myFiles, otherPrFiles);
   const lines = [];
-  if (reason) lines.push(`B4 REFUSES THIS CLAIM: ${reason}`);
+  // THREE STATES, THREE SENTENCES -- worker-capture reviewing #1085. The first version printed a refusal,
+  // announced INCONCLUSIVE, and said NOTHING when clear. So `row-claim check` on a clean row was
+  // byte-identical to `row-reachability.mjs` run standalone, while the verdict above promised the reader
+  // they had the B4 half. **I closed the null-versus-clean conflation inside this function and left the
+  // clean-versus-not-run one open at its edge**, which is the same defect one step out.
+  lines.push(reason
+    ? `B4 REFUSES THIS CLAIM: ${reason}`
+    : "B4: no open pull request holds any file in this row's Region.");
   if (emptyOtherPrs.length > 0) {
     lines.push(`  NOTE: #${emptyOtherPrs.join(", #")} read as touching NO files. An open PR with an empty `
       + "file list is a stale reading, not a clean one -- B4's own #462 finding.");
