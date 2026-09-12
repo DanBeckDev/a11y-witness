@@ -131,7 +131,9 @@ name: auto-arm
 # is the fix half, riding the one event that means "the queue just moved": a push to `main`.
 on:
   pull_request:
-    types: [opened, ready_for_review, reopened, synchronize]
+    # #1094: `auto_merge_enabled` is the event on which update-branch's second input (is it armed) flips,
+    # whoever armed it -- the arm job, pr:open at creation, or a hand `gh pr merge --auto`.
+    types: [opened, ready_for_review, reopened, synchronize, auto_merge_enabled]
   push:
     branches: [main]
   workflow_dispatch:
@@ -160,7 +162,7 @@ permissions:
 
 jobs:
   arm:
-    if: github.event.pull_request.draft == false && github.event.pull_request.base.ref == 'main'
+    if: github.event.pull_request.draft == false && github.event.pull_request.base.ref == 'main' && github.event.action != 'auto_merge_enabled'
     runs-on: ubuntu-latest
     steps:
       # #645: this step ran `gh pr merge --auto` UNCONDITIONALLY, so a PR held by a ruling was re-armed by
@@ -270,7 +272,16 @@ jobs:
     # PRs after a merge, never on main's own tip, and can never gate anything because the merge it reacts
     # to already happened. `continue-on-error: true` is REQUIRED by that category's own definition, not
     # optional here -- a red run must never read as a gate failure when nothing downstream waits on it.
-    if: github.event_name == 'push'
+    # #1094: ALSO on `auto_merge_enabled`. The decision has two inputs -- has main moved, and is this PR
+    # armed -- and the push-only gate reasoned about the first alone. Measured 2026-09-12: a merge landed
+    # 10:27:07Z, the sweep read #1080 as "not armed" at 10:27:15Z, ReadyForReview 10:28:13Z, AutoMergeEnabled
+    # 10:28:23Z, and with every other PR a draft no push could come; #1080 sat green, armed and BEHIND for
+    # 57 minutes until a person ran `gh pr update-branch`. `auto_merge_enabled` is the event on which the
+    # second input flips, whoever armed it; `ready_for_review` is NOT enough (ten seconds too early, and a
+    # PR readied earlier and armed by hand never fires it). `opened` and `synchronize` stay excluded:
+    # neither moves main nor arms anything. The token contract below is unchanged: no GITHUB_TOKEN
+    # fallback on any event.
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action == 'auto_merge_enabled')
     continue-on-error: true
     runs-on: ubuntu-latest
     steps:
