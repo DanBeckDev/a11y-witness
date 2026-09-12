@@ -136,6 +136,15 @@ on:
     types: [opened, ready_for_review, reopened, synchronize, auto_merge_enabled]
   push:
     branches: [main]
+  # #1103: the third input of update-branch's decision -- QUIET -- flips when a PR's gate settles, and
+  # nothing observed that: the push sweep skipped a PR whose head had moved inside the 300s window while
+  # its gate ran, and no later event re-asked. Five armed, green, behind PRs were hand-updated in one day.
+  # `ci` completing IS the gate concluding (`gate` lives in ci.yml), so this is the event, not a clock.
+  # `workflows:` matches the workflow's NAME (ci.yml's `name: ci`), never its filename; the test pins the
+  # two equal. Only `update-branch` admits this event; `sweep` and `stalled` exclude it below.
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -162,7 +171,10 @@ permissions:
 
 jobs:
   arm:
-    if: github.event.pull_request.draft == false && github.event.pull_request.base.ref == 'main' && github.event.action != 'auto_merge_enabled'
+    # #1103 clause 7: `github.event_name == 'pull_request'` is stated, not left to `base.ref` being absent on
+    # every other event -- GitHub coerces an absent `draft` to 0 == false, so without this the base clause
+    # alone was keeping arm off push and workflow_run.
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && github.event.pull_request.base.ref == 'main' && github.event.action != 'auto_merge_enabled'
     runs-on: ubuntu-latest
     steps:
       # #645: this step ran `gh pr merge --auto` UNCONDITIONALLY, so a PR held by a ruling was re-armed by
@@ -196,6 +208,9 @@ jobs:
     # is this repository's own recorded defect. The script imports nothing but `node:*`, so this job needs
     # a checkout and NOTHING else -- no `npm ci`, no build, no `dist`. #330 and #331 record what it costs
     # when a bootstrap script reaches for a workspace package.
+    # #1103: not on workflow_run -- a gate completing changes nothing this job reads, and every `ci`
+    # completion would otherwise add a run to the runs-per-merge count the CI reset measures.
+    if: github.event_name != 'workflow_run'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -233,6 +248,9 @@ jobs:
     # other open PR's head, which a shallow clone cannot supply. `queue-stalled.mjs`'s own `main()` does
     # the branch-tip fetch; this step only needs enough history depth for `git merge-tree` to find a
     # common ancestor at all.
+    # #1103: not on workflow_run -- a gate completing changes nothing this job reads, and every `ci`
+    # completion would otherwise add a run to the runs-per-merge count the CI reset measures.
+    if: github.event_name != 'workflow_run'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -281,7 +299,7 @@ jobs:
     # PR readied earlier and armed by hand never fires it). `opened` and `synchronize` stay excluded:
     # neither moves main nor arms anything. The token contract below is unchanged: no GITHUB_TOKEN
     # fallback on any event.
-    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action == 'auto_merge_enabled')
+    if: github.event_name == 'push' || github.event_name == 'workflow_run' || (github.event_name == 'pull_request' && github.event.action == 'auto_merge_enabled')
     continue-on-error: true
     runs-on: ubuntu-latest
     steps:
@@ -294,10 +312,14 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           EVENT_NAME: ${{ github.event_name }}
           EVENT_PR: ${{ github.event.pull_request.number }}
+          # workflow_run carries the PRs the completed run belonged to; empty for a fork's PR.
+          EVENT_GATE_PR: ${{ github.event.workflow_run.pull_requests[0].number }}
         run: |
-          # #1094 item 3: the two causes of this sweep must not render the same sentence.
+          # #1094 item 3 / #1103 clause 4: the three causes of this sweep must not render the same sentence.
           if [ "$EVENT_NAME" = "push" ]; then
             echo "UPDATE-BRANCH: ran because main moved (push)"
+          elif [ "$EVENT_NAME" = "workflow_run" ]; then
+            echo "UPDATE-BRANCH: ran because a gate completed for #${EVENT_GATE_PR:-?} (workflow_run)"
           else
             echo "UPDATE-BRANCH: ran because #${EVENT_PR} armed (auto_merge_enabled)"
           fi
