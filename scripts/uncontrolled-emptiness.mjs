@@ -106,30 +106,101 @@ function enclosingTest(node) {
 
 /** Does `source` get pinned non-empty anywhere inside `scope`? Text over the scope's own range. */
 /**
- * Is `name` asserted non-empty anywhere in `sourceText`? Exported so the conjunction case is driven
- * directly rather than only through a lint run.
- * @param {string} sourceText the enclosing test's source
+ * Does this expression assert that `name` is NON-EMPTY? Structural, not textual.
+ *
+ * #1155, after worker-judge's five edges: the first version was a regex over the test's source and every
+ * one of its mistakes fell the same way -- **reading an absent control as present**, which is the cheap,
+ * uncaught direction. All five are gone because the question is now asked of the SYNTAX:
+ *
+ *   assert.ok(a.length > 0 || files.length > 0)   a disjunction controls NEITHER operand
+ *   assert.ok(!(files.length > 0))                asserts it IS empty
+ *   assert.ok(cond ? files.length > 0 : true)     controls nothing when `cond` is false
+ *   // assert.ok(files.length > 0)                a COMMENT -- and commenting a line out is HOW a pin
+ *                                                 gets removed (#1088: a source-text guard defeated by a
+ *                                                 comment carrying the phrase, which read 44/0)
+ *   assert.equal(files.length, 0)                 asserts it is EMPTY, and read as a pin because `\s*`
+ *                                                 backtracked so the negative lookahead was evaluated
+ *                                                 before the `0` -- a guard that never guarded
+ *
+ * **Only `&&` recurses.** A conjunction controls both operands, which is the case that cost a redundant
+ * pin in #1160; `||`, `!` and `?:` are refused rather than handled, because each would need a claim about
+ * the other branch that this rule cannot make.
+ *
+ * @param {any} node an expression inside an assertion call
  * @param {string} name the population's identifier
  * @returns {boolean}
  */
-export function pinnedWithin(sourceText, name) {
-  const n = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(
-    // ANYWHERE INSIDE THE `assert.ok(...)`, not immediately after its paren. The first version required
-    // the name to open the call, so `assert.ok(pr.length > 0 && nightly.length > 0, ...)` pinned `pr` and
-    // not `nightly` -- a CONJUNCTION controls both operands, and the detector saw one.
-    //
-    // #1160 found it the expensive way: the rule reported an already-pinned site, the generated fix added
-    // a second pin on top of a working control, and worker-judge found the redundancy. **It is the same
-    // defect I had just corrected in #1123's own instrument** -- that one required `.length` to be
-    // followed by `,` or `)`, so it read `assert.ok(x.length >= 5)` as no pin at all and overstated the
-    // uncontrolled population by a factor of two. A pin detector that recognises one spelling of a pin
-    // reports every other spelling as absent, and mine recognised one POSITION.
-    //
-    // `[^)]*` rather than `.*` so the search cannot run past the end of this call into the next one.
-    `assert\\.ok\\([^)]*\\b${n}\\.length`
-    + `|assert\\.equal\\(\\s*${n}\\.length\\s*,\\s*(?!0\\s*[,)])`
-    + `|assert\\.notDeepEqual\\(\\s*${n}\\s*,`).test(sourceText);
+function assertsNonEmpty(node, name) {
+  if (!node) return false;
+  if (node.type === "LogicalExpression" && node.operator === "&&") {
+    return assertsNonEmpty(node.left, name) || assertsNonEmpty(node.right, name);
+  }
+  // `name.length` bare, or compared against something that is not zero.
+  if (isLengthOf(node, name)) return true;
+  if (node.type === "BinaryExpression" && [">", ">=", "!==", "!="].includes(node.operator)) {
+    // `name.length > 0`, `>= 1`, `!== 0`. A `>= 0` is true of an empty array and is NOT a pin.
+    const zeroish = node.right?.type === "Literal" && node.right.value === 0;
+    if (isLengthOf(node.left, name) && !(node.operator === ">=" && zeroish)) return true;
+  }
+  return false;
+}
+
+/** `name.length` as a member expression. @param {any} n @param {string} name @returns {boolean} */
+function isLengthOf(n, name) {
+  return n?.type === "MemberExpression" && n.property?.name === "length"
+    && n.object?.type === "Identifier" && n.object.name === name;
+}
+
+/** `assert.equal(name.length, <non-zero>)` pins; `, 0` asserts the OPPOSITE and must not.
+ * @param {any[]} args @param {string} name @returns {boolean} */
+function pinsViaEqual(args, name) {
+  const [first, second] = args;
+  const assertsZero = second?.type === "Literal" && second.value === 0;
+  return isLengthOf(first, name) && !assertsZero;
+}
+
+/**
+ * Is this call itself a pin on `name`? One predicate per assertion method, because together they were a
+ * single function at complexity 19 against a ceiling of 15 -- and before that a single arrow at 31.
+ * Optional chaining costs a branch each, so the shape that reads as flat is not.
+ *
+ * @param {any} n @param {string} name @returns {boolean}
+ */
+function isPinningCall(n, name) {
+  if (n.type !== "CallExpression" || n.callee?.type !== "MemberExpression") return false;
+  const args = n.arguments ?? [];
+  const method = n.callee.property?.name;
+  if (method === "ok") return assertsNonEmpty(args[0], name);
+  if (method === "equal") return pinsViaEqual(args, name);
+  if (method === "notDeepEqual") return args[0]?.type === "Identifier" && args[0].name === name;
+  return false;
+}
+
+/**
+ * Is `name` pinned non-empty by an assertion inside `testNode`?
+ *
+ * Walks the enclosing test's AST rather than its text, so a commented-out pin is not a pin. Exported so
+ * the edges above are driven directly rather than only through a lint run.
+ *
+ * @param {any} testNode the enclosing `test(...)` call
+ * @param {string} name
+ * @returns {boolean}
+ */
+export function pinnedWithin(testNode, name) {
+  let found = false;
+  /** @param {any} n */
+  const walk = (n) => {
+    if (found || !n || typeof n !== "object") return;
+    if (isPinningCall(n, name)) { found = true; return; }
+    for (const key of Object.keys(n)) {
+      if (key === "parent") continue;
+      const child = n[key];
+      if (Array.isArray(child)) child.forEach(walk);
+      else if (child && typeof child === "object" && typeof child.type === "string") walk(child);
+    }
+  };
+  walk(testNode);
+  return found;
 }
 
 /** @type {import("eslint").Rule.RuleModule} */
@@ -146,6 +217,9 @@ export const derivedLocalRule = {
         + "form this rule cannot read, exempt the file in the rule's `exempt` option with one of exactly "
         + "two reasons: `demonstration` (the vacuity is the point, as in git-population-vacuity) or "
         + "`guarded-by <symbol>` (a guard outside an assertion makes the code unreachable when empty).",
+      absentGuard: "`{{file}}` is exempted as `guarded-by {{symbol}}`, and `{{symbol}}` does not appear in "
+        + "this file. The exemption is a claim that a control this rule cannot read is present -- if the "
+        + "guard has been removed, the exemption is now hiding the defect the rule exists to find.",
       badReason: "`{{file}}` is exempted with the reason {{reason}}, which is neither `demonstration` nor "
         + "`guarded-by <symbol>`. An exemption whose reason cannot be read is one nobody can audit, and a "
         + "third kind of reason is a ROW rather than a third entry (ceo, #1155) -- because two reasons "
@@ -153,6 +227,7 @@ export const derivedLocalRule = {
     },
   },
   create(context) {
+    const code = context.sourceCode;
     const exempt = context.options?.[0]?.exempt ?? {};
     const here = context.filename.replace(`${process.cwd()}/`, "");
     const reason = exempt[here];
@@ -162,6 +237,16 @@ export const derivedLocalRule = {
       // shapes only -- ceo's ruling on #1155 -- and an entry that matches neither is itself an error, so
       // the list cannot rot quietly. `guarded-by` must NAME the symbol, because "a guard exists" is the
       // claim, and an unnamed one cannot be checked against the file.
+      const named = /^guarded-by (\S+)/.exec(reason);
+      // THE SYMBOL IS CHECKED AGAINST THE FILE, not just its shape -- worker-judge on #1167. The rot mode
+      // is the dangerous one: remove the guard, keep the entry, and the exemption hides the defect this
+      // rule exists to find. The header claimed an unnamed guard "cannot be checked against the file",
+      // which read as though a named one WAS.
+      if (named && !code.getText().includes(named[1])) {
+        return { Program(node) {
+          context.report({ node, messageId: "absentGuard", data: { file: here, symbol: named[1] } });
+        } };
+      }
       if (!/^demonstration$|^guarded-by \S+/.test(reason)) {
         return { Program(node) {
           context.report({ node, messageId: "badReason", data: { file: here, reason: JSON.stringify(reason) } });
@@ -169,7 +254,6 @@ export const derivedLocalRule = {
       }
       return {};
     }
-    const code = context.sourceCode;
     return {
       CallExpression(node) {
         const subject = emptinessSubject(node);
@@ -181,7 +265,7 @@ export const derivedLocalRule = {
         if (!source) return;
         const test = enclosingTest(node);
         if (!test) return;
-        if (pinnedWithin(code.getText(test), source)) return;
+        if (pinnedWithin(test, source)) return;
         context.report({ node, messageId: "uncontrolled",
           data: { subject: subject.name, source } });
       },
