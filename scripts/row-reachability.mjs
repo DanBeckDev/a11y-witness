@@ -71,6 +71,21 @@ const SYMBOL_IN_PROSE = /`([a-z][A-Za-z0-9]*[A-Z][A-Za-z0-9]*|[A-Z][A-Z0-9]+_[A-
 const unique = (values) => [...new Set(values)];
 
 /**
+ * #772: ZERO REFS IS A NARROWER ANSWER, NOT A CLEANER ONE.
+ *
+ * `unmergedRefs()` reads what this checkout has FETCHED, not what the remote holds, so a fresh clone
+ * searches nothing: every symbol comes back carried by nobody and every region unheld. The verdict is
+ * still the honest one available here — what it must not do is read like a search that happened.
+ * @param {number} refs @returns {string[]}
+ */
+function unsearchedPopulationNote(refs) {
+  if (refs > 0) return [];
+  return ["  NOTE: this checkout has fetched NO unmerged remote branches, so the subject and region "
+    + "searches had nothing to look at. `git fetch origin` and ask again for an answer with a population "
+    + "behind it."];
+}
+
+/**
  * NOTHING TO CHECK — and "named nothing" and "named PROSE" are two different sentences (#228).
  *
  * The `.md` filter is correct: there is no symbol to verify in a README, and pretending to check one
@@ -176,13 +191,7 @@ export function startability({ row, subjectsMissing, heldRegions, examined, bloc
     lines: [`#${row} is STARTABLE: every symbol it names is on \`main\`, and no unmerged branch is in its `
       + `region (${examined.paths} path(s), ${examined.symbols} symbol(s), ${examined.refs ?? 0} unmerged `
       + "ref(s) examined).",
-    ...((examined.refs ?? 0) === 0
-      // #772: ZERO REFS IS A NARROWER ANSWER, NOT A CLEANER ONE. `unmergedRefs()` reads what this checkout
-      // has FETCHED, so a fresh clone searches nothing and every symbol comes back carried by nobody. The
-      // verdict is still the honest one available here; what it must not do is read like a search.
-      ? ["  NOTE: this checkout has fetched NO unmerged remote branches, so the subject and region searches "
-        + "had nothing to look at. `git fetch origin` and ask again for an answer with a population behind it."]
-      : []),
+    ...unsearchedPopulationNote(examined.refs ?? 0),
     "  This checks REGIONS, SYMBOLS and the `blocked` label. A row can still be blocked by something none",
     "  of those express -- an unstated dependency, a decision nobody has taken -- so STARTABLE means "
       + "\"nothing I can see\", never \"nothing blocks this\"."] };
