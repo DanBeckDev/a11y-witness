@@ -168,7 +168,14 @@ tracker already has one and it is the ready order. The row is now *out of releas
 both things without either contradicting the other.
 
 **The `Out of release` milestone's own description carries this sentence too, and the two are compared by
-a guard rather than left to agree.** `ready-label-audit.mjs`'s `guidanceDrift` fails when the milestone
-description stops carrying what this page says — because two copies of one rule with nothing comparing
-them is the defect that produced five incidents in one day (`docs/operational-lessons.md`), and writing a
-rule about drift twice, unpinned, would be this page refuting itself.
+a guard rather than left to agree.** `ready-label-audit.mjs`'s `guidanceDrift` fails when either copy stops
+carrying what the other says — because two copies of one rule with nothing comparing them is the defect
+that produced five incidents in one day (`docs/operational-lessons.md`), and writing a rule about drift
+twice, unpinned, would be this page refuting itself.
+
+**It detects a rule going MISSING, not a rule changing meaning**, and the distinction is worth knowing
+before you edit either copy. It matches phrases, so a faithful rewording of either one reads as *deleted*
+and reddens the nightly audit until the two are re-synced — **and the remedy is to re-sync them, never to
+loosen the check.** The two saying it the same way is the property. A copy that keeps every phrase and
+reverses every meaning passes clean, which no phrase-matching guard can prevent; if you are inverting a
+rule rather than editing it, this guard is not the thing that will catch you.
