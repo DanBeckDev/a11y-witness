@@ -241,6 +241,101 @@ const READY_FLAG = "--ready";
  * @param {string[]} argv
  * @returns {{ label: "backlog" | "ready", status: "Backlog" | "Ready" }}
  */
+/** The label that says a row is deliberately outside the release, rather than missing its milestone. */
+export const OUT_OF_RELEASE = "out-of-release";
+
+/**
+ * #1011: A ROW NEEDS A MILESTONE, OR `out-of-release` -- AND `row-file` WAS THE ONE TOOL NOT ASKING.
+ *
+ * `--milestone`/`-m` sits in the passthrough allowlist and nowhere else: this tool accepted one, never
+ * asked for one, and never confirmed one. Meanwhile the org's health check reads a row carrying neither a
+ * milestone nor `out-of-release` as a finding, every thirty minutes. **Two rules about the same row with
+ * nothing comparing them**, which is this repository's most-recorded shape.
+ *
+ * Three rows landed milestone-less on 2026-09-11. One of them, #1003, also reached the tracker off Project
+ * 2 entirely and blocked every Status move in the org until product-manager boarded it by hand.
+ *
+ * REFUSED BEFORE `gh issue create` RUNS, so a refusal leaves nothing behind: no row, nothing half-filed,
+ * nothing for the board to trip over. The read-back below is the other half and is not redundant with it --
+ * `gh` ACCEPTING a flag is not evidence the field is set, which is this repo's own recorded defect
+ * (silently discarded, the default runs, success reported).
+ * The milestone this filing asked for, or `null` -- what the read-back expects to find on the filed row.
+ * @param {string[]} argv @returns {string | null}
+ */
+export function milestoneFromArgv(argv) {
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (arg.startsWith("--milestone=")) return arg.slice("--milestone=".length) || null;
+    if ((arg === "--milestone" || arg === "-m") && (argv[i + 1] ?? "").length > 0) return argv[i + 1];
+  }
+  return null;
+}
+
+/** @param {string[]} argv @returns {boolean} */
+export function declaresRelease(argv) {
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    // `--milestone=X`, `--milestone X`, `-m X`: a flag with no value declares nothing, which is why the
+    // VALUE is checked rather than the flag's presence. An empty `--milestone=` is the same as none.
+    if (arg.startsWith("--milestone=") && arg.slice("--milestone=".length).length > 0) return true;
+    if ((arg === "--milestone" || arg === "-m") && (argv[i + 1] ?? "").length > 0) return true;
+    if ((arg === "--label" || arg === "-l") && argv[i + 1] === OUT_OF_RELEASE) return true;
+    if (arg === `--label=${OUT_OF_RELEASE}`) return true;
+  }
+  return false;
+}
+
+
+/**
+ * The repository's own open milestones, FETCHED rather than listed here -- a literal list is a second copy
+ * of something GitHub already holds, and the day it drifts the refusal names milestones that do not exist.
+ * `null` when the list could not be read: the RULE still stands, only the SUGGESTION degrades.
+ * @param {{ run?: typeof defaultRun }} [deps] @returns {string[] | null}
+ */
+export function openMilestones({ run = defaultRun } = {}) {
+  try {
+    const raw = run("gh", ["api", `repos/${REPO}/milestones`, "--jq", ".[].title"]);
+    const titles = raw.split("\n").map((t) => t.trim()).filter(Boolean);
+    return titles.length > 0 ? titles : null;
+  } catch {
+    return null; // CANNOT_ASK on the suggestion, never on the rule
+  }
+}
+
+/**
+ * The refusal, FOLLOWABLE: it names both doors and, where it can, the exact milestones to choose from.
+ * Following it must pass -- `row-file.test.ts` files again using this message's own suggestion.
+ *
+ * IT NEVER GUESSES ONE. A milestone chosen by a tool looks decided, and a wrong one is worse than an
+ * absent one because the health check goes quiet. Nothing in a row -- its labels, its parent, its Region --
+ * determines a release; a person picks.
+ * @param {string[] | null} milestones @returns {string}
+ */
+export function milestoneRefusal(milestones) {
+  // THE UNREADABLE CASE GETS ITS OWN LINE, not the list's slot -- worker-capture's review of #1016. Reading
+  // `--milestone <one of the milestone list could not be read, so pick from ...>` is garbage inside angle
+  // brackets, and it is the one case where the reader cannot see the list either, so the message is doing
+  // the most work exactly where it read worst.
+  const either = milestones === null
+    ? `  Either: --milestone <a milestone> -- the list could not be read from here; \`gh api repos/${REPO}`
+      + "/milestones --jq '.[].title'` prints it"
+    : `  Either: --milestone <one of ${milestones.map((m) => `"${m}"`).join(", ")}>`;
+  return "row-file: REFUSING to file a row that declares no release -- nothing was sent to GitHub.\n"
+    + "  The org's health check reads a row with neither a milestone nor `" + OUT_OF_RELEASE + "` as a "
+    + "finding within thirty minutes, so a row filed without one is incomplete the moment it lands.\n"
+    + `${either}\n`
+    + `  Or:     --label ${OUT_OF_RELEASE}, if this row is genuinely outside the release.`;
+}
+
+/**
+ * #844: which label -- and which Project 2 Status option, by the SAME name -- this filing gets.
+ * `backlog` unless `--ready` is explicitly given: a row filed with everything a claimant needs (Region,
+ * Acceptance, Open-check already checked above) can go straight to the Ready lane; every other row
+ * starts in Backlog, matching this repo's own convention that `ready` is a judgement about pickability
+ * a filer states on purpose, never a default.
+ * @param {string[]} argv
+ * @returns {{ label: "backlog" | "ready", status: "Backlog" | "Ready" }}
+ */
 export function boardingFor(argv) {
   return argv.includes(READY_FLAG) ? { label: "ready", status: "Ready" } : { label: "backlog", status: "Backlog" };
 }
@@ -300,8 +395,10 @@ export function issueNumberFromUrl(output) {
  * #844/#883: does a FRESH read-back confirm every record this filing wrote -- the board label, the
  * `lane:<owner>` label(s), the Filed-by line, and the Project Status? Named, not just a boolean: a
  * reader fixing a half-boarded row needs to know WHICH did not stick, not merely that something did not.
- * @param {{ labels: string[], body: string | null, boardStatus: string | null }} after
- * @param {{ session: string, label: string, status: string, laneLabels: string[] }} expected
+ * @param {{ labels: string[], body: string | null, boardStatus: string | null,
+ *           milestone?: string | null }} after
+ * @param {{ session: string, label: string, status: string, laneLabels: string[],
+ *           milestone?: string | null }} expected
  * @returns {string[]} empty when everything is confirmed
  */
 export function unverifiedFilingFields(after, expected) {
@@ -310,6 +407,13 @@ export function unverifiedFilingFields(after, expected) {
   const missingLanes = expected.laneLabels.filter((l) => !after.labels.includes(l));
   if (missingLanes.length > 0) missing.push(`${missingLanes.map((l) => `\`${l}\``).join("/")} label(s)`);
   if (after.body === null || filedByLine(after.body) !== expected.session) missing.push("the Filed-by line");
+  // #1011: `gh` ACCEPTING `--milestone` is not evidence the field is set -- a flag nobody reads is this
+  // repo's own recorded defect. Only a fresh read of the filed row says whether it landed.
+  if (expected.milestone !== null && after.milestone !== expected.milestone) {
+    missing.push(after.milestone === null
+      ? "the milestone"
+      : `the milestone (reads "${after.milestone}", not "${expected.milestone}")`);
+  }
   if (after.boardStatus !== expected.status) {
     missing.push(after.boardStatus === null
       ? `Project ${PROJECT_NUMBER} membership`
@@ -418,10 +522,11 @@ export function createIssue(argv, deps = {}) {
   // Injectable so a test can prove every step -- the label composed into argv, the lane derivation, the
   // board-add call, the Status move, and the read-back -- without spawning a real `gh`, reaching GitHub,
   // or reading a real `docs/lane-ownership.json`.
-  const { spawnGh, run, fetchBoardStatus, fetchLabels, moveStatus, ensureLabels, loadLanesConfig } = {
+  const { spawnGh, run, fetchBoardStatus, fetchLabels, moveStatus, ensureLabels, loadLanesConfig,
+    milestones } = {
     spawnGh: spawnGhIssueCreate, run: defaultRun, fetchBoardStatus: fetchIssueBoardStatus,
     fetchLabels: fetchIssueLabels, moveStatus: moveProjectStatus, ensureLabels: ensureLabelsExist,
-    loadLanesConfig: loadLanes, ...deps,
+    loadLanesConfig: loadLanes, milestones: openMilestones, ...deps,
   };
   const session = sessionFromArgv(argv);
   if (!session) {
@@ -443,6 +548,11 @@ export function createIssue(argv, deps = {}) {
     return 1;
   }
   const laneLabels = laneResult.laneLabels;
+  // #1011: BEFORE `gh issue create`, so a refusal leaves nothing behind. See `milestoneRefusal`.
+  if (!declaresRelease(argv)) {
+    process.stderr.write(`${milestoneRefusal(milestones({ run }))}\n`);
+    return 1;
+  }
   const boarding = boardingFor(argv);
   // #844: THE BOARD LABEL IS NOT ADDED HERE -- see `boardAndVerify`'s own header for why it has to wait
   // until AFTER the Project Status is set, not merely after the issue exists. The lane label(s) travel
@@ -465,7 +575,8 @@ export function createIssue(argv, deps = {}) {
     return 2;
   }
 
-  const result = boardAndVerify({ issueNumber, url, boarding, session, laneLabels },
+  const result = boardAndVerify({ issueNumber, url, boarding, session, laneLabels,
+    milestone: milestoneFromArgv(argv) },
     { run, fetchBoardStatus, fetchLabels, moveStatus, ensureLabels });
   if (!result.ok) {
     process.stderr.write(`row-file: ${result.message}\n`);
@@ -491,13 +602,13 @@ export function createIssue(argv, deps = {}) {
  * either not yet labelled `ready` at all (invisible to that floor, same as an ordinary unlabelled issue)
  * or fully consistent (labelled AND Statused) by the time anything could ask.
  * @param {{ issueNumber: number, url: string, boarding: { label: string, status: string },
- *   session: string, laneLabels: string[] }} filed
+ *   session: string, laneLabels: string[], milestone: string | null }} filed
  * @param {{ run: typeof defaultRun, fetchBoardStatus: typeof fetchIssueBoardStatus,
  *   fetchLabels: typeof fetchIssueLabels, moveStatus: typeof moveProjectStatus,
  *   ensureLabels: typeof ensureLabelsExist }} deps
  * @returns {{ ok: true } | { ok: false, message: string }}
  */
-function boardAndVerify({ issueNumber, url, boarding, session, laneLabels },
+function boardAndVerify({ issueNumber, url, boarding, session, laneLabels, milestone },
   { run, fetchBoardStatus, fetchLabels, moveStatus, ensureLabels }) {
   try {
     run("gh", ["project", "item-add", String(PROJECT_NUMBER), "--owner", PROJECT_OWNER, "--url", url]);
@@ -535,13 +646,22 @@ function boardAndVerify({ issueNumber, url, boarding, session, laneLabels },
   } catch {
     bodyAfter = null; // read-back failure reads as "cannot confirm the Filed-by line", not a crash
   }
+  /** @type {string | null} */
+  let milestoneAfter;
+  try {
+    milestoneAfter = run("gh", ["issue", "view", String(issueNumber), "--repo", REPO, "--json", "milestone",
+      "--jq", ".milestone.title // \"\""]).trim() || null;
+  } catch {
+    milestoneAfter = null; // unreadable reads as "cannot confirm", which `unverifiedFilingFields` names
+  }
   const after = {
     labels: fetchLabels(issueNumber, { run }).labels,
     body: bodyAfter,
     boardStatus: fetchBoardStatus(issueNumber, { run }),
+    milestone: milestoneAfter,
   };
   const missing = unverifiedFilingFields(after,
-    { session, label: boarding.label, status: boarding.status, laneLabels });
+    { session, label: boarding.label, status: boarding.status, laneLabels, milestone });
   if (missing.length > 0) {
     return { ok: false, message: `FILED as #${issueNumber}, but the read-back does not confirm it -- `
       + `missing: ${missing.join(", ")}. Refusing to report success for a row it could not fully board.` };
