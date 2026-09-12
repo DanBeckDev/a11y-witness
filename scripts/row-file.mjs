@@ -99,7 +99,7 @@ import { missingTemplateFields, wholeSuiteAcceptanceReason } from "./row-claim/t
 import { moveProjectStatus, filedByLine, fetchLabels as fetchIssueLabels, ensureLabelsExist } from "./row-claim.mjs";
 import { PROJECT_OWNER, PROJECT_NUMBER } from "./board-snapshot.mjs";
 import { REPO } from "./repo-identity.mjs";
-import { declaredRegionFiles, directoryReservations, extractLabeledSection, extractRegionSection, unrecognisedRegionPaths } from "./region-paths.mjs";
+import { declaredRegionFiles, directoryReservations, extractLabeledSection, extractRegionSection, slashlessDirectoryEntries, unrecognisedRegionPaths } from "./region-paths.mjs";
 import { loadLanes, inLane } from "./workflow-lane-check.mjs";
 
 /** @type {(cmd: string, args: string[]) => string} */
@@ -181,6 +181,32 @@ export function directoryRegionWarning(body) {
     + "Each reserves EVERY file beneath it against every other row until this one closes -- a one-line "
     + "Region that reserves a thousand files looks exactly like one that reserves one. If that is what "
     + "you mean, nothing to do; otherwise name the files, or say the exclusion in words.";
+}
+
+/**
+ * #1193: A DIRECTORY DECLARED WITHOUT ITS SLASH -- the one spelling with no witness at all.
+ *
+ * `packages/lab/src/training` is DECLARED, reserves NOTHING, and was not reported stray either, because
+ * something did take it. Both other warnings were satisfied and the author had reserved nothing.
+ *
+ * **It is where the old stray message SENT people.** Until #1193 that warning reported the slash-less
+ * form of every declared directory -- *"declares NOTHING: packages/lab/src/training"* against a Region
+ * that said `packages/lab/src/training/` -- and the obvious way to satisfy it is to delete the slash.
+ * The message was followable, and following it moved the author from contradicted-but-visible to silent.
+ *
+ * The remedy is the one this file already uses twice: say what was declared, say what it reserves, and
+ * leave the decision alone. A refusal would block the row whose author meant the file and mistyped it.
+ *
+ * @param {string} body
+ * @returns {string | null}
+ */
+export function slashlessDirectoryWarning(body) {
+  const entries = slashlessDirectoryEntries(body);
+  if (entries.length === 0) return null;
+  return `WARNING -- the \`## Region\` section declares ${entries.length} entr(ies) that name a `
+    + `DIRECTORY with no trailing slash: ${entries.join(", ")}. Each reserves NOTHING -- `
+    + "`regionCovers` keys on the slash, so a directory without one declares only itself and no file "
+    + "beneath it. Add the slash to reserve the tree, or name the files you mean.";
 }
 
 /**
@@ -761,6 +787,11 @@ export function createIssue(argv, deps = {}) {
   if (strayRegion) process.stderr.write(`row-file: ${strayRegion}\n`);
   const dirRegion = directoryRegionWarning(/** @type {string} */ (body));
   if (dirRegion) process.stderr.write(`row-file: ${dirRegion}\n`);
+  // #1193: beside the other two, for the same reason and at the same moment. These three answer three
+  // different questions about one Region and a body can trip more than one -- they are printed, never
+  // chosen between.
+  const slashless = slashlessDirectoryWarning(/** @type {string} */ (body));
+  if (slashless) process.stderr.write(`row-file: ${slashless}\n`);
   // #883: THE LANE(S), DERIVED BEFORE ANYTHING IS FILED -- see `laneLabelsOrRefusal`'s own header for why
   // a missing/malformed `docs/lane-ownership.json` refuses here rather than guessing.
   const laneResult = laneLabelsOrRefusal(/** @type {string} */ (body), loadLanesConfig);
