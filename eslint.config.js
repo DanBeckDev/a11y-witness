@@ -20,7 +20,72 @@ import { builtinRules } from "eslint/use-at-your-own-risk";
 // ESLint closes it, config loading fails here by name rather than the rule quietly disappearing.
 const maxLinesPerFunction = builtinRules.get("max-lines-per-function");
 if (!maxLinesPerFunction) throw new Error("eslint no longer exports max-lines-per-function via use-at-your-own-risk");
-const local = { rules: { "max-physical-lines-per-function": maxLinesPerFunction } };
+/**
+ * #1144: A READ OF `statusCheckRollup` MUST NARROW IT TO THE NEWEST RUN PER NAME.
+ *
+ * The rollup UNIONS superseded runs, so a raw filter answers about every attempt ever made -- a
+ * superseded FAILED run survives on the head for ever and reports a green PR as failing, which is what
+ * `merge-queue.mjs` did until #634.
+ *
+ * THIS IS AN AST RULE BECAUSE THE GUARD IT REPLACES WAS A LINE REGEX, AND THAT IS THE POINT RATHER THAN
+ * A PORTING DETAIL. `bounded-window-reads.test.ts` asked whether the LINE mentioned a window-naming
+ * predicate, so a raw read passed whenever its line mentioned a wrapper for any reason -- an unrelated
+ * call, an import. That is the guard's own recorded defect one granularity down: its header says the
+ * first version asked whether the FILE mentioned one and `npm run mutate` reported THE GUARD DID NOT
+ * BITE, *"a check observing something ADJACENT to the property, where the adjacency holds while the
+ * property fails."* Per-line fixed the file case and kept the shape.
+ *
+ * This asks whether THIS read is wrapped, which is the property itself. It also sees a read split across
+ * lines, which a line regex cannot. Both holes were latent rather than live -- all 21 rollup reads in the
+ * tree passed the old predicate correctly -- and that is stated on #1144 rather than claimed otherwise.
+ *
+ * EXEMPT BY OPTION, not by a table in a test: `wideWindowIsHarmless` is the rule's own fixture per #908
+ * clause 3. It is EMPTY today by measurement -- all four readers narrow -- and exists so a reader that
+ * genuinely does not need the newest answer is CLASSIFIED rather than made to adopt a predicate it has
+ * no use for. "Nothing needs this" and "somebody forgot" must not be the same state.
+ */
+const NARROWS_THE_WINDOW = new Set(["newestPerName", "newestConclusion", "newestConclusionOf",
+  "headQuietSeconds"]);
+
+/** @type {import("eslint").Rule.RuleModule} */
+const boundedWindowReads = {
+  meta: {
+    type: "problem",
+    schema: [{ type: "object", properties: { wideWindowIsHarmless: { type: "array", items: { type: "string" } } },
+      additionalProperties: false }],
+    messages: {
+      raw: "this reads `statusCheckRollup` without narrowing it to the newest run per NAME. The rollup "
+        + "unions superseded runs, so a raw read answers about every attempt ever made and reports a "
+        + "green PR as failing -- `merge-queue.mjs` did until #634. Wrap it in one of: {{wrappers}}. If "
+        + "the wider window genuinely cannot mislead here, add this file to the rule's "
+        + "`wideWindowIsHarmless` option with the reason.",
+    },
+  },
+  create(context) {
+    const exempt = new Set(context.options?.[0]?.wideWindowIsHarmless ?? []);
+    if (exempt.has(context.filename.replace(`${process.cwd()}/`, ""))) return {};
+    return {
+      // THE READ ITSELF, not its line: `<anything>.statusCheckRollup`. Reported unless an ANCESTOR call
+      // is one of the narrowing wrappers -- walking up rather than matching text is what makes this
+      // about the read rather than about a neighbour of it.
+      "MemberExpression[property.name='statusCheckRollup']"(node) {
+        for (let n = node.parent; n; n = n.parent) {
+          if (n.type === "CallExpression") {
+            const callee = n.callee.type === "MemberExpression" ? n.callee.property : n.callee;
+            if (callee?.type === "Identifier" && NARROWS_THE_WINDOW.has(callee.name)) return;
+          }
+        }
+        context.report({ node, messageId: "raw",
+          data: { wrappers: [...NARROWS_THE_WINDOW].join(", ") } });
+      },
+    };
+  },
+};
+
+const local = { rules: {
+  "max-physical-lines-per-function": maxLinesPerFunction,
+  "bounded-window-reads": boundedWindowReads,
+} };
 
 export default tseslint.config(
   {
@@ -62,6 +127,10 @@ export default tseslint.config(
       "local/max-physical-lines-per-function": [
         "error", { max: 90, skipBlankLines: false, skipComments: false, IIFEs: true },
       ],
+      // #1144: EMPTY OPTION BY MEASUREMENT. All four rollup readers narrow; the list exists so a reader
+      // that genuinely does not need the newest answer is CLASSIFIED rather than made to adopt a
+      // predicate it has no use for.
+      "local/bounded-window-reads": ["error", { wideWindowIsHarmless: [] }],
       "complexity": ["error", 15], // "do one thing": decision points (stricter than ESLint's default 20)
       "max-depth": ["error", 3], // "indent level should not be greater than one or two"
       "max-params": ["error", 4], // flag/polyadic args -> use an argument object
