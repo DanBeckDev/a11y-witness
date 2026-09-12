@@ -78,6 +78,7 @@ import { templateFieldsReason, lookupIssueBody } from "./row-claim/template-fiel
 import { staleRuleReason } from "./row-claim/stale-rule-guard.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
 import { CLAIM_LABEL, STARTED_LABEL } from "./claim-labels.mjs";
+import { assertNoLeakInArgv } from "../packages/lab/src/packaging/leak-patterns.mjs";
 
 // #804: CLAIM_LABEL/STARTED_LABEL are IMPORTED (above) from the leaf claim-labels.mjs and re-exported
 // here, not declared in this file -- see claim-labels.mjs's own header for why. Every existing
@@ -219,7 +220,10 @@ export function claimedObjects({ labels, comments }) {
  * the one call that actually matters.
  * @type {(cmd: string, args: string[]) => string}
  */
-const defaultRun = (cmd, args) => execFileSync(cmd, args, { encoding: "utf8", env: sandboxGitEnv() });
+const defaultRun = (cmd, args) => {
+  assertNoLeakInArgv(cmd, args); // #1053: guarded in the SPAWN HELPER -- three comment writers below
+  return execFileSync(cmd, args, { encoding: "utf8", env: sandboxGitEnv() });
+};
 
 // #749: `gh issue edit --add-label <name>` REFUSES a label that does not exist -- and #677's own
 // reproduction (13:23:15Z) showed the failure is NOT atomic: the SAME command's `--remove-label ready`
