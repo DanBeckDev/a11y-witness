@@ -1588,16 +1588,18 @@ export function releaseDeclarationDrift(labelled, milestoned) {
   };
 }
 
-/** @param {{ run?: typeof defaultRun }} [args] */
-function reportReleaseDrift({ run = defaultRun } = {}) {
+function reportReleaseDrift() {
+  const run = defaultRun;
   // THROUGH THE WALK, never a hand-set --limit. #1090's own guard caught the first version of this line
   // carrying `--limit 500`, an hour after I removed the last four such caps from this file: a cap goes
   // stale silently the day the population passes it, and this population only grows.
   const list = (/** @type {string[]} */ args) => listUntilShort({ run, what: `out-of-release rows`,
     argv: (ask) => ["issue", "list", "--repo", REPO, "--state", "open", "--limit", String(ask),
       "--json", "number", ...args] });
-  const labelled = list(["--label", OUT_OF_RELEASE_LABEL]);
-  const milestoned = list(["--milestone", OUT_OF_RELEASE_MILESTONE_NAME]);
+  const rows = (/** @type {string[]} */ args) =>
+    /** @type {{number: number}[]} */ (/** @type {unknown} */ (list(args)));
+  const labelled = rows(["--label", OUT_OF_RELEASE_LABEL]);
+  const milestoned = rows(["--milestone", OUT_OF_RELEASE_MILESTONE_NAME]);
   const { labelOnly, milestoneOnly } = releaseDeclarationDrift(labelled, milestoned);
 
   if (labelOnly.length === 0 && milestoneOnly.length === 0) {
@@ -1624,6 +1626,10 @@ function reportReleaseDrift({ run = defaultRun } = {}) {
 /** The milestone that says what the label says -- one name, read by the check above. */
 const OUT_OF_RELEASE_MILESTONE_NAME = "Out of release";
 
+/**
+ * @type {[string, () => number][]}  annotated rather than inferred: adding the twelfth entry
+ * changed the inferred element type and the destructure at the call site stopped narrowing.
+ */
 export const CHECKS = [
   ["open issues", reportMutexViolations],
   ["hand claims", reportHandClaims],
