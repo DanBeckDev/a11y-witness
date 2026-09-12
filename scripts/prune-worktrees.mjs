@@ -447,6 +447,14 @@ export function commitsNotOnMain(repoRoot, branch, { run = defaultRun } = {}) {
 }
 
 /**
+ * `mergeStatus`'s three answers, preserved as three. `=== "merged"` is the shape that destroyed it:
+ * `"unknown" === "merged"` is `false`, so a merge status nobody could read became "the answer is no".
+ * @param {string} status
+ * @returns {boolean | "unknown"}
+ */
+const mergedTristate = (status) => (status === "unknown" ? "unknown" : status === "merged");
+
+/**
  * @typedef {{ path: string, branch: string | null, files: number, insertions: number, deletions: number,
  *   onMain: boolean | "unknown", commitsAhead: number | "unknown", retiredSession: boolean
  * }} StrandedWorktree
@@ -472,8 +480,13 @@ export function strandedWork(repoRoot, { run = defaultRun } = {}) {
   const stranded = [];
   /** @type {string[]} */
   const unreadable = [];
+  // EXAMINED COUNTS WHAT WAS EXAMINED. `entries.length` included the primary checkout, which the loop
+  // skips -- so the head line said 58 of a population of 57. worker-judge: the count was held as PRINTED
+  // and never as COUNTING, and `entries.length + 99` was 0 red across all 37 tests.
+  let examined = 0;
   for (const entry of entries) {
     if (isPrimaryWorktree(entry.path)) continue;
+    examined += 1;
     const { branch } = entry;
     const changes = trackedChanges(entry.path, { run });
     // A WORKTREE WE COULD NOT READ IS NOT A CLEAN ONE. Dropping it silently would make the head line
@@ -494,12 +507,17 @@ export function strandedWork(repoRoot, { run = defaultRun } = {}) {
       // progress and the other is a leftover, and calling the first a leftover is the report telling a
       // reader to discard a session's live working directory. The COUNT separates them and the boolean
       // cannot. A detached worktree has no branch to ask about, so both are `"unknown"`.
-      onMain: entry.branch === null ? "unknown" : mergeStatus(repoRoot, entry.branch, { run }) === "merged",
+      // THE TRISTATE SURVIVES THE COMPARISON. `mergeStatus` returns "merged" | "not-merged" | "unknown",
+      // and `=== "merged"` collapsed the last two into one `false` -- so a merge status nobody could read
+      // rendered as "is not an ancestor of origin/main", a positive claim from an unanswerable question.
+      // worker-judge, reviewing #1058, and it is `trackedChanges`'s own rule turned on me: "could not
+      // ask" and "the answer is no" are different reports.
+      onMain: branch === null ? "unknown" : mergedTristate(mergeStatus(repoRoot, branch, { run })),
       commitsAhead: entry.branch === null ? "unknown" : commitsNotOnMain(repoRoot, entry.branch, { run }),
       retiredSession: branch !== null && RETIRED_BRANCH_PREFIXES.some((prefix) => branch.startsWith(prefix)),
     });
   }
-  return { examined: entries.length, stranded, unreadable };
+  return { examined, stranded, unreadable };
 }
 
 /**
