@@ -92,11 +92,14 @@ or
   **Review of #<n> at `<head8>`, by reviewer: convinced (provisional).**
   ```
 
-  **On the verdict line, not under it**, because the org clock matches on
-  **sha plus verdict word** and prose on a following line is invisible to it: a provisional verdict and a
-  full one read identically to every automated reader, and the only thing stopping a provisional one
-  arming a PR is that a person remembers the arrangement. On the line, the clock can report how many are
-  outstanding instead of assuming none.
+  **On the verdict line, not under it, because every reader of a verdict is a person skimming for a
+  shape.** Nothing in this repository parses a PR comment for a verdict — measured 2026-09-12, the word
+  appears in `scripts/` and `packages/*/src` twice and both are prose inside comments — so the readers are
+  the sessions' crons and the clock, all of them attention rather than a regex. **A marker on the line
+  being skimmed is seen; one on the following line is not**, and there is an instance from that same
+  afternoon: `ceo`'s watch pattern required `"#1068 at"` and missed a verdict entirely because it was not
+  where the pattern looked. On the line, a reader counting outstanding provisional verdicts can see which
+  they are instead of assuming there are none.
 - **`ceo` or `worker-judge` spot-checks it before the author marks ready** — either of them. **A
   spot-check is re-running the PR's Acceptance line and one Mutation in a detached worktree and finding
   what the verdict says.** A *not convinced* counts as held when its named blocker reproduces.
