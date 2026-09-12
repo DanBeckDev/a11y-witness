@@ -52,7 +52,13 @@ import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { newestConclusion, headQuietSeconds } from "./update-branch-sweep.mjs";
+import { newestConclusion, headQuietSeconds, normaliseConclusion, SUCCESS }
+  from "./update-branch-sweep.mjs";
+// #1100: SUCCESS IS IMPORTED, NOT SPELLED. `newestConclusion` normalises every conclusion to one
+// vocabulary at its own edge (`gh` spells the same verdict `SUCCESS` on `statusCheckRollup` and `success`
+// on the REST check-runs API), so a literal here is a copy of a fact this file learns from that one --
+// and it read `"SUCCESS"` in three places while the function had started returning `"success"`, which
+// made every green armed pull request report as "has not concluded SUCCESS" and the watchdog find 0 of 2.
 
 export const EXIT = { EXAMINED: 0, CANNOT_ASK: 2 };
 export const DEFAULT_STALL_THRESHOLD_MS = 30 * 60 * 1000;
@@ -84,12 +90,17 @@ export const DEFAULT_BEHIND_STALL_THRESHOLD_SECONDS = 15 * 60;
  * @returns {{ stalled: boolean, code: string, reason: string }}
  */
 export function armedBehindVerdict({
-  armed, gateConclusion, behindBy, quietSeconds, thresholdSeconds = DEFAULT_BEHIND_STALL_THRESHOLD_SECONDS,
+  armed, gateConclusion: rawConclusion, behindBy, quietSeconds,
+  thresholdSeconds = DEFAULT_BEHIND_STALL_THRESHOLD_SECONDS,
 }) {
+  // NORMALISED AT THIS BOUNDARY, for the reason the sibling predicate in `update-branch-sweep.mjs` is:
+  // this is exported and reachable with either of `gh`'s two spellings, and a predicate correct only for
+  // the one its usual caller happens to supply is the defect that reached this file in the first place.
+  const gateConclusion = normaliseConclusion(rawConclusion);
   if (!armed) {
     return { stalled: false, code: "NOT_ARMED", reason: "not armed for auto-merge -- not this check's concern" };
   }
-  if (gateConclusion !== "SUCCESS") {
+  if (gateConclusion !== SUCCESS) {
     return {
       stalled: false, code: "WAITING",
       reason: `gate has not concluded SUCCESS (${gateConclusion ?? "no conclusion yet"}) -- healthy, still `
@@ -184,11 +195,13 @@ export function behindByCount(base, headSha, runGit) {
  *   thresholdMs?: number }} input
  * @returns {{ stalled: boolean, code: string, reason: string }}
  */
-export function stalledVerdict({ armed, gateConclusion, conflict, ageMs, thresholdMs = DEFAULT_STALL_THRESHOLD_MS }) {
+export function stalledVerdict({ armed, gateConclusion: rawConclusion, conflict, ageMs,
+  thresholdMs = DEFAULT_STALL_THRESHOLD_MS }) {
+  const gateConclusion = normaliseConclusion(rawConclusion);
   if (!armed) {
     return { stalled: false, code: "NOT_ARMED", reason: "not armed for auto-merge -- not this check's concern" };
   }
-  if (gateConclusion !== "SUCCESS") {
+  if (gateConclusion !== SUCCESS) {
     return {
       stalled: false, code: "WAITING",
       reason: `gate has not concluded SUCCESS (${gateConclusion ?? "no conclusion yet"}) -- healthy, still `
@@ -290,7 +303,7 @@ function examinePr(pr, now) {
   // imported, not a second hand-rolled `.find()` that can drift from the first.
   const gateConclusion = newestConclusion(pr.statusCheckRollup, "gate");
   const ageMs = armed && pr.autoMergeRequest ? now - Date.parse(pr.autoMergeRequest.enabledAt) : 0;
-  const green = armed && gateConclusion === "SUCCESS";
+  const green = armed && normaliseConclusion(gateConclusion) === SUCCESS;
 
   if (!green) return { examined: false };
 
