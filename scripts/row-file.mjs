@@ -160,6 +160,48 @@ export function bodyFromArgv(argv) {
 }
 
 /**
+ * #1117: A REGION THAT NAMES NO PATH MUST SAY IT MEANS TO.
+ *
+ * THE ROW'S PREMISE WAS THAT SUCH A ROW CANNOT BE FILED. Measured: it can. `missingTemplateFields`
+ * requires the SECTION, not paths, so a Region reading only prose already passes here and
+ * `declaredRegionFiles` already returns `[]` — it reserves nothing and B4 sees nothing. The workaround on
+ * #1042 (a Region naming files it will never touch) was never necessary.
+ *
+ * SO THE GAP IS THE OTHER WAY ROUND, and it is worse: **a row whose author simply forgot the paths is
+ * indistinguishable from one that has none.** Both reserve nothing, both file cleanly, and the first is a
+ * row nobody can route work around — the same over-blocking harm the row describes, arrived at from the
+ * side nobody was looking at.
+ *
+ * This makes the category EXPLICIT. A Region with no paths is accepted when it says so, in #989's own
+ * words — that test reads `declaresPaths: false` as "not in build" for *"a settings change, a ruling, a
+ * measurement posted on the row"* — and refused otherwise. **The clock and the filer now describe the
+ * same category with the same sentence** instead of one inferring it from absence.
+ *
+ * NOT A SECOND REGION PARSER: `declaredRegionFiles` is the same function B4 and the lane labels read, so
+ * "names no path" here means exactly what it means there.
+ *
+ * @param {string} body
+ * @returns {string | null}
+ */
+export function regionRefusalReason(body) {
+  if ((declaredRegionFiles(body) ?? []).length > 0) return null;
+  // SCOPED TO THE REGION SECTION, never to the whole body. The phrase appears in prose on rows that DO
+  // change files -- this row's own body says it twice -- and a declaration that can be made accidentally
+  // somewhere else is the easy path past the check this refusal exists to close.
+  const section = /^##\s+Region\s*$([\s\S]*?)(?=^##\s|$(?![\s\S]))/m.exec(body);
+  if (section && NOT_A_COMMIT.test(section[1])) return null;
+  return "REFUSING to file -- the `## Region` section names no file, and nothing says that is deliberate. "
+    + "A Region naming no path reserves nothing under B4, so a row that simply FORGOT its paths is "
+    + "indistinguishable from one that has none, and nobody can route around it. Either name the files "
+    + "this row will change, or write `its deliverable is not a commit` in the Region section -- which is "
+    + "the sentence #989's in-build rule already uses for a settings change, a ruling, or a measurement "
+    + "posted on the row.";
+}
+
+/** #989's own words, so the clock and the filer name one category rather than two spellings. */
+const NOT_A_COMMIT = /its deliverable is not a commit/i;
+
+/**
  * THE VERDICT, PURE -- `null` means proceed. Reuses #707's `missingTemplateFields` outright rather than
  * re-deriving it; see this file's header for why that matters here specifically.
  * @param {string | null} body
@@ -184,6 +226,8 @@ export function fileRefusalReason(body) {
       + "`gh issue create`. Add the missing section(s) as a `## <Field>` heading with real content under "
       + "it, then file again -- whoever claims this row later has less context than you have right now.";
   }
+  const region = regionRefusalReason(body);
+  if (region) return `row-file: ${region}`;
   // PRESENCE FIRST, THEN CONTENT. A row with no Acceptance section is refused above for that reason; a
   // row whose Acceptance names the whole suite has the section and cannot be run from it, and the two
   // refusals must not be collapsed -- the fix for each is different, which is the same argument
