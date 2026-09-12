@@ -127,19 +127,33 @@ export function updateBranchDecision({ armed, gateConclusion, behind, quietSecon
   if (!armed) {
     return { update: false, reason: "not armed for auto-merge -- not this job's concern" };
   }
-  if (gateConclusion !== null && gateConclusion !== "SUCCESS") {
-    return {
-      update: false,
-      // #498: NAME THE READING, NOT JUST THE VERDICT. This line used to say only "a failing PR needs a
-      // fix", which addresses the AUTHOR -- so when the sweep skipped two green PRs on a stale
-      // conclusion, the log read as work correctly handed back rather than as the sweep being wrong.
-      // Saying which run this conclusion came from means the next wrong skip is falsifiable from the log
-      // alone: open that run and see whether it is the newest.
-      reason: `this sweep read gate = ${gateConclusion} as the NEWEST gate run on the head`
-        + " -- a failing PR needs a fix, not a stale-main push."
-        + " If that PR looks green, check whether a newer gate run exists and report it (#498's shape)",
-    };
-  }
+  // #1100: A RED, ARMED, BEHIND PR IS UPDATED. THE SKIP THAT LIVED HERE WAS SELF-SUSTAINING.
+  //
+  // `gate = FAILURE` HAS TWO CAUSES AND THE CONCLUSION IS IDENTICAL IN BOTH: red because of what the PR
+  // changed, and red because of what MAIN changed underneath it. The correct action is opposite -- leave
+  // the first alone, update the second -- and this predicate could not tell them apart, so it refused the
+  // one action that would.
+  //
+  // Measured on run `34692306488` at 11:55:56Z: #1093 was skipped here, and its failure was `not ok 357`
+  // from `claude-md-content-preservation.test.ts`, **a file #1080 had DELETED from main at 11:27:11Z**.
+  // The merge ref was cut before that deletion, so CI ran a guard main no longer has. **There was no fix
+  // the author could push** -- the assertion did not exist to be satisfied -- and the update that would
+  // clear it was refused BECAUSE OF the red it would clear.
+  //
+  // #498'S REASONING IS RELOCATED, NOT OVERRULED. Pushing main onto a PR that is red on its own contents
+  // burns a CI run and moves nothing, and the author must fix the test. That is still true -- it simply
+  // applies AFTER the update rather than instead of it, and the returned reason says so, because #498's
+  // real value was that its skip named the reading rather than only the verdict.
+  //
+  // WHAT BOUNDS THE COST, and it is stronger than "the population is small": **after an update, a red
+  // that clears was the base's and a red that persists is the PR's own.** Nothing else distinguishes
+  // them, so the update is not a cost paid on a guess -- it is the only instrument that answers the
+  // question this rule used to guess at. One CI run per red armed PR per push to main, paid only when the
+  // base actually moves.
+  //
+  // `armed` still bounds the population and is deliberately untouched: an unarmed PR is skipped below
+  // whatever its colour, because `armed` means a reviewer was convinced, and widening to unarmed PRs is a
+  // different and much larger change.
   if (!behind) {
     return { update: false, reason: "already contains main's current tip -- nothing to update" };
   }
@@ -173,6 +187,17 @@ export function updateBranchDecision({ armed, gateConclusion, behind, quietSecon
   const quietNote = gateConclusion === null && typeof quietSeconds === "number"
     ? `; the head has been quiet ${Math.round(quietSeconds)}s, over the ${HEAD_QUIET_SECONDS}s window`
     : "";
+  // #1100: THE REASON SAYS WHICH CASE IT IS IN. "Updated despite a red base" and "updated because behind
+  // and green" are different events and the log must not spell them the same -- a new path that is
+  // quieter than the one it replaces is a regression even when the tests pass, which is the other half of
+  // #498's lesson read forwards.
+  if (gateConclusion !== null && gateConclusion !== "SUCCESS") {
+    return { update: true,
+      reason: `armed and behind, with gate = ${gateConclusion} -- UPDATED ANYWAY (#1100). A red has two `
+        + "causes and this is the only thing that tells them apart: if it CLEARS, the red was the base's; "
+        + "if it PERSISTS, it is this PR's own and the author owns the fix (#498). The quiet window does "
+        + "not apply -- a concluded gate means CI has finished, so nobody is mid-push" };
+  }
   return { update: true,
     reason: `armed, gate green or still running, and behind main's current tip${quietNote}` };
 }
