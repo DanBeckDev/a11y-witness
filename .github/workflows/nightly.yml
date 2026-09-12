@@ -38,7 +38,11 @@ name: nightly
 # run rather than a second trigger.
 on:
   schedule:
-    - cron: "0 6 * * *"
+    # #965: OFF THE HOUR. Four consecutive days (09-09..09-12) the :00 schedule started hours late or not at
+    # all -- GitHub's shared cron queue is worst at the top of the hour -- and ceo dispatched by hand. The
+    # nightly runs at 06:17 UTC; the org watch (#912) runs hourly at :37.
+    - cron: "17 6 * * *"
+    - cron: "37 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -47,6 +51,7 @@ permissions:
 
 jobs:
   coverage:
+    if: github.event.schedule != '37 * * * *'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -96,6 +101,7 @@ jobs:
           gh issue comment 169 --body "$BODY"
 
   ready-audit:
+    if: github.event.schedule != '37 * * * *'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -129,6 +135,7 @@ jobs:
   # `a11ign/a11ign` URLs answer 404 and are named every night: expected, not a failure. The comment goes
   # on #928 (the org's nightly reading) until #912 creates the nightly issue; then change the number.
   doc-report:
+    if: github.event.schedule != '37 * * * *'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -147,3 +154,32 @@ jobs:
         run: |
           node scripts/doc-cross-reference-report.mjs > /tmp/doc-report.md
           gh issue comment 928 --body-file /tmp/doc-report.md
+
+  # #912: THE ORG'S CLOCK, durable. `org-watch.mjs` reads main's colour (and, as its remaining reads land,
+  # the queue and utilisation) and exits QUIET or ATTENTION; on ATTENTION its report is posted as one
+  # comment on #928, the org's reading issue. Silent when clean, but never silent because it did not look:
+  # a CANNOT ASK is an ATTENTION. Hourly at :37, on the second cron above; the nightly jobs skip that cron.
+  watch:
+    if: github.event.schedule == '37 * * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci --ignore-scripts
+      - name: Read the org and post only if something needs attention
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          node scripts/org-watch.mjs > /tmp/org-watch.md; rc=$?
+          set -e
+          cat /tmp/org-watch.md
+          if [ "$rc" -ne 0 ]; then gh issue comment 928 --body-file /tmp/org-watch.md; fi
+
