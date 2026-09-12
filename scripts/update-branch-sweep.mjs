@@ -265,6 +265,66 @@ function runGitForReal(args) {
 /** @param {string[]} args */
 const gh = (args) => execFileSync("gh", args, { encoding: "utf8" }).trim();
 
+/**
+ * #1018: THE HEAD THE DECISION WAS MADE FROM, RE-READ AT THE MOMENT OF ACTING -- pure, over two shas.
+ *
+ * `gh pr list` names every open PR's `headRefOid` in one call, and every decision below is computed from
+ * that snapshot: `isBehind` from the sha, `newestConclusion` and `headQuietSeconds` from the runs attached
+ * to it. The ACTION is `gh pr update-branch <n>`, which takes a PR NUMBER and no sha -- so a push landing
+ * between the read and the call makes the DECISION wrong rather than the push, and it does so in both
+ * directions: a PR that has since been updated is pushed again on a stale `behind`, and a PR that has
+ * since fallen behind is skipped on a stale `up to date`. Neither prints anything a reader could act on.
+ *
+ * `null` -- the head could not be re-read -- is REFUSED, never treated as unchanged. This sweep runs
+ * unattended and pushes to other sessions' branches; "could not ask" answering "nothing moved" is the
+ * shape this repository has paid for most.
+ *
+ * @param {{ number: number, decidedFrom: string, headNow: string | null }} pin
+ * @returns {string | null} the refusal to print, or `null` when it is safe to act
+ */
+export function movedHeadRefusal({ number, decidedFrom, headNow }) {
+  if (headNow === decidedFrom) return null;
+  const short = (/** @type {string | null} */ sha) => (sha === null ? "unreadable" : sha.slice(0, 12));
+  const what = headNow === null
+    ? "its head could not be re-read, and an unreadable head is not an unchanged one"
+    : `its head MOVED between the decision and the action (${short(decidedFrom)} -> ${short(headNow)})`;
+  return `#${number} REFUSED -- ${what}. The decision came from ${short(decidedFrom)}; `
+    + "`gh pr update-branch` acts on the PR, not on a sha, so acting now would apply a verdict computed "
+    + "from a head that no longer exists. It will be re-decided on the next sweep.";
+}
+
+/**
+ * #1018: the PR's head right now, or `null` if it cannot be read -- never a guess and never the old value.
+ * @param {{ number: number, repo: string, run?: typeof gh }} args
+ * @returns {string | null}
+ */
+export function readHeadNow({ number, repo, run = gh }) {
+  try {
+    const oid = JSON.parse(run(["pr", "view", String(number), "--repo", repo, "--json", "headRefOid"])).headRefOid;
+    return typeof oid === "string" && oid !== "" ? oid : null;
+  } catch (cause) {
+    void cause;
+    return null;
+  }
+}
+
+// #1018: WHY NOT `expected_head_sha`, WHICH WOULD CLOSE THE WINDOW ENTIRELY.
+//
+// The REST endpoint `PUT /repos/{o}/{r}/pulls/{n}/update-branch` documents an `expected_head_sha` that
+// rejects the update when the head has moved -- strictly better than re-reading, because it is atomic and
+// this is not. `gh pr update-branch` exposes no such flag, so adopting it means moving the action to
+// `gh api`.
+//
+// NOT DONE HERE, DELIBERATELY: confirming that parameter behaves as documented requires PERFORMING an
+// update, and a probe is a read, never a write. Adopting an endpoint this repository has never exercised,
+// for the one call in this file that pushes to other sessions' branches, on documentation alone, is a
+// worse trade than a window measured in one `gh pr view`.
+//
+// WHAT WOULD LET THE NEXT PERSON ADOPT IT: exercise it once against a PR that is genuinely behind, with a
+// deliberately wrong `expected_head_sha`, and confirm the call is REJECTED rather than silently ignoring
+// the parameter -- the failure mode that matters, since an ignored parameter looks exactly like a working
+// one on the happy path. Then the re-read below becomes redundant rather than wrong.
+
 function main() {
   refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/update-branch-sweep.mjs" });
 
@@ -309,6 +369,16 @@ function main() {
     const { update, reason } = updateBranchDecision({ armed, gateConclusion, behind, quietSeconds });
     if (!update) {
       console.log(`UPDATE-BRANCH: #${pr.number} SKIPPED -- ${reason}`);
+      continue;
+    }
+
+    // #1018: PINNED. The decision above came from `pr.headRefOid` as the list reported it; this asks what
+    // the head is NOW, and refuses rather than acting on a verdict computed from a sha that has moved.
+    const refusal = movedHeadRefusal({
+      number: pr.number, decidedFrom: pr.headRefOid, headNow: readHeadNow({ number: pr.number, repo }),
+    });
+    if (refusal) {
+      console.log(`UPDATE-BRANCH: ${refusal}`);
       continue;
     }
 
