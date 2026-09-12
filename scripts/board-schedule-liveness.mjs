@@ -202,6 +202,26 @@ const DAY_MS = 86_400_000;
 
 /** Exit codes, and the third is the one that matters. */
 /**
+ * THE WORKFLOW FILE THIS PROCESS IS RUNNING INSIDE, or `null` when it is not running in Actions.
+ *
+ * #1154. `GITHUB_WORKFLOW_REF` is `owner/repo/.github/workflows/<file>@<ref>`; the basename is what
+ * `gh run list --workflow` takes. Reading it is the whole point: a name read from the run cannot name a
+ * workflow that no longer exists, which is the defect this row is about.
+ *
+ * @param {NodeJS.ProcessEnv} env
+ * @returns {string | null}
+ */
+export function hostWorkflowFile(env) {
+  const ref = env?.GITHUB_WORKFLOW_REF;
+  if (typeof ref !== "string" || ref.trim() === "") return null;
+  // The ref is `<owner>/<repo>/.github/workflows/<file>@<ref>` and the ref half may itself contain `/`
+  // (`refs/heads/main`), so the `@` is cut FIRST and the basename taken from what is left.
+  const path = ref.split("@")[0];
+  const file = path.slice(path.lastIndexOf("/") + 1);
+  return /^[\w.-]+\.ya?ml$/.test(file) ? file : null;
+}
+
+/**
  * HOW LONG SINCE THIS WATCHDOG ITSELF LAST RAN, in hours -- `null` when the answer could not be had.
  *
  * #272. THIS CHECK RUNS ON `push` AND ONLY ON `push`, deliberately: a watchdog moved onto a cron is
@@ -226,11 +246,29 @@ const DAY_MS = 86_400_000;
  * @param {Date} now
  * @returns {number | null}
  */
-export function hoursSincePreviousRun(run, now) {
+export function hoursSincePreviousRun(run, now, env = process.env) {
+  // #1154: THE WORKFLOW IS READ FROM THE RUN, NEVER NAMED HERE.
+  //
+  // This asked for `board-liveness.yml` for eleven days after #901 deleted that workflow and folded its
+  // steps into trunk-guard. **It did not fail.** GitHub keeps a deleted workflow's entity addressable by
+  // path for ever, so the call returned 200 with the old run history, frozen at 2026-09-10T22:20:14Z --
+  // and `watchdogSilenceLine` duly printed *"it last ran 42h ago ... so a quiet spell here means nobody
+  // pushed"* while main took 538 pushes in that window. A real number, a rising trend, and a stated cause
+  // that is flatly untrue and unfalsifiable from the report itself.
+  //
+  // The `catch` below would have caught a 404 and the `!previous` guard would have caught an empty list.
+  // **The case GitHub actually produces is the one neither covers.**
+  //
+  // So the name is not written down. `GITHUB_WORKFLOW_REF` is what the run itself is executing, so it
+  // cannot go stale under a rename, a move, or a fold into another workflow -- and when it is absent
+  // (running outside Actions) the answer is UNKNOWN rather than a guess. A guessed name is what produced
+  // the 42 hours: a wrong answer is worse here than no answer, because `watchdogSilenceLine` explains it.
+  const workflow = hostWorkflowFile(env);
+  if (!workflow) return null;
   /** @type {{ createdAt?: string }[]} */
   let runs;
   try {
-    runs = JSON.parse(run(["run", "list", "--repo", REPO, "--workflow", "board-liveness.yml",
+    runs = JSON.parse(run(["run", "list", "--repo", REPO, "--workflow", workflow,
       "--json", "createdAt", "--limit", "2"]));
   } catch {
     return null;
