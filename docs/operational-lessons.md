@@ -738,6 +738,57 @@ Three rules follow, and they are cheap:
    written against a shape you did not verify is the count-based check all over again.
 
 
+## A CHECK WRITTEN AS A TEXT SEARCH CANNOT TELL THE GUARD FROM THE EXPLANATION OF THE GUARD
+
+Three of these on 2026-09-12, found independently by two sessions, which is a shape rather than a
+coincidence. **This repository writes very long explanations — that is deliberate and it is why the shape
+recurs here more than it would elsewhere.** A comment naming the thing a check searches for satisfies the
+check, and the check then reports on its own prose.
+
+| where | what happened |
+|---|---|
+| #1002 | a leak-scan pin satisfied by a **commented-out tail** |
+| #1001 | a gate assertion satisfied by prose about itself |
+| #1022 | the row's own open-check, `grep -c 'Merge already in progress\|…' scripts/arm-pr.mjs`, went `0 → 1` **entirely because a JSDoc line quotes the error the fix is about**. The fix deliberately does not match GitHub's message text — keying on prose is what `merge-guard`'s `FAULT.*` rule exists to avoid — so nothing in the code could ever have satisfied it |
+
+**It fails in BOTH directions and neither is loud.**
+
+- *"Zero until fixed"*, met by a comment, reads as a fix that landed. That was #1022.
+- *"Non-zero while open"*, met by a comment, can never reach zero, so **the row can never be shown closed**
+  even after the work is done. That is the commoner half here, and the safer one, and it is still not a
+  measurement.
+
+**The population, measured 2026-09-12.** 60 open rows; 59 carry an `## Open-check`; **23 of those checks
+are a text search over repo files.** Of the 13 targets that are source files rather than docs, each
+pattern compared against the file raw and against the same file with comments blanked
+(`local-import-closure.mjs`'s `stripComments`):
+
+| | |
+|---|---|
+| satisfied by prose **alone** today | 0 |
+| **satisfiable by prose** — the pattern also occurs in comments, so the count survives the code being removed | **4** |
+| code-only, immune | 2 |
+| no match either way (genuinely open) | 7 |
+
+```
+#32  real-page-corpus.mjs      12 matches raw,  3 in code  ->  9 in comments
+#34  case-matrix.mjs           11 matches raw, 10 in code  ->  1 in comments
+#34  criterion-coverage.ts      7 matches raw,  3 in code  ->  4 in comments
+#852 row-claim.mjs              4 matches raw,  2 in code  ->  2 in comments
+```
+
+**The rule: a check must read the behaviour, not the file.** In order of preference — call the function
+and read its answer; read an exported value; count something only code can produce. `#968`'s
+`grep -c '^export const OUT'` is the cheap correct form: `^export` is a shape a comment cannot have.
+Searching a **prose** file for a sentence is fine and is not this defect — a `.md` has no code/comment
+distinction to confuse.
+
+**And the tell is specific: if the string you are searching for is also the string you would use to
+EXPLAIN the thing, the check is about to read your explanation.** That is exactly when a codebase like
+this one has already written it down nearby.
+
+[#1027 carries the four amendments and the sweep.]
+
 ## A GUARD THAT ALREADY EXISTED, and a weaker check substituted for it
 
 Three mistakes in one session on 2026-09-01/02, and only the first was a gap in this repo. The other two
