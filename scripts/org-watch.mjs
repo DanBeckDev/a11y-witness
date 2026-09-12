@@ -161,7 +161,9 @@ export function totalCount(path, { repo, run = defaultRun }) {
  * anyone. The assertion comes from the run's own failing log.
  * @param {{ repo: string, workflow?: string, now?: Date, run?: typeof defaultRun }} deps
  * @returns {{ readable: boolean, red: boolean, since: string | null, hours: number | null,
- *             atLeast: boolean, firstFailing: string | null, why: string | null }}
+ *             atLeast: boolean, firstFailing: string | null, why: string | null,
+ *             windows: { since: string, until: string | null, hours: number, open: boolean }[],
+ *             examined: number, pageBeginsMidRed: boolean }}
  */
 export function mainColour({ repo, workflow = "trunk-guard", now = new Date(), run = defaultRun }) {
   /** @type {{ conclusion: string | null, created_at: string, databaseId?: number, id?: number }[]} */
@@ -179,18 +181,24 @@ export function mainColour({ repo, workflow = "trunk-guard", now = new Date(), r
     // success.** A pinning test asserted the shape and could not separate them, because there was nothing
     // to separate: `assert.notDeepEqual(unreadable, green)` is the one line that would have caught it.
     return { readable: false, red: false, since: null, hours: null, atLeast: false, firstFailing: null,
+      windows: [], examined: 0, pageBeginsMidRed: false,
       why: `could not read ${workflow}'s runs: ${cause instanceof Error ? cause.message : String(cause)}` };
   }
+  // #1047: THE SEQUENCE, from the list already fetched -- no extra call. `mainColour` answers "is main red
+  // now"; `windows` answers "what has main done since the last read", which is the question a watch at any
+  // interval can actually answer.
+  const sequence = redWindows(runs, now);
   const newestFirst = [...runs].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
   // AN EMPTY LIST IS ALSO NOT A GREEN MAIN. A workflow with no runs at all -- renamed, never triggered,
   // or a `branch=main` filter that matches nothing -- answers the question no more than a 502 does.
   if (newestFirst.length === 0) {
     return { readable: false, red: false, since: null, hours: null, atLeast: false, firstFailing: null,
+      windows: [], examined: 0, pageBeginsMidRed: false,
       why: `${workflow} reports no runs on main at all` };
   }
   if (newestFirst[0].conclusion !== "failure") {
     return { readable: true, red: false, since: null, hours: null, atLeast: false, firstFailing: null,
-      why: null };
+      why: null, ...sequence };
   }
   // THE FIRST failure AFTER THE LAST success -- not the newest failure, which understates every streak
   // longer than one run. #928 was 8 runs over 27.8 hours and the newest-failure reading would have said 0.
@@ -206,6 +214,7 @@ export function mainColour({ repo, workflow = "trunk-guard", now = new Date(), r
   const hours = (now.getTime() - Date.parse(oldest.created_at)) / 3_600_000;
   const id = oldest.databaseId ?? oldest.id;
   return {
+    ...sequence,
     readable: true,
     red: true,
     since: oldest.created_at,
@@ -280,6 +289,111 @@ function outcomeOf({ conclusion, status }) {
   const present = (/** @type {string | null | undefined} */ value) =>
     (typeof value === "string" && value.trim() !== "" ? value.trim().toLowerCase() : null);
   return present(conclusion) ?? present(status) ?? "unknown";
+}
+
+/**
+ * EVERY RED WINDOW IN THE RUN LIST, oldest first -- #1047. **Main's colour is not a sample, it is a
+ * sequence.**
+ *
+ * `mainColour` answers *is main red now*, and a watch that only asks that cannot see a break shorter than
+ * its own interval. Measured 2026-09-12: the night's red lasted **19.9 minutes** against a first read
+ * specified as hourly -- roughly a 1-in-3 chance of overlapping any given sample. `product-manager`'s own
+ * 30-minute clock read green at 03:43Z, the red became knowable at 03:59:19Z, and their 04:13Z reading
+ * reported it three minutes after a person had already found it by hand.
+ *
+ * **A sampling watch that misses produces a GREEN RECORD across a window in which main was broken**, and
+ * *"silent when clean"* and *"silent because it did not look"* render identically in a log -- which is
+ * #912's own founding sentence arriving inside the clock built to answer it.
+ *
+ * The run list holds every conclusion whether or not anyone was looking, so a read at ANY interval can
+ * report every window since the last one. Sampling harder is not the lever: a red shorter than the
+ * interval is invisible at every interval.
+ *
+ * THREE THINGS THAT ARE NOT WINDOWS, each of which would otherwise be counted as zero red:
+ *
+ * - **A window still OPEN at the read** is counted to `now` and carries `open: true`. Summed naively it
+ *   contributes nothing or is dropped for having no close, so **the worst state reports as the best**.
+ * - **A run still IN FLIGHT neither opens nor closes a window.** It is not a failure and it is not a
+ *   success, and treating it as either invents an edge.
+ * - **A GAP IN THE RUNS IS NOT GREEN.** `trunk-guard` runs on merges, so six hours with no merge is six
+ *   hours of UNKNOWN -- no evidence either way. `examined` is returned so a caller can say "N windows
+ *   across M runs examined" rather than reporting a clean sheet it did not earn. A field empty by
+ *   construction is not evidence of absence.
+ *
+ * @param {{ conclusion?: string | null, created_at: string }[]} runs
+ * @param {Date} now
+ * @returns {{ windows: { since: string, until: string | null, hours: number, open: boolean }[],
+ *             examined: number, pageBeginsMidRed: boolean }}
+ */
+export function redWindows(runs, now) {
+  const settled = [...runs]
+    .filter((r) => r.conclusion === "failure" || r.conclusion === "success")
+    .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
+  const windows = [];
+  /** @type {string | null} */
+  let openedAt = null;
+  for (const run of settled) {
+    if (run.conclusion === "failure" && openedAt === null) openedAt = run.created_at;
+    if (run.conclusion === "success" && openedAt !== null) {
+      windows.push({ since: openedAt, until: run.created_at, open: false,
+        hours: hoursBetween(openedAt, run.created_at) });
+      openedAt = null;
+    }
+  }
+  if (openedAt !== null) {
+    windows.push({ since: openedAt, until: null, open: true,
+      hours: hoursBetween(openedAt, now.toISOString()) });
+  }
+  // #1049: A PAGE THAT BEGINS MID-RED CLIPS ITS FIRST WINDOW, and the clip is INVISIBLE in the numbers.
+  //
+  // `redWindows` opens at the first `failure` it can see. If the run that actually opened the window is off
+  // the end of `per_page=20`, the window starts at the page edge instead and its hours are understated.
+  // worker-capture drove one real history both ways through this function:
+  //
+  //     whole history    "15" hours, since 2026-09-11T14:00Z, 1 window across 4 settled runs
+  //     page-truncated    "5" hours, since 2026-09-12T00:00Z, 1 window across 2 settled runs
+  //
+  // **Three times understated, on a metric whose target is 0, in the direction that looks better** -- and
+  // the two notes differ only by a denominator no reader would read as a truncation warning, because
+  // "1 window across 2 settled runs" is exactly what a quiet week looks like.
+  //
+  // The bound is readable WITHOUT paginating: if the OLDEST settled run in the page is a `failure`, the
+  // page starts mid-red and that window's start is unknown. One bit, from the list already fetched, and
+  // the identical signal `mainColour` already carries for the streak.
+  // NAMED `pageBeginsMidRed`, not `atLeast`: `mainColour` already carries an `atLeast` meaning "no success
+  // appears in the page, so the STREAK may be older than it looks". Same cause, different claim, and one
+  // object cannot carry both under one name -- which typescript caught the moment they met.
+  const pageBeginsMidRed = settled.length > 0 && settled[0].conclusion === "failure";
+  return { windows, examined: settled.length, pageBeginsMidRed };
+}
+
+/** @param {string} from @param {string} to @returns {number} hours to one decimal */
+function hoursBetween(from, to) {
+  return Math.round(((Date.parse(to) - Date.parse(from)) / 3_600_000) * 10) / 10;
+}
+
+/**
+ * The sum of every red window, and how it was arrived at -- #1047. A SINGLE CURRENT WINDOW IS THE SAMPLING
+ * ASSUMPTION ONE LAYER UP: it reports 0 for a night with three breaks all fixed before the weekly read.
+ *
+ * The rendered text names the window count AND the runs examined, because a week with few merges has few
+ * conclusions to read and must say so rather than presenting a quiet sheet as a clean one.
+ * @param {ReturnType<typeof redWindows>} read
+ * @returns {{ value: string, note: string }}
+ */
+export function redHoursFigure({ windows, examined, pageBeginsMidRed = false }) {
+  const total = Math.round(windows.reduce((sum, w) => sum + w.hours, 0) * 10) / 10;
+  const stillOpen = windows.some((w) => w.open);
+  return {
+    // #1049: `at least` ON THE VALUE, not only in the note. A clipped window understates the figure
+    // threefold and a denominator is not a truncation warning -- the number itself has to say it is a
+    // bound, because the number is what gets quoted.
+    value: pageBeginsMidRed ? `at least ${total}` : String(total),
+    note: `${windows.length} window(s) across ${examined} settled run(s) examined`
+      + (pageBeginsMidRed ? "; the page BEGINS MID-RED, so the first window's start is unknown and this is a "
+        + "lower bound" : "")
+      + (stillOpen ? "; THE LAST IS STILL OPEN at the read" : ""),
+  };
 }
 
 /**
