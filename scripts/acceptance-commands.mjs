@@ -181,7 +181,42 @@ const FULL_CAPABILITIES =
 // A bare line, deliberately -- `History: full` names nothing else the way `Acceptance:`/`Closes:` name a
 // command or an issue, so this needs no section parser, just a marker this PR's checkout should deepen
 // before anything else runs.
-const HISTORY_FULL_PATTERN = /^\s*History:\s*full\s*$/im;
+// #1036: BOLD-TOLERANT, because six lines below `commandLinesAfter`'s own stop rule already is --
+// `^(?:\*\*|__)?${name}:(?:\*\*|__)?` for `Acceptance:`/`Refutation:`/`Mutation:`. One function, two
+// conventions about bold, three lines apart, and the stricter one was the newer code. `**History: full**`
+// is a spelling these bodies reach for constantly, and it was recognised NOWHERE: not as a declaration, so
+// the checkout stayed shallow, and not as a declaration by `commandLinesAfter` either, so it was taken as
+// a command and terminated the scan -- reproducing #1035's exact pair of misleading messages in the very
+// commit that fixed them. worker-capture's finding.
+//
+// Still ANCHORED at both ends, which is what keeps `node scripts/x.mjs --History: full-run` a command:
+// the tolerance is for the wrapper, never for surrounding text.
+const HISTORY_FULL_PATTERN = /^\s*(?:\*\*|__)?History:\s*full(?:\*\*|__)?\s*$/im;
+
+// #1036: A LINE THAT OPENS WITH `History:` AND IS NOT A RECOGNISED DECLARATION. `History: full.` and
+// `History: shallow` are neither honoured nor commands, and silently taking them as commands is how the
+// unrecognised spelling produces a refusal about something else. Named rather than guessed at.
+const HISTORY_ISH_PATTERN = /^\s*(?:\*\*|__)?History\s*:/i;
+
+/**
+ * #1036: is this line an attempt at the `History:` declaration, recognised or not?
+ *
+ * Both answers skip, and for different reasons. The RECOGNISED form is honoured from the whole body by
+ * `hasFullHistoryDeclaration`, so taking it as a command is pure loss. A NEAR-MISS (`History: full.`,
+ * `History: shallow`) is not honoured and the checkout stays shallow -- but it must not ALSO become a
+ * command and terminate the scan, because then the job reports "every command above was refused" about a
+ * line the author wrote as a declaration, and the real command, whose refusal would have named `history`
+ * and been followable, never enters the list at all. Skipping leaves exactly one refusal, and it is the
+ * one that names the actual problem.
+ *
+ * Extracted rather than inlined so `commandLinesAfter` stays under the complexity gate -- a called
+ * function's branches are not the caller's, the same reason `postBlockedByNoteIfAny` exists next door.
+ * @param {string} trimmed
+ * @returns {boolean}
+ */
+function isHistoryDeclarationLine(trimmed) {
+  return HISTORY_FULL_PATTERN.test(trimmed) || HISTORY_ISH_PATTERN.test(trimmed);
+}
 
 /**
  * Does the PR body ask for this run's checkout to carry full history (#497)? A PR carrying the line with
@@ -1231,7 +1266,8 @@ function commandLinesAfter(lines, headerIndex) {
     // (the named file declares it on line 13) -- one placement, two messages, neither naming it. Skipping
     // rather than refusing, because the declaration is position-independent by design and honouring it
     // wherever it lands is the behaviour the author already expects.
-    if (HISTORY_FULL_PATTERN.test(trimmed)) continue;
+    if (isHistoryDeclarationLine(trimmed)) continue;
+
     // #438: stops on ANY of the three known section headers, not just Mutation:, so a bare (non-heading)
     // `Refutation:` line ends an in-progress Acceptance: block instead of being read as one more command.
     if (SECTION_FIELD_NAMES.some((name) => new RegExp(`^(?:\\*\\*|__)?${name}:(?:\\*\\*|__)?`, "i").test(trimmed))) break;
