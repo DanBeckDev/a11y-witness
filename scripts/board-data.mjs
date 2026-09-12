@@ -33,6 +33,7 @@ import { REPO } from "./repo-identity.mjs";
 // The gate predicates live in `board-gates.mjs` (#429), a module with no process in it, so a test of the
 // selection runs where a test of this file cannot. Re-exported: no importer of this file changes.
 import { latestVerdictGate } from "./board-gates.mjs";
+import { assertNoLeakInArgv } from "../packages/lab/src/packaging/leak-patterns.mjs";
 export { gateVerdicts, isConformanceGate, latestVerdictGate, worstVerdict } from "./board-gates.mjs";
 
 // RE-EXPORTED, not restated -- issue #92. Five other modules import `REPO` from here, so it stays exported
@@ -74,6 +75,10 @@ export const READ_SET = ["docs/board/reported", "scripts/board-report.mjs"];
 // knowing which subprocess reads which variable.
 /** @param {string[]} args */
 export function gh(args) {
+  // #1053: the leak check lives in the SPAWN HELPER, so every consumer of this `gh` is covered and so is
+  // every call somebody adds to one tomorrow. Four of the eight writers #1053 names reach GitHub through
+  // this one function.
+  assertNoLeakInArgv("gh", args);
   return execFileSync("gh", args,
     { encoding: "utf8", cwd: ROOT, env: sandboxGitEnv(), maxBuffer: 32 * 1024 * 1024 });
 }
