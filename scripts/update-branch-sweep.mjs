@@ -162,6 +162,12 @@ function gateState(gateConclusion) {
     return `gate ${NO_VERDICT}, so a replacement run is already going and this reached NO VERDICT (#1007)`;
   }
   return "gate still running";
+  // WHAT IS DELIBERATELY NOT HERE: `timed_out` and `startup_failure` take the RED path, and a reader
+  // should not have to learn that by elimination. Both are genuine non-verdicts about the pull request's
+  // OWN contents -- a job that ran out of time or could not start is a fact about this head -- in a way a
+  // supersede is not: a cancellation says only that main moved. So they are reds with two causes like any
+  // other, and the update is the instrument that tells the causes apart. Named here rather than listed in
+  // the predicate, because adding them to `NO_VERDICT` is what would be wrong.
 }
 
 /**
