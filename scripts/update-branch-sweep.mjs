@@ -117,8 +117,14 @@ export function headQuietSeconds(runs, now) {
  */
 export const HEAD_QUIET_SECONDS = 300;
 
-/** The one spelling of success, in the normalised vocabulary — lower case, like every other conclusion. */
-const SUCCESS = "success";
+/**
+ * The one spelling of success, in the normalised vocabulary — lower case, like every other conclusion.
+ *
+ * EXPORTED because `newestConclusion` HAS A SECOND CONSUMER and normalising its return changed what that
+ * consumer reads. `queue-stalled.mjs` compares the same value in three places, and a literal there is a
+ * copy of this fact in a file that learns the vocabulary from this one.
+ */
+export const SUCCESS = "success";
 
 /**
  * #1100: ONE VOCABULARY, normalised at every edge that reads a conclusion.
