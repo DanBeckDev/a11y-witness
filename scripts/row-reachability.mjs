@@ -82,7 +82,7 @@ const unique = (values) => [...new Set(values)];
  * ceiling, which is the lint rule doing its job rather than an obstacle to route around.
  *
  * @param {number} row
- * @param {{paths: number, symbols: number, prose?: number}} examined
+ * @param {{paths: number, symbols: number, prose?: number, refs?: number}} examined
  * @returns {{code: number, lines: string[]} | null} null when there IS something to check.
  */
 function examinedNothing(row, examined) {
@@ -115,7 +115,7 @@ function examinedNothing(row, examined) {
  *          blockedLabel?: boolean,
  *          state?: string | null,
  *          closedAt?: string | null,
- *          examined: {paths: number, symbols: number, prose?: number}}} facts
+ *          examined: {paths: number, symbols: number, prose?: number, refs?: number}}} facts
  * @returns {{code: number, lines: string[]}}
  */
 
@@ -174,7 +174,15 @@ export function startability({ row, subjectsMissing, heldRegions, examined, bloc
   }
   return { code: EXIT.STARTABLE,
     lines: [`#${row} is STARTABLE: every symbol it names is on \`main\`, and no unmerged branch is in its `
-      + `region (${examined.paths} path(s), ${examined.symbols} symbol(s) examined).`,
+      + `region (${examined.paths} path(s), ${examined.symbols} symbol(s), ${examined.refs ?? 0} unmerged `
+      + "ref(s) examined).",
+    ...((examined.refs ?? 0) === 0
+      // #772: ZERO REFS IS A NARROWER ANSWER, NOT A CLEANER ONE. `unmergedRefs()` reads what this checkout
+      // has FETCHED, so a fresh clone searches nothing and every symbol comes back carried by nobody. The
+      // verdict is still the honest one available here; what it must not do is read like a search.
+      ? ["  NOTE: this checkout has fetched NO unmerged remote branches, so the subject and region searches "
+        + "had nothing to look at. `git fetch origin` and ask again for an answer with a population behind it."]
+      : []),
     "  This checks REGIONS, SYMBOLS and the `blocked` label. A row can still be blocked by something none",
     "  of those express -- an unstated dependency, a decision nobody has taken -- so STARTABLE means "
       + "\"nothing I can see\", never \"nothing blocks this\"."] };
@@ -241,7 +249,15 @@ function prState(ref) {
   }
 }
 
-/** Every remote branch except `main` — the population an unmerged claim is measured against. */
+/**
+ * Every remote branch except `main` — the population an unmerged claim is measured against.
+ *
+ * #772: IT IS PURELY LOCAL. `for-each-ref refs/remotes/origin` reads what this checkout has fetched, not
+ * what the remote holds, so a checkout with no remote branches returns ZERO and every "is this symbol
+ * carried elsewhere" loop below never runs. The answer is then an empty `carriers` list for every symbol
+ * and a STARTABLE verdict — **from an empty population, not from a search.** "Zero unmerged refs" and "no
+ * ref carries this" are different facts, and the caller reports the count so they cannot be read as one.
+ */
 function unmergedRefs() {
   return git(["for-each-ref", "--format=%(refname:short)", "refs/remotes/origin"]).split("\n")
     .map((r) => r.trim()).filter((r) => r && r !== "origin/main" && !r.startsWith("origin/HEAD"));
@@ -249,13 +265,30 @@ function unmergedRefs() {
 
 /** @param {string} path */
 const onMain = (path) => {
+  // #772: `cat-file -e` RETURNS 128 FOR BOTH "no such path" AND "no such revision", measured against this
+  // repository — so the `status === 1` test that fixes `symbolOnMain` and `refsCarryingSymbol` cannot fix
+  // this one. The revision has to be proved readable SEPARATELY, and then a 128 is genuinely about the path.
+  //
+  // Without that, a checkout whose `origin/main` is missing reports every declared path as absent, which
+  // reads as "none of this row's Region has landed" -- a confident answer from a question never asked.
+  assertOriginMainReadable();
   try {
     git(["cat-file", "-e", `origin/main:${path}`]);
     return true;
   } catch {
-    return false;
+    return false; // `origin/main` resolves, so this is about the PATH
   }
 };
+
+/** @type {boolean | null} Proved once per process: the ref either resolves here or nothing below can ask. */
+let originMainProved = null;
+
+/** Throws so `main()`'s CANNOT_ASK path reports it, rather than every path reading as absent. */
+function assertOriginMainReadable() {
+  if (originMainProved) return;
+  git(["rev-parse", "--verify", "--quiet", "origin/main^{commit}"]);
+  originMainProved = true;
+}
 
 /**
  * IS THIS SYMBOL ON `main`, ANYWHERE — never bounded to the row's own Region (#719).
@@ -336,6 +369,10 @@ export function subjectAndRegionFacts(body) {
   const prose = named.filter((path) => path.endsWith(".md"));
   const symbols = unique([...body.matchAll(SYMBOL_IN_PROSE)].map((m) => m[1]));
   const refs = unmergedRefs();
+  // #772: THE COUNT TRAVELS WITH THE VERDICT. An empty ref list is a real state -- a fresh clone, a
+  // checkout that has never fetched branches -- and a subject search across it proves nothing. Counted
+  // here rather than guarded, because zero refs is legitimate and its cost is only that the answer is
+  // narrower than it looks; what is not acceptable is that narrowness being invisible.
 
   // THE #186 CASE FIRST. A symbol the row is about, absent from `main`'s WHOLE TREE and present on some
   // other ref, means the row's subject has not landed -- which no region check can see, because nobody is
@@ -398,7 +435,7 @@ export function subjectAndRegionFacts(body) {
     }
   }
   return { subjectsMissing, heldRegions,
-    examined: { paths: paths.length, symbols: symbols.length, prose: prose.length } };
+    examined: { paths: paths.length, symbols: symbols.length, prose: prose.length, refs: refs.length } };
 }
 
 /** @param {number} row */
