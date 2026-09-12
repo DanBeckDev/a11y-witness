@@ -25,10 +25,15 @@
 // generating and the publishing are separate acts and a bad report can be seen before it is posted.
 import { execFileSync } from "node:child_process";
 import { sandboxGitEnv } from "./git-env.mjs";
+import { changedFiles } from "./changed-files.mjs";
 import { readFileSync, existsSync, readdirSync} from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { REPO } from "./repo-identity.mjs";
+// The gate predicates live in `board-gates.mjs` (#429), a module with no process in it, so a test of the
+// selection runs where a test of this file cannot. Re-exported: no importer of this file changes.
+import { latestVerdictGate } from "./board-gates.mjs";
+export { gateVerdicts, isConformanceGate, latestVerdictGate, worstVerdict } from "./board-gates.mjs";
 
 // RE-EXPORTED, not restated -- issue #92. Five other modules import `REPO` from here, so it stays exported
 // at this path; `repo-identity.mjs` is the single declared value now, and this is one of its callers.
@@ -239,6 +244,7 @@ function readEntries(kind) {
     .map((e) => e.body);
 }
 
+
 export function reported() {
   const metaPath = path.join(ROOT, REPORTED_DIR, "meta.json");
   // DERIVED FROM `REPORTED_KINDS`, not repeated. This line read `gates: readEntries("gates"),
@@ -251,7 +257,8 @@ export function reported() {
   /** @param {any} entry */
   const fresh = (entry) => Date.now() - Date.parse(entry.at) < staleMs;
   const gates = (raw.gates ?? []).filter((/** @type {any} */ g) => g.at && Number.isFinite(Date.parse(g.at)));
-  const latest = gates.sort((/** @type {any} */ a, /** @type {any} */ b) => Date.parse(b.at) - Date.parse(a.at))[0] ?? null;
+  // #429: THE VERDICT SLOT, not the newest of any kind -- see `latestVerdictGate`'s own header.
+  const latest = latestVerdictGate(gates);
   // EVERY GATE, not just the newest. Section five recommended "buying nothing yet" while the record held
   // the measurement that answered it, because the document could not SEE any gate but the latest -- so
   // the prose was hand-written and went stale the moment the re-run landed. A section that states a
@@ -260,43 +267,6 @@ export function reported() {
     gates, achievements: raw.achievements ?? [] };
 }
 
-/** The verdicts a gate PRINTED, quoted from its own output and never retyped.
- *
- * THE BOARD'S DOCUMENT COULD NOT SAY WHETHER A CHECK PASSED. `board-report.mjs` prints the gate's whole
- * output verbatim into the GitHub edition; the PDF quoted only the COMMAND and the capture spread. So the
- * two editions would have disagreed about whether a check passed, and the silent one is the one the board
- * reads -- found 2026-09-07, the day before the first FAIL was due to be recorded.
- *
- * Quoted, never classified. A gate states its own verdict in its own sentence; this returns those
- * sentences. Deciding whether a FAIL blocks anything is a JUDGEMENT and is not derivable from the output,
- * which is why `note` on the entry carries it and why an unexplained FAIL renders as unexplained rather
- * than as an opinion this file invented.
- *
- * @param {string | undefined} gateOutput
- */
-export function gateVerdicts(gateOutput) {
-  const lines = String(gateOutput ?? "").split("\n");
-  /** @type {{ verdict: string, line: string }[]} */
-  const found = [];
-  for (const raw of lines) {
-    const line = raw.trim();
-    // A verdict is the word at the head of its own clause, so `RULES: PASS -- ...` and `PASS -- ...`
-    // both count and the word inside a sentence ("a page that FAILS this rule") does not.
-    const m = /^(?:[A-Za-z: ]{0,24}?\b)?(PASS|FAIL|BLOCKED|INCONCLUSIVE)\b\s*(?:[—-]\s*(.*))?$/.exec(line);
-    if (m) found.push({ verdict: m[1], line });
-  }
-  return found;
-}
-
-/** The single worst verdict a gate printed, or null when it printed none.
- * @param {string | undefined} gateOutput */
-export function worstVerdict(gateOutput) {
-  /** @type {Record<string, number>} */
-  const order = { PASS: 0, INCONCLUSIVE: 1, BLOCKED: 2, FAIL: 3 };
-  const all = gateVerdicts(gateOutput);
-  if (all.length === 0) return null;
-  return all.reduce((w, v) => (order[v.verdict] > order[w.verdict] ? v : w), all[0]);
-}
 
 /**
  * The capture age a real-page gate printed, pulled from its own verbatim output rather than retyped by a
@@ -598,7 +568,10 @@ export function conflictMetrics(since) {
  */
 export function readSetIsNotMain() {
   const uncommitted = git(["status", "--porcelain", "--", ...READ_SET]);
-  const offMain = git(["diff", "--name-only", "main", "--", ...READ_SET]);
+  // #939, two defects on one line. `--no-renames` (through `changedFiles`), so a read-set file MOVED is
+  // seen; and `origin/main`, not local `main`, which in a shared checkout has been measured over a thousand
+  // commits stale -- this refusal exists to say the read set is not main's, and it was asking the wrong main.
+  const offMain = changedFiles(["origin/main"], { repoRoot: ROOT, pathspec: [...READ_SET] }).join("\n");
   if (!uncommitted && !offMain) return null;
   const lines = [];
   if (uncommitted) lines.push(`uncommitted changes:\n${uncommitted}`);

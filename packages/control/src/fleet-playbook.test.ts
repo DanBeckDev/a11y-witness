@@ -13,7 +13,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { validRef, PLAYBOOKS, LIMIT_PATTERN, SERIAL_PATTERN, PLAYBOOK_TIMEOUT_MS, DEFAULT_PLAYBOOK_TIMEOUT_MS,
-  onTheControlPlane, journalScope, controlPlaneCheckout }
+  onTheControlPlane, journalScope, controlPlaneCheckout, osRollbackRefusal, staleRefRefusal }
   from "./fleet-playbook.mjs";
 
 test("commits and ordinary branch names are accepted", () => {
@@ -53,8 +53,12 @@ test("only the named playbooks are runnable, and they are names rather than path
   // because the fault it exists for cannot be reached any other way — a worker wedged inside a capture
   // does not respond to `Stop-ScheduledTask`, keeps the port, and goes on serving a matching
   // `/health.code` from files the deploy has just updated, so `verify-code.yml`'s reboot never fires.
-  assert.deepEqual(PLAYBOOKS,
-    ["deploy.yml", "sleep.yml", "provision-role.yml", "recover.yml", "inventory-install.yml", "control-host-install.yml"]);
+  // `os-rollback.yml` joined on 2026-09-11 (#921) and displaced `recover.yml` as the most destructive entry:
+  // it rolls a box's WINDOWS BUILD back. It earns its place the same way -- a feature update that slipped
+  // the appliance policy had no remote repair at all -- and it is fenced harder than anything else here:
+  // one named worker or nothing, and a read-only dry run unless `--apply` (tests below).
+  assert.deepEqual(PLAYBOOKS, ["deploy.yml", "sleep.yml", "provision-role.yml", "recover.yml",
+    "inventory-install.yml", "control-host-install.yml", "os-rollback.yml"]);
   // `provision.yml` stays REFUSED and that is not an oversight: it is the UTM/PowerShell provisioning
   // playbook, a different file from `provision-role.yml`, and only the role one should be reachable from
   // a laptop. Two files one character apart, one allowed and one not, is exactly what an allowlist is for.
@@ -241,4 +245,137 @@ test("`HEAD` is the DEFAULT ref on the checkout this command is meant to be run 
   // to one commit rather than to a branch tip that has since advanced.
   assert.match(command, /git checkout --quiet HEAD /, command);
   assert.match(command, /merge --ff-only --quiet abc1234def5678$/, command);
+});
+
+test("an OS rollback names exactly ONE worker, and --apply belongs to it alone (#921)", () => {
+  // "No --limit" means the whole fleet everywhere else, which is right for a deploy and the one target a
+  // Windows rollback must never have. A list is refused too: one box's OS at a time.
+  for (const limitFlag of [undefined, "a11y_workers", "a11y-worker-3,a11y-worker-4", ""]) {
+    assert.match(osRollbackRefusal({ chosen: "os-rollback.yml", limitFlag, apply: false }) ?? "",
+      /without --limit=<one worker>/, JSON.stringify(limitFlag));
+  }
+  assert.equal(osRollbackRefusal({ chosen: "os-rollback.yml", limitFlag: "a11y-worker-4", apply: false }), null);
+  assert.equal(osRollbackRefusal({ chosen: "os-rollback.yml", limitFlag: "a11y-worker-4", apply: true }), null);
+  // Accepted and ignored would be the silently-discarded flag this repo refuses everywhere else.
+  for (const chosen of PLAYBOOKS.filter((name) => name !== "os-rollback.yml")) {
+    assert.match(osRollbackRefusal({ chosen, limitFlag: "a11y-worker-4", apply: true }) ?? "",
+      /refusing --apply/, chosen);
+    assert.equal(osRollbackRefusal({ chosen, limitFlag: undefined, apply: false }), null, chosen);
+  }
+  assert.ok(PLAYBOOK_TIMEOUT_MS["os-rollback.yml"] > DEFAULT_PLAYBOOK_TIMEOUT_MS,
+    "a rollback runs inside a restart that can take most of an hour; the default ceiling would kill it");
+});
+
+test("the rollback playbook refuses before it acts, and its dry run is itself (#921)", () => {
+  const play = readFileSync(fileURLToPath(new URL("../ansible/os-rollback.yml", import.meta.url)), "utf8");
+  const executable = play.split("\n").filter((line) => !line.trimStart().startsWith("#")).join("\n");
+  const at = (pattern: RegExp) => executable.search(pattern);
+
+  // Each guard is present, and each comes BEFORE the first task that changes anything.
+  const firstChange = at(/Initiate-OSUninstall/);
+  const guards: [string, RegExp][] = [
+    ["one host", /ansible_play_hosts_all \| length == 1/],
+    ["the others agree on one build", /rollback_fleet_builds \| unique \| length == 1/],
+    // AHEAD, not merely different: worker-judge's review found "differs" passed a box one build BEHIND and
+    // a box on the same build in another edition, and DISM would have taken either further from the fleet.
+    ["the same edition as the fleet", /rollback_this_edition == rollback_fleet_edition/],
+    ["a build strictly AHEAD of the fleet's", /rollback_this_number \| int > rollback_fleet_number \| int/],
+    ["not mid-capture", /rollback_before\.json\.busy/],
+    ["the dry run stops here", /ansible\.builtin\.meta: end_host\s+when: not os_rollback_apply/],
+    ["a closed path is refused", /rollback_found\.windowDays \| int > 0/],
+  ];
+  assert.ok(firstChange > 0, "the playbook must contain the change it guards");
+  for (const [name, pattern] of guards) {
+    const where = at(pattern);
+    assert.ok(where >= 0, `guard missing: ${name}`);
+    assert.ok(where < firstChange, `guard AFTER the change it exists to prevent: ${name}`);
+  }
+  // Busy is asked over HTTP from the control plane, the same channel `deploy.yml` asks on.
+  assert.match(executable, /url: "http:\/\/\{\{ ansible_host \}\}:\{\{ a11y_port \}\}\/health"/);
+  // The apply switch has exactly one spelling, the one `fleet-playbook.mjs` passes.
+  assert.match(executable, /a11y_os_rollback_apply \| default\(false\)/);
+  // The proof is the build /health reports afterwards, not DISM's exit code.
+  assert.match(executable, /rollback_after\.json\.environment\.windowsVersion/);
+  // The restart is not assumed either way: a stage that loses its connection (DISM restarting the box
+  // itself) is tolerated, and a restart is asked for only when the box is still there to be asked.
+  assert.match(executable, /register: rollback_staged\s+ignore_unreachable: true/);
+  assert.match(executable, /when: not \(rollback_staged\.unreachable \| default\(false\)\)/);
+});
+
+// --- #971: A REF THAT MEANS SOMETHING DIFFERENT HERE THAN ON ORIGIN ---
+//
+// `expected` is `git rev-parse <ref>` IN THIS CHECKOUT, and on a machine with worktrees a local branch
+// sits wherever the last worktree left it. Measured 2026-09-11: `primary:update` put the local `main` on
+// f0d69cb7 at 05:44Z; by the deploy, origin/main was 25a5f680. The control plane shipped f0d69cb7 and THE
+// READ-BACK PASSED -- both halves of that check use the same stale SHA, so it is internally consistent and
+// a merge behind. `worker:code` found it afterwards as 10 of 10 STALE.
+//
+// The trap was already written in this file's own comments ("`--ref=main` is not the fix and makes it
+// worse") and nothing refused it. These test the refusal, not the comment.
+//
+// PURE, over two resolved SHAs, and that is the row's own condition: the real deploy path is
+// orchestrator's and nobody else runs it. What these CANNOT establish is that the refusal happens before
+// anything is shipped -- that is placement in `main` (ahead of `requireCommitIsOnOrigin` and the first
+// `ssh`), and asserting it by reading this file's source is the wiring-not-behaviour defect this same file
+// records against #645's first attempt. It is stated on the PR rather than faked with a source scrape.
+
+const SHA = (c: string) => c.repeat(40);
+
+test("#971 ACCEPTANCE: a ref resolving to a different commit on origin is REFUSED, naming both SHAs and "
+  + "the way out", () => {
+  const refusal = staleRefRefusal({ ref: "main", local: "f0d69cb7" + "a".repeat(32),
+    origin: "25a5f680" + "b".repeat(32) })!;
+  assert.ok(refusal, "a stale local branch must not deploy silently");
+  assert.match(refusal, /^REFUSING:/, "the first word must say what happened");
+  assert.match(refusal, /f0d69cb7aaaa/, "the SHA it would have shipped");
+  assert.match(refusal, /25a5f680bbbb/, "and the SHA origin holds, so the operator can see which is which");
+  assert.match(refusal, /npm run primary:update/, "the fix the row asked to be named");
+  // BOTH WAYS OUT, not one. A local tip that differs may be BEHIND origin or AHEAD of it, and telling an
+  // operator to fast-forward when they meant to ship unpushed work is a refusal that cannot be followed.
+  assert.match(refusal, /push it, and pass --ref=/);
+});
+
+test("#971: agreement is silent -- the ordinary deploy must not acquire a new way to fail", () => {
+  assert.equal(staleRefRefusal({ ref: "main", local: SHA("a"), origin: SHA("a") }), null);
+  assert.equal(staleRefRefusal({ ref: "HEAD", local: SHA("b"), origin: SHA("b") }), null,
+    "`HEAD` is the DEFAULT ref on the detached primary, which is where this command is meant to be run "
+    + "from -- if this ever refused, every ordinary deploy would stop");
+});
+
+test("#971: `HEAD` is checked like any other ref, and it is the case that actually bit -- the primary is "
+  + "detached by design, so `localBranch()` returns the literal string HEAD", () => {
+  const refusal = staleRefRefusal({ ref: "HEAD", local: SHA("d"), origin: SHA("e") })!;
+  assert.ok(refusal, "a detached primary behind origin/main is exactly the 2026-09-11 incident");
+  assert.match(refusal, /origin\/HEAD/);
+});
+
+test("#971: an UNRESOLVABLE `origin/<ref>` is refused, never read as agreement -- could-not-ask answering "
+  + "clear is this repository's most expensive recurring shape", () => {
+  const refusal = staleRefRefusal({ ref: "local-only", local: SHA("c"), origin: null })!;
+  assert.ok(refusal);
+  assert.match(refusal, /does not resolve/);
+  // AND ITS REMEDIES ARE DIFFERENT ONES. `primary:update` cannot help a branch origin has never seen, so
+  // offering it here would be a message that reads like help and is not.
+  assert.match(refusal, /git push -u origin local-only/);
+  assert.doesNotMatch(refusal, /To deploy origin's tip/,
+    "the stale-branch remedy must not be pasted onto a case it cannot fix");
+});
+
+test("#971: both SHAs are column-aligned, and a long ref name degrades rather than throwing", () => {
+  const lines = staleRefRefusal({ ref: "main", local: SHA("1"), origin: SHA("2") })!.split("\n");
+  const local = lines.find((l) => l.includes("this checkout"))!;
+  const origin = lines.find((l) => l.includes("origin/main:"))!;
+  assert.equal(local.indexOf(SHA("1").slice(0, 12)), origin.indexOf(SHA("2").slice(0, 12)),
+    "the two SHAs must start in the same column -- the eye lands on the digits that differ");
+  const long = "agent/" + "x".repeat(60);
+  assert.doesNotThrow(() => staleRefRefusal({ ref: long, local: SHA("1"), origin: SHA("2") }),
+    "a negative repeat count would throw; alignment is cosmetic and must degrade, never fail");
+});
+
+test("#971: the comparison is on the resolved COMMITS, so an abbreviated SHA is not equal to its full "
+  + "form -- `git rev-parse` gives both sides the full 40, and anything shorter reaching here is a bug "
+  + "this must not paper over", () => {
+  assert.ok(staleRefRefusal({ ref: "main", local: SHA("a"), origin: SHA("a").slice(0, 12) }),
+    "two spellings of the same commit must still refuse -- equality here is the whole check, and "
+    + "accepting a prefix would make it a substring test that passes on any shared prefix");
 });

@@ -272,9 +272,118 @@ function renderTable(rows) {
   return lines;
 }
 
-export async function fleetStatus() {
-  const workers = fleetToProbe();
-  const probes = await Promise.all(workers.map(probeWorker));
+/**
+ * THE CONSISTENCY VERDICT, WITH ITS DENOMINATOR — #920.
+ *
+ * NAMED `consistencyVerdict`, NOT `fleetVerdict`, and the first version was the second. `fleetVerdict`
+ * is the shared gate helper in `packages/lab/src/gates/fleet.mjs`, and `exit-code-contract.test.ts`
+ * detects adoption of the exit-code contract by that name — so a same-named function here made this
+ * file read as adopting a contract it does not use, while also being listed as DOCUMENTED. CI caught
+ * it as "a script cannot adopt the contract AND carry its own". A name that is already somebody
+ * else's identifier is a claim about what the code does, in exactly the way a comment is.
+ *
+ * `fleetStatus` compared only the boxes that answered and printed `fleet CONSISTENT` over them, while the
+ * reachability count sat on a separate line. **An unreachable box that has drifted reads as agreement.**
+ * Measured: the status read CONSISTENT over nine boxes, and the tenth — excluded for not answering — was
+ * `a11y-worker-4`, on Windows `10.0.26200` where the other nine are on `10.0.22631`. The OS is a
+ * capture-cache key, so the fleet was inconsistent, the command said otherwise for a day, and five
+ * captures (#29) were taken on the divergent box in that time.
+ *
+ * `ceo`'s ruling: **never CONSISTENT over a subset.** Three states, and two of them must not collapse:
+ *
+ *   `CONSISTENT`    every box in the inventory was compared, and they agree
+ *   `INCONSISTENT`  the boxes that WERE compared disagree — a real finding whatever the rest would say
+ *   `UNKNOWN`       the compared ones agree, but not all of them could be compared
+ *
+ * "Nine agree and one did not answer" is not "ten disagree", and a reader acts differently on each: the
+ * first is a box to reach, the second is a fleet to re-provision.
+ *
+ * **The denominator is `compared`, not `reachable`**, and the difference is the same defect one level
+ * down. `fleetConsistency` drops a guest that reports no `environment` before comparing, so a box can
+ * answer `/health` and still not be in the set the verdict is about. Using the reachable count here would
+ * have fixed the instance and left the class.
+ *
+ * `doctor`'s `checkFleetConsistency` already says "N of M guests agree … the rest could not be asked". It
+ * learned this first; this command, whose whole job is to describe the fleet, never did.
+ *
+ * **AND A CLEAN ENVIRONMENT COMPARISON IS NOT A USABLE FLEET — #1029.** This function used to take no
+ * readiness input at all, so its verdict was byte-identical whether or not a box could capture. Measured:
+ * `a11y-worker-4` sat `warming` behind a `PhoneExperienceHost` dialog for ~19.7 hours while this line read
+ * `fleet CONSISTENT across 10 of 10 — these workers are interchangeable for capture`. They were not
+ * interchangeable; one of them could not capture at all.
+ *
+ * That is THE SAME CLASS as the denominator lesson above, one field over: it was applied to which boxes
+ * were COMPARED and never to whether a compared box can WORK. A guest that answers `/health`, reports a
+ * matching environment and cannot start NVDA was counted as agreeing, and the headline called the set
+ * interchangeable. `ready` is the field this repo already ruled you dispatch on; the headline verdict was
+ * the one place that did not.
+ *
+ * **Two facts, one verdict, and the verdict is the pessimistic one.** The consistency answer is not
+ * deleted — it is real, separate, and still printed in the BLOCKED line — it simply may no longer stand
+ * in for usability.
+ *
+ * **AND NO READINESS SUPPLIED IS `UNKNOWN`, NOT `CONSISTENT`.** `rows` has no default: a caller that omits
+ * it has not asked whether the fleet can capture, and answering the permissive way is the same defect this
+ * function was fixed for, one door over. worker-judge's tiebreak, reviewing #1048: when the safe direction
+ * and the permissive direction are one line apart, take the safe one.
+ *
+ * `busy` IS NOT A FAULT. A worker mid-capture is the system working, and refusing a healthy fleet under
+ * load is the easy wrong fix; only `warming` and `unreachable` may hold the headline down.
+ *
+ * @param {{ consistent: boolean, compared: number, total: number, mismatches?: unknown[],
+ *           rows?: { name?: string, state?: string }[] }} input `rows` carries each box's `stateOf`
+ * @returns {{ state: "CONSISTENT" | "INCONSISTENT" | "UNKNOWN" | "BLOCKED", line: string }}
+ */
+export function consistencyVerdict({ consistent, compared, total, mismatches = [], rows }) {
+  const across = `across ${compared} of ${total}`;
+  if (compared === 0) {
+    return { state: "UNKNOWN",
+      line: `fleet UNKNOWN — 0 of ${total} boxes reported an environment to compare` };
+  }
+  if (!consistent) {
+    return { state: "INCONSISTENT",
+      line: `fleet INCONSISTENT ${across} — ${describeMismatches(/** @type {any} */ (mismatches)).join("; ")}` };
+  }
+  if (compared < total) {
+    return { state: "UNKNOWN",
+      line: `fleet UNKNOWN — the ${compared} compared agree, and ${total - compared} of ${total} could not be `
+        + "compared. A box that did not answer and has drifted reads exactly like one that agrees, so this "
+        + "is not a consistent fleet until it answers" };
+  }
+  // NO READINESS SUPPLIED IS CANNOT ASK, NOT "ALL READY". A default that silently answers the permissive
+  // way is the 19.7 hours in miniature: this function's whole defect was answering a question it had not
+  // been given the inputs for. There is exactly one production caller and it passes `rows`, so this
+  // changes no real verdict -- it closes the door through which the same bug walks back in.
+  if (rows === undefined) {
+    return { state: "UNKNOWN",
+      line: `fleet UNKNOWN — the environments agree ${across}, and no readiness was supplied, so whether `
+        + "these boxes can capture was never asked. A consistent environment is not a usable fleet" };
+  }
+  // NAMED, NEVER COUNTED. "blocked" and "blocked on a11y-worker-4, warming" are different instructions:
+  // one sends a reader to `fleet:status` again, the other sends them to a box.
+  const blocked = rows.filter((row) => row.state === "warming" || row.state === "unreachable");
+  if (blocked.length > 0) {
+    const named = blocked.map((row) => `${row.name ?? "an unnamed box"}, ${row.state}`).join("; ");
+    return { state: "BLOCKED",
+      line: `fleet BLOCKED — the environments agree ${across}, and ${blocked.length} of ${total} cannot `
+        + `capture: ${named}. A consistent environment is not a usable fleet, and this line used to read `
+        + "CONSISTENT for 19.7 hours while a box was held behind a dialog" };
+  }
+  return { state: "CONSISTENT",
+    line: `fleet CONSISTENT ${across} — these workers are interchangeable for capture` };
+}
+
+/**
+ * @param {{ workers?: () => { name: string, url: string }[],
+ *           probe?: (worker: { name: string, url: string }) => Promise<any> }} [deps] injectable ONLY so a
+ *   test can drive THIS FUNCTION rather than the pure one below it. #1029's defect was never inside
+ *   `consistencyVerdict` -- both halves were computed here and never crossed -- so a test that drives only
+ *   the verdict holds the function and leaves the CALL unheld, which is where the 19.7 hours happened.
+ *   Production passes nothing and the defaults are the real probes.
+ */
+export async function fleetStatus(deps) {
+  const workers = (deps?.workers ?? fleetToProbe)();
+  const probes = await Promise.all(workers.map(deps?.probe ?? probeWorker));
   const rows = summarise(probes);
   const guests = probes
     .filter((p) => p.reachable)
@@ -282,7 +391,7 @@ export async function fleetStatus() {
     // OPTIONAL field, meaning "this probe did not collect one", which is exactly true here since
     // `/health` carries no policy block. `null` would be a claim that it collected an empty policy.
     .map((p) => ({ worker: p.url, environment: p.health?.environment, policy: undefined }));
-  const { consistent, mismatches } = fleetConsistency(guests);
+  const { consistent, mismatches, compared } = fleetConsistency(guests);
   // WHICH CODE EACH BOX SERVES, COMPARED — the column has been printed since this file existed and
   // nothing ever read it. A fleet part-way through a deploy shows two hashes, and that is the ONLY
   // symptom it has: `consistent` above cannot see it, because `workerCode` is deliberately outside
@@ -293,7 +402,22 @@ export async function fleetStatus() {
   // — the safety net working, one step too late. A split is a fact about the fleet and this is the
   // command that describes the fleet.
   const codes = [...new Set(rows.map((r) => r.code).filter(Boolean))];
-  return { rows, consistent, mismatches, codes, reachable: guests.length, total: workers.length };
+  // `comparedAgree`, not `consistent`: the field says agreement AMONG THE COMPARED SET, and a bare
+  // `consistent: true` over nine of ten is the exact misreading #920 is about, one serialisation away.
+  // `verdict` is the answer; this is one of its inputs.
+  // `rows` carries each box's `stateOf`, which this verdict had no way to see until #1029. Passing it
+  // is the whole fix: the two halves were both computed here and never crossed.
+  const verdict = consistencyVerdict({ consistent, compared, total: workers.length, mismatches, rows });
+  return { rows, comparedAgree: consistent, verdict, mismatches, codes, compared,
+    reachable: guests.length, total: workers.length,
+    // DEPRECATED, kept one release for scripts reading `fleet:status --json` from outside this repo.
+    //
+    // Removing it outright fails SILENTLY: `undefined` is falsy, so `if (status.consistent)` would read
+    // every fleet as inconsistent and nothing would throw. So it stays -- but it does NOT alias
+    // `comparedAgree`, which would keep the exact misreading #920 fixes. It carries the CORRECTED answer:
+    // true only when every box in the inventory was compared and they agree. A legacy consumer gets the
+    // fix without changing a line, which is the one thing a compatibility field should do.
+    consistent: verdict.state === "CONSISTENT" };
 }
 
 async function main() {
@@ -313,16 +437,16 @@ async function main() {
         + "is\n  a separate channel with separate access. `npm run worker:code` compares what they serve\n"
         + "  against this checkout.\n");
     }
-    if (status.reachable >= 2) {
-      process.stdout.write(status.consistent
-        ? "  fleet CONSISTENT — these workers are interchangeable for capture\n"
-        : `  fleet INCONSISTENT — ${describeMismatches(status.mismatches).join("; ")}\n`
-          // NAME THE REMEDY, not just the state. A reader who has not read the runbook cannot get from
+    // THE VERDICT CARRIES ITS OWN DENOMINATOR (#920), so it prints whatever the count is — including 0
+    // and 1, which the old `reachable >= 2` gate silenced. A verdict the reader never sees is not safer.
+    process.stdout.write(`  ${status.verdict.line}\n`);
+    if (status.verdict.state === "INCONSISTENT") {
+      // NAME THE REMEDY, not just the state. A reader who has not read the runbook cannot get from
           // "browserVersion differs" to "re-provision the WHOLE fleet, never one box", and the difference
           // matters: `provisionRevision` is a capture CACHE KEY and a MUST_MATCH field, so a single box
           // provisioned alone gets a stamp its peers lack and splits the fleet further. That is why
-          // `--serial=0` is right here and wrong almost everywhere else.
-          + "  These guests are NOT interchangeable for capture, so a corpus run must not start: two\n"
+      // `--serial=0` is right here and wrong almost everywhere else.
+      process.stdout.write("  These guests are NOT interchangeable for capture, so a corpus run must not start: two\n"
           + "  workers on different values would share a cache key while producing different evidence.\n"
           + "  Re-provision the WHOLE fleet together — `npm run fleet:provision -- --serial=0`. Never one\n"
           + "  box alone: a lone re-provision splits the fleet rather than converging it.\n");

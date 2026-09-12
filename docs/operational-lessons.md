@@ -108,8 +108,9 @@ worked, and the session running it had predicted it would not, so the reasons ar
   commit, so two worktrees on two commits means one of them is refused and which depends on who deployed
   last. **One driver for all of it.**
 - **A fresh worktree has NO corpus** — `runs/` is gitignored — so `check-signals`, `rules:gate` and
-  `verify.corpus.test.ts` all skip there. The pre-push hook skips them *loudly*, which is honest and still
-  means a delegated change gets a weaker gate than the main checkout's. Symlink `runs/` and `.venv` in, and
+  `verify.corpus.test.ts` all skip there. The pre-push hook does not run the first two at all since #911
+  and says so unconditionally, which is honest and still means a delegated change gets a weaker gate than
+  the main checkout's. Symlink `runs/` and `.venv` in, and
   run the corpus-dependent gates at merge time where they are real.
 - **Do NOT drive the fleet and review diffs at the same time.** That is how a progress file describing a
   FINISHED run was read while a new one was a minute old — see the diagnostics table above; it cost 12
@@ -737,6 +738,71 @@ Three rules follow, and they are cheap:
    written against a shape you did not verify is the count-based check all over again.
 
 
+## A CHECK WRITTEN AS A TEXT SEARCH CANNOT TELL THE GUARD FROM THE EXPLANATION OF THE GUARD
+
+Three of these on 2026-09-12, found independently by two sessions, which is a shape rather than a
+coincidence. **This repository writes very long explanations — that is deliberate and it is why the shape
+recurs here more than it would elsewhere.** A comment naming the thing a check searches for satisfies the
+check, and the check then reports on its own prose.
+
+| where | what happened |
+|---|---|
+| #1002 | a leak-scan pin satisfied by a **commented-out tail** |
+| #1001 | a gate assertion satisfied by prose about itself |
+| #1022 | the row's own open-check, `grep -c 'Merge already in progress\|…' scripts/arm-pr.mjs`, went `0 → 1` **entirely because a JSDoc line quotes the error the fix is about**. The fix deliberately does not match GitHub's message text — keying on prose is what `merge-guard`'s `FAULT.*` rule exists to avoid — so nothing in the code could ever have satisfied it |
+
+**It fails in BOTH directions and neither is loud.**
+
+- *"Zero until fixed"*, met by a comment, reads as a fix that landed. That was #1022.
+- *"Non-zero while open"*, met by a comment, can never reach zero, so **the row can never be shown closed**
+  even after the work is done. That is the commoner half here, and the safer one, and it is still not a
+  measurement.
+
+**The population, measured 2026-09-12.** 60 open rows; 59 carry an `## Open-check`; **23 of those checks
+are a text search over repo files.** Of the 13 targets that are source files rather than docs, each
+pattern compared against the file raw and against the same file with comments blanked
+(`local-import-closure.mjs`'s `stripComments`):
+
+| | |
+|---|---|
+| satisfied by prose **alone** today | 0 |
+| **satisfiable by prose** — the pattern also occurs in comments, so the count survives the code being removed | **4** |
+| code-only, immune | 2 |
+| no match either way (genuinely open) | 7 |
+
+```
+#32  real-page-corpus.mjs      12 matches raw,  3 in code  ->  9 in comments
+#34  case-matrix.mjs           11 matches raw, 10 in code  ->  1 in comments
+#34  criterion-coverage.ts      7 matches raw,  3 in code  ->  4 in comments
+#852 row-claim.mjs              4 matches raw,  2 in code  ->  2 in comments
+```
+
+**That table is what was FOUND. All four were amended the same day** (#1027), and each amendment carries
+its own measurement on its own row — so the remedy is the cheap half of this entry, not the expensive one.
+**#32 is the whole argument in one row:** `grep -n 'forms' real-page-corpus.mjs` answered *"the word forms
+appears in this file"*, which it always will, because most of the matches are URLs
+(`.../tutorials/forms/labels/`). It now imports the module and asks whether any of the 109 shipped pages
+carries a `probeForms` key. Same question, one that can actually change.
+
+**And #34's check carried a wrong word that the grep could never have surfaced.** It read
+`grep -n '2.4.6' criterion-coverage.ts # still partial`; that entry's `status` is `"assessed"` and has
+never been `partial`. The row's substance was right — 2.4.6 covers headings while the criterion says
+*headings AND labels* — but the overstatement lives in its `channels`, and anyone reading the check for
+the row's condition would have gone looking for a field value that does not exist. **A text check cannot
+be wrong about the field it does not read.**
+
+**The rule: a check must read the behaviour, not the file.** In order of preference — call the function
+and read its answer; read an exported value; count something only code can produce. `#968`'s
+`grep -c '^export const OUT'` is the cheap correct form: `^export` is a shape a comment cannot have.
+Searching a **prose** file for a sentence is fine and is not this defect — a `.md` has no code/comment
+distinction to confuse.
+
+**And the tell is specific: if the string you are searching for is also the string you would use to
+EXPLAIN the thing, the check is about to read your explanation.** That is exactly when a codebase like
+this one has already written it down nearby.
+
+[#1027 carries the four amendments and the sweep.]
+
 ## A GUARD THAT ALREADY EXISTED, and a weaker check substituted for it
 
 Three mistakes in one session on 2026-09-01/02, and only the first was a gap in this repo. The other two
@@ -999,11 +1065,47 @@ Review before pushing, not after: a review that lands after the commit becomes a
 
 ### The pre-push hook's scope, verbatim
 
-The pre-push hook holds only what costs nothing: measured at ~5 s, no worker, no Codex, no network. It
-SKIPS the corpus-dependent checks loudly when `runs/` is absent rather than passing quietly, because a
-check that reports success having examined nothing is how "verified" comes to mean "unexamined".
-`A11Y_SKIP_VERIFY=1 git push` overrides it, and says so. The worker- and Codex-dependent gates stay
-release-time: a 75-minute check on `git push` gets the hook deleted within a day.
+**Three checks, since #911 (2026-09-11, step 4 of the CI Reset). The hook is a COURTESY; CI is the gate.**
+
+| | |
+|---|---|
+| **lint** | the paths this branch changed against `origin/main`, PLUS anything dirty in the tree. By PATH and not by changed PACKAGE: `changed-packages.mjs` lists `packages/<name>` directories only, so a `scripts/`-only change — the most common shape of a row here — scopes to the EMPTY list, and a check handed an empty population reports clean about a population it never read. And the tree as well as the diff, because every note in the hook says the gate reads the TREE rather than the commits being pushed: a list built from `origin/main...HEAD` alone lints nothing on the first push of a new branch |
+| **typecheck** | the WHOLE program, and the reason is the mechanism rather than a preference. tsc's unit is the program, not the file. Measured at `40e36ba4`: the root program is 953 files (534 `.test.ts`, 130 top-level `scripts/`); `tsc -p packages/<name>` is **0** test files, because every package tsconfig carries `"exclude": ["src/**/*.test.ts"]`; and no package program contains top-level `scripts/`. So "typecheck the changed packages" drops 664 of 953 and reports clean — the root tsconfig's own comment records that regression happening once already, 25 test files silently unchecked |
+| **the leak scan** | `tracked-source-leak-guard.test.ts` and `tracked-prose-leak-guard.test.ts`, by name. **The one check whose value is being BEFORE the push rather than before the merge**: this repository is public, so a pushed branch is visible the moment it lands. It was two of the 22 files in `guards:sweep`, which is why "keep the leak scan and delete the sweep" would, taken literally, have deleted it |
+
+**What went, and why none of it is a reduction in what gets checked:** the 22-file tree-wide sweep, an
+`.mjs` parse check, a board-guard glob and a changeset gate all run again in CI minutes later, on the
+whole tree. Wall clock at `40e36ba4`: the sweep alone was 30.22 s of about 39 s; lint 3.93 s, typecheck
+4.86 s, the two leak guards 1.39 s. The hook is about 10 s now, and **75% of that saving is the sweep**.
+
+**`training:check-signals` and `rules:gate` are not run here at all, and the hook says so unconditionally**,
+naming the lab job that answers each. They read the corpus in gitignored `runs/`, and the 2026-09-06 ruling
+is that such a gate gives a VERDICT only when the agent driving the fleet and the lab runs it — in this
+hook it could only ever have been a pre-check. Unconditional matters: the old form was gated on `runs/`
+being present, so it was SILENT on exactly the machine holding a stale copy, which is the machine that most
+needs telling. One measured here was 89 hours old.
+
+**The fast/full split is gone with it, and it had a hole worth recording**: the BOARD-ONLY path ran the
+board guards instead of lint and typecheck, and never ran the sweep — so it never ran the leak guards, on
+the one kind of diff (`docs/board/summaries/*.md`) made entirely of the prose they scan.
+
+**The git-only refusals stay** and are outside the "three checks" claim by name: the stale-base check,
+`resolve-toward-main`, the 300-deletion warning, the armed-PR lookup and the `A11Y_SKIP_VERIFY` gate. None
+is a copy of CI, each costs milliseconds, and each is push SAFETY rather than verification.
+`A11Y_SKIP_VERIFY_REASON="<why>" A11Y_SKIP_VERIFY=1 git push` overrides the checks and prints the reason; a
+bare `=1` is refused. The worker- and Codex-dependent gates stay release-time: a 75-minute check on
+`git push` gets the hook deleted within a day.
+
+**What it held before #911, kept verbatim because CLAUDE.md's own line is the thing that changed:**
+
+```
+git push                      # pre-push hook: lint, typecheck, tests, check-signals, rules:gate (~5s)
+```
+
+> The pre-push hook holds only what costs nothing (~5s, no worker, no network) and SKIPS corpus-dependent checks loudly when `runs/` is absent, rather than passing quietly. `A11Y_SKIP_VERIFY=1 git push` overrides it.
+
+`pre-push-hook-scope.test.ts` is what holds the hook to three — it parses the hook's own `run` call sites
+and every npm/node invocation outside them, and a fourth check fails it.
 
 ## Why the deprecation note exists, and what "kept" means
 
@@ -1118,4 +1220,79 @@ Kept, because the reasoning holds for the next genuinely dead box. `lab_fleet_wo
 the group, unconditionally, with no health filter -- so a dead box there is dispatched work by every
 pooling job and takes the run down with it. Measured 2026-09-07: `capture-only` died on *"The worker at
 http://<a11y-worker-10>:8765 did not answer /health"* after the job had already started.
+
+## Guard triage 4 of 6: the tracker, board and label guards, and why each existed
+
+**The CI Reset (10 September 2026) retired the nine-session org shape these guards policed** --
+`session:dispatcher`, `session:orchestrator`, `session:worker-audit`, `session:worker-contracts` and
+`session:worker-config` are gone, and the four roles left are product-manager, eng-capture, eng-judge and
+fleet. A guard that checks a label nobody applies cannot fail, which is worse than no guard: it is a green
+check nobody can interpret. Each one had a real incident behind it, and the incident is still true -- only
+the org shape it was policing is retired. Recorded here per the chairman's condition on the deletion,
+rather than let the incidents disappear with the files.
+
+**`board-style.test.ts`** (#20, #159, #284) -- pinned the board body's word cap (925 words) and a curated
+verb/style list, after #576 sent the body over cap and turned `trunk-guard` red until reverted. The board
+report survives with one smoke test (below); the style policy is now a human editorial judgement, not a
+build dependency.
+
+**`board-markdown.test.ts`** (#159, #827) -- pinned `toHtml`/`inline`'s Markdown-to-board rendering rules.
+Retired with the rest of the board content-policing family; the render mechanism itself is covered by the
+new smoke test.
+
+**`board-schedule.test.ts`** (#590) -- pinned `board-report.yml`/`board-summary-check.yml`'s cron
+expressions against the London hour claimed in the workflow's own logic, plus a retired-21:00-entry ghost
+check. The underlying schedule is unchanged by this row (#901 explicitly kept it), but asserting the
+workflow's *internal* time-consistency at the pull-request level is the same shape as the other retiring
+board-content pins: a fact about the board's own operation, not about whether the code that shipped works.
+
+**`board-summary-origin.test.ts`** (#22, #131, #159) -- pinned that the 21:00 (later 07:45) summary check
+reads `origin/main`, never a working tree, after a summary was found reporting on state that did not exist
+as far as the edition was concerned.
+
+**`board-achievement-retirement.test.ts`** (#284, #827) -- pinned the three-edition rule for how long an
+achievement stays in the board body before moving to the record.
+
+**`board-achievement-staleness.test.ts`** (#90) -- pinned that an authored capability claim in the board's
+own §3 gets re-checked rather than trusted forever once written.
+
+**`board-record.test.ts`** (#576, #577, #806) -- pinned that writing a board achievement record refuses at
+write time when it would displace one, after the word cap incident above cost a red `trunk-guard` until
+reverted.
+
+**`board-report.test.ts`** (#9) -- the detailed render-section test for `scripts/board-report.mjs`,
+replaced by a single smoke test (`board-report-smoke.test.ts`) proving the renderer produces output
+without throwing. The detail this file asserted (individual section wording, pluralisation, edge counts)
+is now a human's read of the rendered document, not a build dependency.
+
+**`audit-citation-index.test.ts`** and **`audit-findings-dispositioned.test.ts`** -- pinned that
+`docs/architecture-audit.md`'s frozen findings were each dispositioned (closed, or cited by a test that
+would fail if the finding recurred) somewhere the audit's own freeze policy could not reach. The audit
+document and its disposition-tracking apparatus are a tracker mechanism from the nine-session org; the
+findings themselves, where still relevant, live on as ordinary GitHub issues under the new org.
+
+### Five candidates named in the plan, checked and NOT deleted
+
+`workflow-lane-check.test.ts`, `a-hold-means-cannot-merge.test.ts`, `pr-hold.test.ts`,
+`merge-guard-pr-hold-rule.test.ts` and `arm-pr.test.ts` all name "hold", "lane" or "session-label" --
+families this row's own plan lists as retiring. Read individually rather than deleted on the name match,
+because each tests a mechanism **currently, actively wired into a required CI job today**, not merely a
+retired label taxonomy:
+
+- `workflow-lane-check.mjs` runs as its own step inside `ci.yml`'s `mergeSafety` job, right now, on every
+  pull request.
+- `merge-guard-pr-hold-rule.test.ts` covers one rule composed into `merge-guard.mjs`'s
+  `mergeSafetyVerdict`, which `mergeSafety` calls directly (`node scripts/merge-guard.mjs --ci-gate`).
+  `mergeSafety` is removed as a job by #902 -- not yet merged at the time of this row -- and only then
+  does this rule's test stop guarding something live.
+- `pr-hold.test.ts` and `a-hold-means-cannot-merge.test.ts` between them are the **only** test coverage
+  for `pr-hold-state.mjs`'s `armVerdict`/`armabilityOf`/`disarmVerdict` -- the exact functions
+  `auto-arm.yml`'s "Enable auto-merge... unless held" step calls on every arm attempt.
+- `arm-pr.test.ts` covers `arm-pr.mjs`'s `armDecision`, invoked by `auto-arm.yml` on every PR armed
+  (`node scripts/arm-pr.mjs --pr=... --repo=...`). `claim-provenance.mjs` (#848) is a durable *second*
+  answer to "who worked this row" -- it does not make `arm-pr.mjs` itself dead code today.
+
+Deleting any of the five would leave a live, merge-blocking mechanism with no test at all until the row
+that retires its *calling* workflow lands. Left in place; a future row may retire them once #902 (and
+whatever eventually replaces `pr-hold`/`arm-pr`'s labeling for the new four-role org) actually ships.
 

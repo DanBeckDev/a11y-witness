@@ -35,6 +35,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync, appendFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+import { changedFiles } from "./changed-files.mjs";
 // RELATIVE, NOT `@a11ign/worker-fleet/cli-flags` — every other root script uses the package
 // specifier, and every other root script runs after `npm run build`. This one gates whether ANYTHING
 // else in the workflow builds at all, so it cannot depend on a build having already happened; the file
@@ -531,13 +532,12 @@ async function main() {
   // Three dots: the PULL REQUEST's own diff, against the merge base rather than the base branch's tip —
   // the same operator `changeset-check.yml` already used, for the identical reason: two dots would
   // include every commit that landed on main since the branch was cut, which is not this PR's change.
-  const files = execFileSync("git", ["diff", "--name-only", `${base}...HEAD`],
-    { cwd: repoRoot, env: sandboxGitEnv(), encoding: "utf8" })
-    .split("\n")
-    .filter(Boolean);
+  // #939: through the one helper, so the SOURCE side of a rename is listed. Spelling the diff here was how
+  // nine readers came to disagree about what "changed" means.
+  const files = changedFiles([`${base}...HEAD`], { repoRoot });
 
   if (files.length === 0) {
-    console.error(`ci-changed: "git diff --name-only ${base}...HEAD" returned nothing — either this PR is `
+    console.error(`ci-changed: changedFiles("${base}...HEAD") returned nothing — either this PR is `
       + "empty, or --base is wrong. Refusing to report every job as unnecessary on the strength of a diff "
       + "that may simply have failed to run.");
     process.exit(2);

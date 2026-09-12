@@ -35,8 +35,8 @@
 //
 //   npm run ready:audit           print every violation and exit 1, or exit 0 with the count
 import { execFileSync } from "node:child_process";
-import { pathToFileURL } from "node:url";
-import { realpathSync } from "node:fs";
+import { pathToFileURL, fileURLToPath } from "node:url";
+import { realpathSync, readFileSync } from "node:fs";
 // RELATIVE, NOT the `@a11ign/worker-fleet/cli-flags` package specifier: that export map
 // points at `dist/`, so it needs both `node_modules` AND a completed build. This file is reachable
 // from a pre-install entry (see `pre-install-import-graph.test.ts`, which derives that population
@@ -44,8 +44,12 @@ import { realpathSync } from "node:fs";
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { REPO } from "./repo-identity.mjs";
 import { fetchBoardItems, PROJECT_NUMBER } from "./board-snapshot.mjs";
-import { fetchClosedRowEvents, claimsFromEvents, describeClaims, unattributableClosedRows,
-  PROVENANCE_REQUIRED_FROM } from "./claim-provenance.mjs";
+// `claimsFromEvents`/`describeClaims` are no longer imported: a row that reaches the report has NO claim
+// events by construction, so describing them printed "no session ever claimed this row" every time --
+// a sentence that was true, said nothing, and read as the whole answer. `attributionFor` says which of
+// the three states it is instead.
+import { fetchClosedRowEvents, unattributableClosedRows, reportableUnattributable, attributionFor,
+  fetchClosingPullRequest, PROVENANCE_REQUIRED_FROM } from "./claim-provenance.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
 import { READY_LABEL, WAS_READY_LABEL } from "./claim-labels.mjs";
 // #782: THE PURE DECISION ONLY -- `labelsToStrip` classifies a label, it never calls `gh`. Importing it
@@ -1066,25 +1070,437 @@ function reportUnattributableClosedRows() {
   // it prints when it read nothing at all.
   const rows = fetchClosedRowEvents({ openIssues: fetchOpenIssues() });
   const historical = unattributableClosedRows(rows);
-  const gated = unattributableClosedRows(rows, { since: PROVENANCE_REQUIRED_FROM });
+  const gated = reportableUnattributable(rows, { since: PROVENANCE_REQUIRED_FROM });
+  const notPlanned = unattributableClosedRows(rows, { since: PROVENANCE_REQUIRED_FROM }).length
+    - gated.length;
   const recovered = rows.length - historical.length;
   process.stdout.write(`${rows.length} closed row(s) read; ${recovered} name their claimant and the `
     + `window from the timeline, label or no label. ${historical.length} carry no claim event at all -- `
     + `rows claimed by hand before #673 closed that route, where no record was ever written and none can `
-    + `be recovered.\n`);
-  if (gated.length === 0) {
-    process.stdout.write(`OK  every row closed since ${PROVENANCE_REQUIRED_FROM} names its claimant\n`);
+    + `be recovered. ${notPlanned} row(s) closed NOT_PLANNED are not counted: they were never worked, so `
+    + `"who worked this" has no answer and its absence is not a defect.\n`);
+  return reportProvenanceOf(gated);
+}
+
+/** What each verdict prints as. Only `undeclared` is counted: see `attributionFor`. */
+const PROVENANCE_MARK = { worker: "ATTRIBUTED", work: "WORK, NOT WORKER", undeclared: "NEEDS A PERSON" };
+
+/**
+ * Every reportable row with its verdict. PURE given `closingPrFor`, and exported so the finding count is
+ * tested without the network -- the first version counted by `!attributed`, which put the middle verdict
+ * in the finding, and nothing that ran it could see that.
+ *
+ * @param {ReturnType<typeof reportableUnattributable>} gated
+ * @param {(number: number) => ReturnType<typeof fetchClosingPullRequest>} closingPrFor
+ */
+export function provenanceVerdicts(gated, closingPrFor) {
+  return gated.map(({ number, title, closedAt }) => ({ number, title, closedAt, ...attributionFor(closingPrFor(number)) }));
+}
+
+/**
+ * The rows the provenance check returns as its FINDING: `undeclared` only. Its own function so the count the
+ * audit exits with is the one the test reads -- a test that recomputed it would pass whatever the audit did.
+ *
+ * @param {ReturnType<typeof provenanceVerdicts>} verdicts @returns {number[]}
+ */
+export function provenanceFindings(verdicts) {
+  return verdicts.filter((v) => v.verdict === "undeclared").map((v) => v.number);
+}
+
+/**
+ * The three verdicts, printed apart, because collapsing them is what made ten rows read as one
+ * population on 2026-09-09: five had been closed by a merged pull request that declared them, and
+ * calling those UNATTRIBUTABLE put work that shipped correctly beside a row whose history cannot be
+ * reconstructed at all. Only `undeclared` is returned as a finding.
+ *
+ * @param {ReturnType<typeof reportableUnattributable>} gated
+ * @returns {number}
+ */
+function reportProvenanceOf(gated) {
+  const verdicts = provenanceVerdicts(gated, fetchClosingPullRequest);
+  for (const { number, title, closedAt, verdict, line } of verdicts) {
+    process.stdout.write(`${PROVENANCE_MARK[verdict]}  #${number} "${title}" -- closed ${closedAt}, ${line}\n`);
+  }
+  const undeclared = provenanceFindings(verdicts);
+  if (undeclared.length === 0) {
+    process.stdout.write(`OK  every row closed since ${PROVENANCE_REQUIRED_FROM} that was actually `
+      + `worked names its claimant or the pull request that declared it\n`);
     return 0;
   }
-  for (const { number, title, closedAt, events } of gated) {
-    process.stdout.write(`UNATTRIBUTABLE  #${number} "${title}" -- closed ${closedAt}, `
-      + `${describeClaims(claimsFromEvents(events))}\n`);
+  process.stderr.write(`\n${undeclared.length} row(s) closed since ${PROVENANCE_REQUIRED_FROM} cannot `
+    + `name their worker: ${undeclared.map((n) => `#${n}`).join(", ")}. A branch name identifies the `
+    + `WORK, never the worker -- have whoever pushed it re-run \`row-claim.mjs claim\`, so the next `
+    + `audit reads what this one could not.\n`);
+  return undeclared.length;
+}
+
+// #870: A ROW CAN READ `COMPLETED` WITH NOTHING BEHIND IT. #79 was closed 40 seconds after PR #89 --
+// which declared `Closes #79` and never merged -- closed unmerged. `closedByPullRequestsReferences`
+// (the ISSUE's own side, `fetchClosingPrRefs` above) CANNOT see this: measured directly, #79's own
+// `closedByPullRequestsReferences` comes back EMPTY once #89 closed unmerged, and #159/#132 (legitimately
+// closed by a DIFFERENT, later, merged PR) come back showing exactly that later PR -- GitHub's issue-side
+// field silently drops a stale, never-merged closing reference and shows only a currently-valid one. So
+// this reads the OTHER side -- `closingIssuesReferences`, queried FROM the closed-unmerged PR -- which
+// still names #79 (confirmed directly: `pullRequest(number:89){closingIssuesReferences}` returns `[79]`,
+// `merged: false`). Two GraphQL fields answering what sounds like the same question, disagreeing on
+// exactly the case this row exists to catch, is the reason both are read here rather than one assumed to
+// stand in for the other.
+//
+// THE FIELD NOT USED, deliberately: `merge_commit_sha`. It is populated on a closed, UNMERGED PR --
+// GitHub computes a test-merge object -- and reads like proof of a merge in exactly the state where there
+// is none. `merged`/`mergedAt` are the fields read here and by `fetchClosingPrRefs` above; neither call
+// site in this file has ever reached for `merge_commit_sha`.
+
+/**
+ * @typedef {{ number: number, mergedAt: string | null }} ClosedPr
+ * @typedef {{ number: number, title: string, closedAt: string, stateReason: string | null }} ClosedIssue
+ */
+
+/**
+ * Every CLOSED PR that never merged -- `mergedAt`, never `merge_commit_sha`, which is populated on both
+ * states and would make this list indistinguishable from "every closed PR".
+ * @param {{ run?: typeof defaultRun }} [deps]
+ * @returns {ClosedPr[]}
+ */
+export function fetchClosedUnmergedPrs({ run = defaultRun } = {}) {
+  /** @type {string} */
+  let raw;
+  try {
+    raw = run("gh", ["pr", "list", "--repo", REPO, "--state", "closed", "--limit", "1000",
+      "--json", "number,mergedAt"]);
+  } catch (cause) {
+    throw new Error(`ready-label-audit: could not list closed PRs from ${REPO} -- refusing to guess. `
+      + `${/** @type {Error} */ (cause).message}`, { cause });
   }
-  process.stderr.write(`\n${gated.length} row(s) closed since ${PROVENANCE_REQUIRED_FROM} carry no claim `
-    + `event, so nothing can say who worked them. A hand claim got past \`row-claim.mjs\` -- find who `
-    + `pushed the branch named on the row and have them re-run \`row-claim.mjs claim\` against it, so the `
-    + `next audit can read what this one could not.\n`);
-  return gated.length;
+  /** @type {unknown} */
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (cause) {
+    throw new Error(`ready-label-audit: gh's closed-PR response was not JSON -- refusing to guess. `
+      + `First 200 chars: ${raw.slice(0, 200)}`, { cause });
+  }
+  if (!Array.isArray(parsed)) {
+    throw new Error(`ready-label-audit: gh's closed-PR response was not a list -- refusing to guess. `
+      + `Got: ${JSON.stringify(parsed).slice(0, 300)}`);
+  }
+  return parsed
+    .map((/** @type {any} */ p) => ({ number: p.number, mergedAt: p.mergedAt ?? null }))
+    .filter((p) => p.mergedAt === null);
+}
+
+/**
+ * The issues a closed, UNMERGED PR declares it would close, queried from the PR's OWN side --
+ * `closingIssuesReferences`, never the issue-side `closedByPullRequestsReferences` this file's own
+ * `fetchClosingPrRefs` reads for a DIFFERENT question (`readyRowsAlreadyMerged`'s "is a merge already
+ * done"), which cannot see a reference from a PR that closed without merging.
+ * @param {number[]} prNumbers
+ * @param {{ run?: typeof defaultRun }} [deps]
+ * @returns {Map<number, number[]>} PR number -> the issue numbers it would have closed
+ */
+export function fetchClosingIssueRefs(prNumbers, { run = defaultRun } = {}) {
+  /** @type {Map<number, number[]>} */
+  const map = new Map();
+  if (prNumbers.length === 0) return map;
+  const [owner, name] = REPO.split("/");
+  const fields = prNumbers.map((n, i) => `p${i}: pullRequest(number: ${n}) { number `
+    + `closingIssuesReferences(first: 20) { nodes { number } } }`).join(" ");
+  const query = `{ repository(owner: "${owner}", name: "${name}") { ${fields} } }`;
+  /** @type {string} */
+  let raw;
+  try {
+    raw = run("gh", ["api", "graphql", "-f", `query=${query}`]);
+  } catch (cause) {
+    throw new Error(`ready-label-audit: could not resolve closing issue references -- refusing to guess. `
+      + `${/** @type {Error} */ (cause).message}`, { cause });
+  }
+  /** @type {unknown} */
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (cause) {
+    throw new Error(`ready-label-audit: gh's closing-issue-references response was not JSON -- refusing `
+      + `to guess. First 200 chars: ${raw.slice(0, 200)}`, { cause });
+  }
+  const repo = /** @type {any} */ (parsed)?.data?.repository;
+  if (!repo || typeof repo !== "object") {
+    throw new Error(`ready-label-audit: gh's closing-issue-references response had no repository -- `
+      + `refusing to guess. Got: ${JSON.stringify(parsed).slice(0, 300)}`);
+  }
+  return closingIssueRefsFromRepoNode(repo, prNumbers);
+}
+
+/**
+ * Reads each aliased `p<N>: pullRequest(...)` node's closing-issue list back out, keyed by the real PR
+ * number rather than by alias -- split out of `fetchClosingIssueRefs` purely to keep that function's
+ * complexity under gate, the same split `closingPrRefsFromRepoNode` already makes for `fetchClosingPrRefs`.
+ * @param {Record<string, any>} repo
+ * @param {number[]} prNumbers
+ * @returns {Map<number, number[]>}
+ */
+function closingIssueRefsFromRepoNode(repo, prNumbers) {
+  /** @type {Map<number, number[]>} */
+  const map = new Map();
+  for (let i = 0; i < prNumbers.length; i++) {
+    const node = repo[`p${i}`];
+    if (!node || typeof node.number !== "number") {
+      throw new Error(`ready-label-audit: PR #${prNumbers[i]} is missing from the closing-issue-references `
+        + `response -- refusing to guess. Got: ${JSON.stringify(node ?? null).slice(0, 300)}`);
+    }
+    const nodes = node.closingIssuesReferences?.nodes;
+    const issues = Array.isArray(nodes)
+      ? nodes.map((/** @type {any} */ r) => r.number).filter((n) => typeof n === "number")
+      : [];
+    map.set(node.number, issues);
+  }
+  return map;
+}
+
+/**
+ * @typedef {{ number: number, title: string, closedAt: string, closedBy: number }} SoleUnmergedCloserRow
+ */
+
+/**
+ * Pure: which CLOSED issues were declared closed by a PR that never merged, with no OTHER PR currently
+ * recognised as closing them?
+ *
+ * `mergedRefsByIssue` (from `fetchClosingPrRefs`, the issue's own `closedByPullRequestsReferences`) is
+ * the "no LATER MERGED PR references the row" half -- if GitHub still shows a merged closer for this
+ * issue, the row is NOT a candidate, whether or not an earlier, abandoned PR also once claimed it (#159
+ * and #132's real shape: their own field shows the PR that actually shipped the work, not the one this
+ * audit's naive population would have quoted). An issue absent from `unmergedClosingRefsByPr`'s reversed
+ * index -- no closed-unmerged PR ever named it at all -- is out of this check's population entirely; it
+ * closed some other way and this check has nothing to say about it.
+ *
+ * `unmergedClosingRefsByPr` may name more than one PR per issue; "sole closing reference" means exactly
+ * one closed-unmerged PR names it AND no merged PR does.
+ *
+ * @param {ClosedIssue[]} closedIssues
+ * @param {Map<number, number[]>} unmergedClosingRefsByPr PR number -> issue numbers it would close
+ * @param {Map<number, ClosingPrRef[]>} mergedRefsByIssue issue number -> PRs GitHub currently recognises
+ *   as closing it (from `fetchClosingPrRefs`)
+ * @returns {SoleUnmergedCloserRow[]}
+ */
+export function soleUnmergedCloserRows(closedIssues, unmergedClosingRefsByPr, mergedRefsByIssue) {
+  /** @type {Map<number, number[]>} */
+  const closersByIssue = new Map();
+  for (const [pr, issues] of unmergedClosingRefsByPr) {
+    for (const issue of issues) {
+      const list = closersByIssue.get(issue) ?? [];
+      list.push(pr);
+      closersByIssue.set(issue, list);
+    }
+  }
+  /** @type {SoleUnmergedCloserRow[]} */
+  const flagged = [];
+  for (const issue of closedIssues) {
+    const closers = closersByIssue.get(issue.number);
+    if (!closers || closers.length !== 1) continue; // not this population, or more than one claimant
+    const hasMergedCloser = (mergedRefsByIssue.get(issue.number) ?? [])
+      .some((ref) => ref.state === "MERGED" && ref.mergedAt);
+    if (hasMergedCloser) continue; // GitHub still recognises a real closer; not a candidate
+    flagged.push({ number: issue.number, title: issue.title, closedAt: issue.closedAt, closedBy: closers[0] });
+  }
+  return flagged;
+}
+
+function reportSoleUnmergedCloser() {
+  const unmergedPrs = fetchClosedUnmergedPrs();
+  const prNumbers = unmergedPrs.map((p) => p.number);
+  const closingRefsByPr = fetchClosingIssueRefs(prNumbers);
+  const referencedIssues = [...new Set([...closingRefsByPr.values()].flat())];
+  if (referencedIssues.length === 0) {
+    process.stdout.write(`OK  ${prNumbers.length} closed, unmerged PR(s) checked, none declares a `
+      + `closing issue\n`);
+    return 0;
+  }
+  const closedIssues = fetchClosedCompletedIssues().filter((i) => referencedIssues.includes(i.number));
+  const mergedRefsByIssue = fetchClosingPrRefs(referencedIssues);
+  const flagged = soleUnmergedCloserRows(closedIssues, closingRefsByPr, mergedRefsByIssue);
+  if (flagged.length === 0) {
+    process.stdout.write(`OK  ${referencedIssues.length} row(s) named by a closed-unmerged PR checked, `
+      + `every one is also recognised as closed by a merged PR\n`);
+    return 0;
+  }
+  for (const row of flagged) {
+    // The report states the FACT ("closed by a PR that never merged"), never the conclusion ("not
+    // done") -- the work may have shipped elsewhere, and twice in #870's own measured population it did.
+    // REOPEN is the ruling this row asks for; the mutation itself is left to whoever runs `gh issue
+    // reopen`, matching this whole file's own standing rule that it reports debris and does not act on
+    // the tracker.
+    process.stdout.write(`REOPEN  #${row.number} "${row.title}" was closed by PR #${row.closedBy}, which `
+      + `never merged, and no other PR is currently recognised as closing it -- closed ${row.closedAt}. `
+      + `The work may have shipped elsewhere; this check cannot see that, only that this closing reference `
+      + `did not.\n`);
+  }
+  process.stderr.write(`\n${flagged.length} closed row(s) rest on a PR that never merged, with nothing `
+    + `else currently closing them -- \`gh issue reopen\` is the ruling, run by a person: this audit `
+    + `reports the debris, it does not act on the tracker.\n`);
+  return flagged.length;
+}
+
+// #870's SECOND CHECK, `ceo`'s ruling: `criterion-coverage.ts` and a closed row can disagree about
+// whether a criterion's rule exists, and unlike the check above, this one is unambiguous -- two files,
+// no run history, no judgement about whether work shipped elsewhere under a different PR.
+//
+// `criterion-coverage.ts` is READ, never imported: it is TypeScript, this file runs under plain `node`,
+// and the package publishes no subpath for it. The four status values are DEFINED on `CriterionCoverage`
+// itself: `assessed` -- the shipped judge can return a finding; `partial` -- assessed, but a named
+// failure mode is not covered (a claim that CODE EXISTS, same as `assessed`); `reachable` -- NOT assessed,
+// and could be; `out-of-scope` -- never will be. Only `reachable` says no code exists at all, so only
+// `reachable` disagrees with a row that closed COMPLETED -- `partial` is already the file's OWN answer to
+// "how much was done", and collapsing it into `reachable` would be inventing a fifth state nobody declared.
+const CRITERION_COVERAGE_PATH =
+  fileURLToPath(new URL("../packages/judge/src/criterion-coverage.ts", import.meta.url));
+
+/**
+ * Pure: every `"N.N.N": { ... status: "word"` pair this file's own source declares, in source order.
+ * Comments before `status:` are skipped (several entries carry a paragraph explaining the status before
+ * the field itself), so this reads what a `tsc`-checked object literal actually assigns rather than the
+ * first quoted word after the key.
+ * @param {string} source
+ * @returns {Map<string, string>}
+ */
+export function criterionStatusesFromSource(source) {
+  /** @type {Map<string, string>} */
+  const map = new Map();
+  const pattern = /"(\d+\.\d+\.\d+)":\s*\{\s*(?:\/\/[^\n]*\n\s*)*status:\s*"(\w[\w-]*)"/g;
+  for (const match of source.matchAll(pattern)) {
+    map.set(match[1], match[2]);
+  }
+  return map;
+}
+
+/**
+ * Which CLOSED issue, if any, this criterion's own tracker row is -- by the convention #79 itself
+ * establishes: a row's TITLE begins with the criterion number it is about. Not a field GitHub has, so
+ * this names it as a convention rather than a fact and returns `undefined` when no title matches --
+ * "no row found" and "found and it agrees" must never read the same, which is why the caller reports the
+ * first explicitly rather than treating it as silence.
+ * @param {string} criterion
+ * @param {ClosedIssue[]} closedIssues
+ * @returns {ClosedIssue | undefined}
+ */
+export function criterionOwningRow(criterion, closedIssues) {
+  const prefix = new RegExp(`^${criterion.replace(/\./g, "\\.")}(?:\\s|$)`);
+  return closedIssues.find((i) => prefix.test(i.title));
+}
+
+/**
+ * @typedef {{ criterion: string, status: string, row: ClosedIssue }} CoverageDisagreement
+ */
+
+/**
+ * Pure: every `reachable` criterion whose owning row is closed `COMPLETED`.
+ *
+ * A FLOOR IS THE CALLER'S JOB, NOT THIS FUNCTION'S -- `reportCoverageTrackerDisagreement` asserts the
+ * examined count itself, because a floor belongs beside the population it counts, not inside a function
+ * that also has to stay pure and testable against a handful of synthetic statuses.
+ * @param {Map<string, string>} statuses
+ * @param {ClosedIssue[]} closedIssues
+ * @returns {CoverageDisagreement[]}
+ */
+export function coverageTrackerDisagreements(statuses, closedIssues) {
+  /** @type {CoverageDisagreement[]} */
+  const disagreements = [];
+  for (const [criterion, status] of statuses) {
+    if (status !== "reachable") continue;
+    const row = criterionOwningRow(criterion, closedIssues);
+    if (!row || row.stateReason !== "COMPLETED") continue;
+    disagreements.push({ criterion, status, row });
+  }
+  return disagreements;
+}
+
+/**
+ * Pure: every `reachable` criterion for which NO closed row matches the title convention at all -- a
+ * THIRD state, distinct from both "agrees" and "disagrees". `coverageTrackerDisagreements` above folds
+ * "no row found" into "no disagreement" by construction (`if (!row ...) continue`), which is correct for
+ * COUNTING findings but would silently hide the case from a reader if nothing else ever named it -- the
+ * title convention is not a GitHub field, and a criterion nobody filed a row for at all is not evidence
+ * of anything, but a reader should be told the check could not look rather than assume it looked and
+ * found nothing.
+ * @param {Map<string, string>} statuses
+ * @param {ClosedIssue[]} closedIssues
+ * @returns {string[]}
+ */
+export function reachableCriteriaWithoutRow(statuses, closedIssues) {
+  const without = [];
+  for (const [criterion, status] of statuses) {
+    if (status !== "reachable") continue;
+    if (!criterionOwningRow(criterion, closedIssues)) without.push(criterion);
+  }
+  return without;
+}
+
+/**
+ * Every issue closed `COMPLETED` -- `stateReason`, never bare `state`, because a row closed
+ * `NOT_PLANNED` is a decision this check has nothing to say about.
+ * @param {{ run?: typeof defaultRun }} [deps]
+ * @returns {ClosedIssue[]}
+ */
+export function fetchClosedCompletedIssues({ run = defaultRun } = {}) {
+  /** @type {string} */
+  let raw;
+  try {
+    raw = run("gh", ["issue", "list", "--repo", REPO, "--state", "closed", "--limit", "1000",
+      "--json", "number,title,closedAt,stateReason"]);
+  } catch (cause) {
+    throw new Error(`ready-label-audit: could not list closed issues from ${REPO} -- refusing to guess. `
+      + `${/** @type {Error} */ (cause).message}`, { cause });
+  }
+  /** @type {unknown} */
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (cause) {
+    throw new Error(`ready-label-audit: gh's closed-issue response was not JSON -- refusing to guess. `
+      + `First 200 chars: ${raw.slice(0, 200)}`, { cause });
+  }
+  if (!Array.isArray(parsed)) {
+    throw new Error(`ready-label-audit: gh's closed-issue response was not a list -- refusing to guess. `
+      + `Got: ${JSON.stringify(parsed).slice(0, 300)}`);
+  }
+  return parsed.map((/** @type {any} */ i) =>
+    ({ number: i.number, title: i.title, closedAt: i.closedAt, stateReason: i.stateReason ?? null }));
+}
+
+// A floor sized below today's count, so a new "reachable" criterion joining does not fail this check --
+// the failure that matters is `criterionStatusesFromSource` matching NOTHING, which is how a scan that
+// stopped recognising the file's own shape would still report a clean, empty disagreement list.
+const MIN_CRITERIA_EXAMINED = 50;
+
+function reportCoverageTrackerDisagreement() {
+  const source = readFileSync(CRITERION_COVERAGE_PATH, "utf8");
+  const statuses = criterionStatusesFromSource(source);
+  if (statuses.size < MIN_CRITERIA_EXAMINED) {
+    throw new Error(`ready-label-audit: only ${statuses.size} criteria found in ${CRITERION_COVERAGE_PATH} `
+      + `-- refusing to report a clean disagreement list having barely read the file. Expected at least `
+      + `${MIN_CRITERIA_EXAMINED}.`);
+  }
+  const closedIssues = fetchClosedCompletedIssues();
+  const disagreements = coverageTrackerDisagreements(statuses, closedIssues);
+  // A THIRD STATE, named rather than folded into "no disagreement" -- the title convention is not a
+  // GitHub field, and a `reachable` criterion with no row matching it is a criterion this check could not
+  // look up, never one it looked up and cleared.
+  const noRow = reachableCriteriaWithoutRow(statuses, closedIssues);
+  if (noRow.length > 0) {
+    process.stdout.write(`NO ROW FOUND  ${noRow.join(", ")} read \`reachable\` and no closed-COMPLETED `
+      + `row's title starts with the criterion number -- not evidence either way, just unexamined.\n`);
+  }
+  if (disagreements.length === 0) {
+    process.stdout.write(`OK  ${statuses.size} criteria in criterion-coverage.ts examined, none reads `
+      + `\`reachable\` while its own tracker row is closed COMPLETED\n`);
+    return 0;
+  }
+  for (const { criterion, status, row } of disagreements) {
+    process.stdout.write(`DISAGREEMENT  ${criterion} reads \`${status}\` in criterion-coverage.ts and `
+      + `#${row.number} "${row.title}" is closed COMPLETED -- the two artefacts cannot both be right.\n`);
+  }
+  process.stderr.write(`\n${disagreements.length} criterion/row pair(s) disagree about whether the rule `
+    + `exists -- criterion-coverage.ts is the artefact the rule's own code has to agree with, so it is `
+    + `the one to trust; the row's closure is the one to fix.\n`);
+  return disagreements.length;
 }
 
 /** @type {[string, () => number][]} */
@@ -1098,6 +1514,8 @@ export const CHECKS = [
   ["closing PR references", reportAlreadyMerged],
   ["claim activity", reportDeadClaims],
   ["closed-row provenance", reportUnattributableClosedRows],
+  ["closing PR never merged", reportSoleUnmergedCloser],
+  ["coverage vs tracker", reportCoverageTrackerDisagreement],
 ];
 
 /**

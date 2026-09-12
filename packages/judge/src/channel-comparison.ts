@@ -497,6 +497,29 @@ export function tabOrderCanProveAbsence(tabbedNames: string[], input: RuleInput)
 }
 
 /**
+ * The completeness verdicts under which a sweep counts as having examined the page: `exact`, and `unknown`
+ * -- deliberately allowed and COUNTED rather than refused. No verdict at all reads the same as `unknown`.
+ *
+ * WHY `unknown` IS ALLOWED, measured 2026-09-11 (#961, `orchestrator` on a snapshot fetched 05:14:05Z, read
+ * with `sweepCompleteness` at `116b67e1`). The allowance was written when every capture predated the census
+ * counter and refusing would have silenced 2.1.1 corpus-wide. That population is now ZERO scored captures:
+ * 14 of 113 real-page captures lack a `distinct` census and all 14 are undeclared (none in calibration,
+ * training or fixture); 580 of 4,392 dataset capture files lack one and none shows a raw shortfall; none
+ * of the 2,820 exported records reads `unknown` for link, heading, graphic or formControl; 0 of 312
+ * acceptance captures lack it. Kept on that number (#961 decided (b)). Where `unknown` DOES still reach a
+ * gate is two other routes, #962's: `tableCells`, which no census counts and no rule reads, and landmark
+ * sweeps that name nothing, which `sweepCompleteness` now judges by count instead of reading `unknown`.
+ *
+ * Everything else is PARTIAL: `truncated`, `phantom`, `elsewhere` (#951), and any verdict added after this
+ * line was written. It is spelled as the ALLOWED set, once, for both readers (`assertableSweep` here and
+ * `incompleteFeeds` in `outcomes.ts`), because both used to list the BAD verdicts and let anything else
+ * through: `elsewhere` fell through each to "absence allowed" and "examined in full" until it was named, and
+ * in `outcomes.ts` nothing noticed (worker-judge's mutation on #956, 742 tests green). A new verdict now
+ * fails closed.
+ */
+export const EXAMINED_IN_FULL: ReadonlySet<string> = new Set(["exact", "unknown"]);
+
+/**
  * MAY A RULE ASSERT FROM THIS SWEEP? — capture-integrity-plan C2.
  *
  * Absence is the one claim a sweep cannot make alone, and this repo already states that rule and then
@@ -526,13 +549,12 @@ export function tabOrderCanProveAbsence(tabbedNames: string[], input: RuleInput)
  */
 export function assertableSweep(input: RuleInput, type: string, claim: "presence" | "absence"): boolean {
   const verdict = input.completeness?.[type];
+  if (verdict === undefined || EXAMINED_IN_FULL.has(verdict)) return true;
   // A sweep that announced more than the page exposes may have announced THIS one. Fatal to either claim.
   if (verdict === "phantom") return false;
-  // Short: it cannot rule anything out, but what it DID hear was still heard.
-  if (verdict === "truncated") return claim === "presence";
-  // `exact`, and `unknown` — which is deliberately allowed and COUNTED rather than refused, because every
-  // capture predating the counter reports it and refusing would silence 2.1.1 across the whole corpus.
-  return true;
+  // Short -- `truncated`, `elsewhere` (#951: it ran out of a container on the page), or a verdict this line
+  // predates. It cannot rule anything out, but what it DID hear is on the page and was still heard.
+  return claim === "presence";
 }
 
 export function unverifiedSweeps(input: RuleInput, types: string[]): string[] {

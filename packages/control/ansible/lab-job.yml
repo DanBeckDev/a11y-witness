@@ -649,8 +649,8 @@
             REFERRED); this code fires on either.
           "2": >-
             INCONCLUSIVE -- fewer real pages were examined than the audit's own population (an unusable
-            page not already DECLARED in runs/real-page-unexaminable.json still counts as a shortfall here,
-            by design). Re-run rather than trusting the ratio shown.
+            page not already DECLARED in packages/lab/baselines/real-page-unexaminable.json still counts as a
+            shortfall here, by design). Re-run rather than trusting the ratio shown.
         argv: ["/usr/bin/npm", "run", "--silent", "rules:real-pages"]
         timeout: 900
       # Same, with --update: rewrites the baseline. Separate job because it WRITES a claim that every
@@ -764,6 +764,14 @@
       rules-coverage:
         argv: ["/usr/bin/npm", "run", "--silent", "rules:coverage"]
         timeout: 900
+      # HOW MANY REAL-PAGE CAPTURES LOSE REQUIREMENT 2's FULL-PAGE CLAIM, and to which sweep.
+      # Reads `runs/real-page-corpus`, so it is a VERDICT only here: a copy in any other checkout is only
+      # as fresh as its last sync, and one measured at 89 hours old reported cleanly over a corpus that no
+      # longer existed. That is CLAUDE.md's "a gate that reads runs/ is not yours to report", and this
+      # entry is what lets the rule be obeyed rather than worked around with a shell loop over SSH.
+      full-page-claims:
+        argv: ["/usr/bin/npm", "run", "--silent", "lab:full-page-claims"]
+        timeout: 600
       rules-gate:
         # gateVerdict/exitCodeFor -- lab-job.test.ts derives which jobs need this and refuses a fifth
         # undeclared adopter, so it cannot go stale the way `evidence-check` alone did for weeks.
@@ -1054,11 +1062,11 @@
       ansible.builtin.assert:
         that:
           - worker is not defined
-          - role | default('training') in ['training', 'calibration', 'fixture']
+          - role | default('training') in ['training', 'calibration', 'fixture', 'field']
           - shard | default('0/1') is match('^[0-9]+/[0-9]+$')
         fail_msg: >-
           capture-real-pages now runs across the whole fleet ({{ groups['a11y_workers'] | join(', ') }})
-          and takes no -e worker. Optionally -e role=training|calibration and -e shard=i/n; sharding is for
+          and takes no -e worker. Optionally -e role=training|calibration|fixture|field and -e shard=i/n; sharding is for
           splitting a run across separate machines, not for using more than one worker.
 
     # Same containment as `worker` and `role`: a NAME from a fixed list, never a path. `--output` is a

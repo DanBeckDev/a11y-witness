@@ -71,10 +71,11 @@ import { READY_LABEL, WAS_READY_LABEL } from "./ready-label-audit.mjs";
 import { gitCommonDir, appendJsonl } from "./merge-guard.mjs";
 import { withBoardSnapshot, PROJECT_OWNER, PROJECT_NUMBER } from "./board-snapshot.mjs";
 import { runnerReason } from "./row-claim/runner-rule.mjs";
-import { ownPrHealthReason, lookupOwnPrHealth } from "./row-claim/own-pr-health-rule.mjs";
+import { inBuildReason, lookupHeldRows } from "./row-claim/own-pr-health-rule.mjs";
 import { resolveBlockedByOverride, blockedByExceptionNote } from "./row-claim/blocked-by-rule.mjs";
 import { fileOverlapReason, lookupMyRegionFiles, lookupOpenPrFiles } from "./row-claim/file-overlap-rule.mjs";
 import { templateFieldsReason, lookupIssueBody } from "./row-claim/template-fields-rule.mjs";
+import { staleRuleReason } from "./row-claim/stale-rule-guard.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
 import { CLAIM_LABEL, STARTED_LABEL } from "./claim-labels.mjs";
 
@@ -112,6 +113,99 @@ export const BRANCH_LABEL_PREFIX = "branch:";
 // the claim -- the moment the releasing session, and only it, is known to be done with that directory --
 // remove it automatically rather than trusting the next sweep to notice.
 export const WORKTREE_LABEL_PREFIX = "worktree:";
+
+// #987: AND NEITHER OF THOSE TWO FACTS FITS IN A LABEL. GitHub caps a label NAME at 50 characters, so
+// `worktree:` (9) leaves 41 for a path and `branch:` (7) leaves 43. An ordinary worktree beside this
+// checkout -- `/Users/<user>/Documents/repos/personal/a11y-wt-987` -- is 50 characters on its own, making
+// a 59-character label, and `gh issue edit --add-label` answers HTTP 422. Measured 2026-09-11 while
+// claiming #986 (72 characters, refused); measured again the day this row was built: of the 33 rows that
+// have ever carried one, every single `worktree:` label names a short `/private/tmp/wt-<row>` path,
+// because that is the only shape that fits. The flag's documented usage could not be followed for the
+// common case, so engineers dropped the flag -- and #933's hazard (uncommitted work in a retired
+// session's worktree, invisible to every enumeration) went unrecorded precisely where it is most likely.
+//
+// SO THE RECORD MOVES TO A CLAIM COMMENT, and the two labels are no longer written.
+//
+// A comment rather than the row BODY, deliberately. The body is a read-modify-write with no atomicity and
+// it is not this tool's to own: rows carry `## Region`/`## Acceptance`/`## Open-check` sections that
+// product-manager amends -- one was amended on THIS row while it sat in the Ready column -- and a claim
+// rewriting a body it read a moment earlier would silently drop that edit. A comment is append-only, so
+// two writers cannot clobber each other, and `row-claim` already posts one (#741's exception note).
+export const CLAIM_RECORD_MARKER = "<!-- row-claim: claim record -->";
+const CLAIM_RECORD_BRANCH = "Claimed-branch:";
+const CLAIM_RECORD_WORKTREE = "Claimed-worktree:";
+
+/**
+ * Pure: the claim-record comment for a claim (or, with both fields absent, for a RELEASE).
+ *
+ * The marker is an HTML comment so it is invisible in the rendered thread while still being the thing
+ * `claimRecordFrom` matches on -- a prose heading would be matched by anyone quoting this comment, which
+ * is the mention-versus-use trap `acceptance-commands.mjs`'s header already names.
+ *
+ * A release writes the marker with NO field lines rather than writing nothing, because "released" and
+ * "never recorded" have to be distinguishable: without it the last CLAIM comment would still be the
+ * newest record, and `check` would keep naming a worktree this tool had already removed.
+ * @param {{ session: string, branch?: string | null, worktree?: string | null, released?: boolean }} record
+ * @returns {string}
+ */
+export function claimRecordComment({ session, branch, worktree, released = false }) {
+  const what = released ? `released by \`${session}\`` : `claimed by \`${session}\``;
+  const lines = released ? [] : [
+    ...(branch ? [`${CLAIM_RECORD_BRANCH} ${branch}`] : []),
+    ...(worktree ? [`${CLAIM_RECORD_WORKTREE} ${worktree}`] : []),
+  ];
+  return [CLAIM_RECORD_MARKER, `**Claim record** -- ${what}.`, "", ...lines,
+    ...(lines.length === 0 ? ["No branch or worktree is recorded for this row."] : []),
+    "", "The branch and worktree live here rather than in a `branch:`/`worktree:` label because GitHub "
+    + "caps a label name at 50 characters and an ordinary absolute path does not fit (#987).",
+  ].join("\n");
+}
+
+/**
+ * Pure: the branch and worktree the NEWEST claim-record comment names, or nulls when none does.
+ *
+ * Newest wins, and only comments carrying the marker are read -- a row can be claimed, released and
+ * claimed again, and each of those appended its own record. `comments` is oldest-first, the order
+ * `gh issue view --json comments` returns.
+ * @param {string[]} comments comment bodies, oldest first
+ * @returns {{ branch: string | null, worktree: string | null, recorded: boolean }}
+ */
+export function claimRecordFrom(comments) {
+  const records = comments.filter((c) => c.includes(CLAIM_RECORD_MARKER));
+  const newest = records.at(-1);
+  if (newest === undefined) return { branch: null, worktree: null, recorded: false };
+  const read = (/** @type {string} */ key) => {
+    const match = new RegExp(`^${key}\\s*(.+)$`, "m").exec(newest);
+    return match ? match[1].trim() : null;
+  };
+  return { branch: read(CLAIM_RECORD_BRANCH), worktree: read(CLAIM_RECORD_WORKTREE), recorded: true };
+}
+
+/**
+ * Pure: the branch and worktree a row records, preferring the claim comment and falling back to a
+ * `branch:`/`worktree:` LABEL written before #987 landed.
+ *
+ * THE FALLBACK IS A MIGRATION READ WITH AN END CONDITION, not a second spelling of the same fact. The
+ * comment is the only place a NEW claim writes; the label is only ever read. Measured the day this
+ * landed: **3 open rows** carried one (#772, #987, #1019) and 30 closed ones did. It can be deleted once
+ * this prints 0:
+ *
+ * ```bash
+ * gh issue list --state open --limit 200 --json labels \
+ *   --jq '[.[]|select(.labels|map(.name)|any(startswith("branch:") or startswith("worktree:")))]|length'
+ * ```
+ *
+ * Dropping it sooner would leave a stale `worktree:` label on one of those three and skip removing the
+ * directory it names, which is the one outcome #665 exists to prevent.
+ * @param {{ labels: string[], comments: string[] }} row
+ * @returns {{ branch: string | null, worktree: string | null }}
+ */
+export function claimedObjects({ labels, comments }) {
+  const fromComment = claimRecordFrom(comments);
+  if (fromComment.recorded) return { branch: fromComment.branch, worktree: fromComment.worktree };
+  const labelled = claimStatus(labels);
+  return { branch: labelled.branch, worktree: labelled.worktree };
+}
 
 /**
  * @typedef {{ number: number, title: string, labels: string[], state?: "OPEN" | "CLOSED" }} IssueClaim
@@ -194,6 +288,47 @@ export function fetchLabels(issueNumber, { run = defaultRun } = {}) {
   // is the one place this actually changes behaviour, and only when `state` is the literal `"CLOSED"`.
   const state = obj.state === "OPEN" || obj.state === "CLOSED" ? obj.state : undefined;
   return { number: obj.number, title: obj.title, labels: names, state };
+}
+
+/**
+ * #987: the row's comment bodies, oldest first -- the thread `claimRecordFrom` reads the recorded branch
+ * and worktree out of.
+ *
+ * THROWS rather than returning null on a failed read, unlike the `lookup`-wrapped helpers next door, and
+ * that asymmetry is the point: `declineRow` uses this to decide which directory to remove, so a read that
+ * silently became "no worktree recorded" would skip the removal and report a clean decline -- unreadable
+ * is not unrecorded, the same distinction `arm-pr`'s own label read already refuses to blur.
+ * @param {number} issueNumber
+ * @param {{ run?: typeof defaultRun }} [deps]
+ * @returns {string[]}
+ */
+export function fetchClaimComments(issueNumber, { run = defaultRun } = {}) {
+  /** @type {string} */
+  let raw;
+  try {
+    raw = run("gh", ["issue", "view", String(issueNumber), "--repo", REPO, "--json", "comments"]);
+  } catch (cause) {
+    throw new Error(`row-claim: could not read issue #${issueNumber}'s comments from ${REPO} -- refusing `
+      + `to guess what branch or worktree its claim recorded. ${/** @type {Error} */ (cause).message}`,
+    { cause });
+  }
+  /** @type {unknown} */
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (cause) {
+    throw new Error(`row-claim: gh's comment response for issue #${issueNumber} was not JSON -- refusing `
+      + `to guess. First 200 chars: ${raw.slice(0, 200)}`, { cause });
+  }
+  const comments = /** @type {{ comments?: unknown }} */ (parsed)?.comments;
+  if (!Array.isArray(comments)) {
+    throw new Error(`row-claim: gh's response for issue #${issueNumber} carried no comments array -- `
+      + `refusing to guess. Got: ${JSON.stringify(parsed).slice(0, 300)}`);
+  }
+  return comments.map((/** @type {unknown} */ c) => {
+    const body = /** @type {{ body?: unknown }} */ (c)?.body;
+    return typeof body === "string" ? body : "";
+  });
 }
 
 /**
@@ -367,27 +502,26 @@ export function moveProjectStatus(issueNumber, statusName,
  * choice made the other way: a convenience guard that blocks all work on a lookup failure gets bypassed
  * and then never consulted again, which is worse than the rare miss it would have caught.
  *
- * `requiredContexts`/`checkRuns` are separately injectable (rather than folded into `run`) because
- * `own-pr-health-rule.mjs`'s own lookup reads them through `merge-guard/lookups.mjs`'s dedicated helpers,
- * not through an arbitrary `gh` argv -- a test overriding only `run` would otherwise reach a real network
- * call the moment a fixture's own PR reads OPEN, which is exactly the trap `lookupClosingPrHealth`'s own
- * comment names.
- *
+ * #989: THE CHECK-STATE DEPS ARE GONE. B2 used to read the session's own PR colour and this paragraph
+ * explained why `requiredContexts`/`checkRuns` were injected separately from `run` -- they reach `gh`
+ * through `merge-guard/lookups.mjs`'s own helper, so a fixture injecting `run` alone placed a real network
+ * call. B2 now asks whether a ROW is in build and reads no check state at all, so the deps have no
+ * subject; callers still passing them are simply ignored, which is why no test had to change for it.
  * @param {number} issueNumber the row about to be claimed -- excluded from B2's "other held rows" check
  * @param {string} mySession
  * @param {{ run?: typeof defaultRun,
- *           requiredContexts?: () => (string[] | null),
- *           checkRuns?: (sha: string) => ({name: string, status: string, conclusion: string | null,
- *             completedAt: string | null}[] | null) }} deps
+ *           }} deps
  * @returns {string | null}
  */
-export function sessionEligibilityReason(issueNumber, mySession,
-  { run = defaultRun, requiredContexts, checkRuns } = {}) {
+export function sessionEligibilityReason(issueNumber, mySession, { run = defaultRun } = {}) {
   const ghRun = (/** @type {string[]} */ args) => run("gh", args);
 
-  const ownPr = lookupOwnPrHealth(mySession, issueNumber, { run: ghRun, requiredContexts, checkRuns });
-  const health = ownPrHealthReason(ownPr);
-  if (health) return health;
+  // #989: B2 asks whether a ROW is in build, not whether a PR is open. `null` from the lookup is
+  // INCONCLUSIVE and returns no refusal, exactly as the PR-shaped version did -- a failed lookup must
+  // never invent a block any more than it may invent a clearance.
+  const heldRows = lookupHeldRows(mySession, issueNumber, { run: ghRun });
+  const inBuild = heldRows === null ? null : inBuildReason(heldRows);
+  if (inBuild) return inBuild;
 
   const myFiles = lookupMyRegionFiles(issueNumber, { run: ghRun });
   const otherPrFiles = lookupOpenPrFiles({ run: ghRun });
@@ -416,18 +550,20 @@ export function sessionEligibilityReason(issueNumber, mySession,
  * of `ineligible`.
  *
  * @param {{ issueNumber: number, mySession: string, ineligible: string, blockedBy: string | undefined }} attempt
- * @param {{ ghRun: (args: string[]) => string, requiredContexts?: () => (string[] | null),
- *           checkRuns?: (sha: string) => ({name: string, status: string, conclusion: string | null,
- *             completedAt: string | null}[] | null) }} deps
+ * @param {{ ghRun: (args: string[]) => string }} deps
  * @returns {{ proceed: true, blockedByNote: string | null } | { proceed: false, reason: string }}
  */
 function eligibilityWithBlockedBy({ issueNumber, mySession, ineligible, blockedBy }, deps) {
   if (!blockedBy) return { proceed: false, reason: ineligible };
-  const ownPr = lookupOwnPrHealth(mySession, issueNumber,
-    { run: deps.ghRun, requiredContexts: deps.requiredContexts, checkRuns: deps.checkRuns });
-  const health = ownPrHealthReason(ownPr);
-  if (!health) return { proceed: false, reason: ineligible };
-  const override = resolveBlockedByOverride(ownPr, blockedBy, { run: deps.ghRun });
+  const heldRows = lookupHeldRows(mySession, issueNumber, { run: deps.ghRun });
+  const inBuild = heldRows === null ? null : inBuildReason(heldRows);
+  if (!inBuild) return { proceed: false, reason: ineligible };
+  // #741's OVERRIDE NEEDS AN OPEN PR TO CARRY ITS MEASUREMENT COMMENT, AND A ROW IN BUILD HAS NONE -- that
+  // is what "in build" means. So the override cannot fire on a #989 refusal, and `resolveBlockedByOverride`
+  // says exactly that ("no open PR of this session's own was found to attach a measurement comment to")
+  // rather than being silently skipped. Moving the measurement comment onto the ROW is a separate row; it
+  // is a change to what #741 asks for, not a rename.
+  const override = resolveBlockedByOverride(null, blockedBy, { run: deps.ghRun });
   if (!override.ok) {
     return { proceed: false,
       reason: `${ineligible} (--blocked-by=${blockedBy} did not apply: ${override.reason})` };
@@ -449,6 +585,39 @@ function postBlockedByNoteIfAny(issueNumber, blockedByNote, runFn) {
 }
 
 /**
+ * #987: posts the claim record -- the branch and worktree, in a comment, because neither fits in a label.
+ *
+ * A claim that names NEITHER posts nothing: a dispatch, or a non-code row, has no git object to record,
+ * and a marker comment carrying no fields is how a RELEASE is spelled (`claimRecordFrom` would read this
+ * as "released" rather than "claimed with nothing"). Those two states must not share a spelling.
+ * @param {number} issueNumber
+ * @param {{ session: string, branch?: string, worktree?: string }} record
+ * @param {(cmd: string, args: string[]) => string} runFn
+ */
+function postClaimRecord(issueNumber, { session, branch, worktree }, runFn) {
+  if (!branch && !worktree) return;
+  const body = claimRecordComment({ session, branch, worktree });
+  runFn("gh", ["issue", "comment", String(issueNumber), "--repo", REPO, "--body", body]);
+}
+
+/**
+ * #987: posts the RELEASE record, superseding whatever the last claim recorded -- pulled out of
+ * `declineRow` for the same reason `postBlockedByNoteIfAny` and `declineRemoveLabels` were (a called
+ * function's own branches are not the caller's, and `declineRow` sits one step from the complexity gate).
+ *
+ * Nothing is posted when nothing was recorded: a row that never named a branch or worktree has no record
+ * to supersede, and a marker comment on it would be noise a future `claimRecordFrom` then has to read.
+ * @param {number} issueNumber
+ * @param {{ session: string, recorded: { branch: string | null, worktree: string | null } }} release
+ * @param {(cmd: string, args: string[]) => string} runFn
+ */
+function postReleaseRecord(issueNumber, { session, recorded }, runFn) {
+  if (!recorded.branch && !recorded.worktree) return;
+  runFn("gh", ["issue", "comment", String(issueNumber), "--repo", REPO, "--body",
+    claimRecordComment({ session, released: true })]);
+}
+
+/**
  * #749: writes the claim's labels, split from `writeRowLabels` for the same reason
  * `postBlockedByNoteIfAny` above is (a called function's own lines are not the caller's).
  *
@@ -460,12 +629,16 @@ function postBlockedByNoteIfAny(issueNumber, blockedByNote, runFn) {
  * non-zero exit (`defaultRun`'s own `execFileSync`), so a failed ADD call never reaches the REMOVE below --
  * the row keeps `ready` (worse than a clean claim, but recoverable and visible) rather than losing it while
  * gaining nothing.
+ *
+ * #987: NO `branch:`/`worktree:` LABEL IS BUILT HERE ANY MORE -- see `CLAIM_RECORD_MARKER`'s own header
+ * for why (GitHub's 50-character label-name cap made the documented `--worktree=<path>` usage impossible
+ * for any path outside `/private/tmp`). The two facts are written as a claim COMMENT instead, by
+ * `writeRowLabels` after it knows it won the race.
  * @param {number} issueNumber
- * @param {{ run: typeof defaultRun, sessionLabel: string, extraLabels: string[], branchLabel: string[],
- *           worktreeLabel: string[], wasReady: boolean }} args
+ * @param {{ run: typeof defaultRun, sessionLabel: string, extraLabels: string[], wasReady: boolean }} args
  */
-function applyClaimLabels(issueNumber, { run, sessionLabel, extraLabels, branchLabel, worktreeLabel, wasReady }) {
-  const labelsToAdd = [CLAIM_LABEL, sessionLabel, ...extraLabels, ...branchLabel, ...worktreeLabel,
+function applyClaimLabels(issueNumber, { run, sessionLabel, extraLabels, wasReady }) {
+  const labelsToAdd = [CLAIM_LABEL, sessionLabel, ...extraLabels,
     ...(wasReady ? [WAS_READY_LABEL] : [])];
   ensureLabelsExist(labelsToAdd, { run });
   run("gh", ["issue", "edit", String(issueNumber), "--repo", REPO,
@@ -479,13 +652,11 @@ function applyClaimLabels(issueNumber, { run, sessionLabel, extraLabels, branchL
  * @param {string[]} extraLabels labels written alongside `in-progress` + `session:<name>` -- `[]` for a
  *   dispatch, `[STARTED_LABEL]` for a claim/start
  * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus, branch?: string,
- *           worktree?: string, blockedBy?: string, requiredContexts?: () => (string[] | null),
- *           checkRuns?: (sha: string) => ({name: string, status: string, conclusion: string | null,
- *             completedAt: string | null}[] | null) }} deps
+ *           worktree?: string, blockedBy?: string }} deps
  * @returns {{ claimed: true, statusMoved: true } | { claimed: true, statusMoved: false, notOnBoard: boolean, statusReason: string } | { claimed: false, reason: string }}
  */
 function writeRowLabels(issueNumber, mySession, extraLabels,
-  { run = defaultRun, moveStatus = moveProjectStatus, branch, worktree, blockedBy, requiredContexts, checkRuns } = {}) {
+  { run = defaultRun, moveStatus = moveProjectStatus, branch, worktree, blockedBy } = {}) {
   const before = fetchLabels(issueNumber, { run });
   const decision = decideClaim(before.labels, mySession);
   if (!decision.proceed) return { claimed: false, reason: decision.reason };
@@ -510,49 +681,48 @@ function writeRowLabels(issueNumber, mySession, extraLabels,
   const alreadyMine = claimStatus(before.labels).sessions.includes(mySession);
   let blockedByNote = null;
   if (!alreadyMine) {
-    const ineligible = sessionEligibilityReason(issueNumber, mySession, { run, requiredContexts, checkRuns });
+    const ineligible = sessionEligibilityReason(issueNumber, mySession, { run });
     if (ineligible) {
       const eligibility = eligibilityWithBlockedBy({ issueNumber, mySession, ineligible, blockedBy },
-        { ghRun: ghRunForBody, requiredContexts, checkRuns });
+        { ghRun: ghRunForBody });
       if (!eligibility.proceed) return { claimed: false, reason: eligibility.reason };
       blockedByNote = eligibility.blockedByNote;
     }
   }
 
   const sessionLabel = `session:${mySession}`;
-  // #656: THE BRANCH LABEL, when this claim names one -- optional, since not every row is code-changing
-  // and a dispatch (no branch created yet) legitimately omits it. `branchLabel` is `[]` rather than
-  // `undefined` so it composes into `labelsToAdd`/the back-off removal list below exactly like
-  // `extraLabels` does, with no special-casing at either site.
-  const branchLabel = branch ? [`${BRANCH_LABEL_PREFIX}${branch}`] : [];
-  // #665: THE WORKTREE LABEL, identical shape one field over -- optional for the same reason `branch` is
-  // (a dispatch has no worktree yet, a non-code row never gets one).
-  const worktreeLabel = worktree ? [`${WORKTREE_LABEL_PREFIX}${worktree}`] : [];
   // #449: RECORD, IN THE SAME EDIT, THAT THIS ROW WAS `ready` BEFORE THE CLAIM -- `declineRow`'s only way
   // to know whether releasing this row should restore `ready`, since removing it below is the one place
   // that fact is ever seen. A resumed claim (dispatched -> started, `ready` already gone) computes false
   // here and adds nothing, harmlessly -- the marker this row's own earlier dispatch already wrote stays
   // exactly where it is.
   const wasReady = before.labels.includes(READY_LABEL);
-  applyClaimLabels(issueNumber,
-    { run, sessionLabel, extraLabels, branchLabel, worktreeLabel, wasReady });
+  applyClaimLabels(issueNumber, { run, sessionLabel, extraLabels, wasReady });
 
   const after = fetchLabels(issueNumber, { run });
   const afterStatus = claimStatus(after.labels);
   const otherSessions = afterStatus.sessions.filter((s) => s !== mySession);
   if (otherSessions.length > 0) {
     // LOST THE RACE, DETECTED AFTER THE FACT: back off rather than leave a contested claim standing.
-    // Removing only OUR OWN session label (and any of our extras, including the branch/worktree labels
-    // we just added), never `in-progress` (which the other session's claim needs) and never the other
-    // session's label (not ours to touch).
+    // Removing only OUR OWN session label and any of our extras, never `in-progress` (which the other
+    // session's claim needs) and never the other session's label (not ours to touch).
+    //
+    // #987: there is no branch/worktree label to take back any more, and nothing to retract in the thread
+    // either -- the claim-record comment is posted BELOW this block, so a claim that lost the race never
+    // wrote one. That ordering is the same reason #741's exception note sits where it does.
     run("gh", ["issue", "edit", String(issueNumber), "--repo", REPO,
-      ...[sessionLabel, ...extraLabels, ...branchLabel, ...worktreeLabel].flatMap((l) => ["--remove-label", l])]);
+      ...[sessionLabel, ...extraLabels].flatMap((l) => ["--remove-label", l])]);
     return { claimed: false, reason: `lost a race to ${otherSessions.join(", ")} -- backed off` };
   }
   // #741: THE EXCEPTION GOES ON THE RECORD, in the same act that wins the claim -- never on a race we
   // then lost (the block above already returned), so a losing session's attempted override leaves no
   // comment behind naming an exception it never actually exercised.
   postBlockedByNoteIfAny(issueNumber, blockedByNote, run);
+  // #987: THE BRANCH AND WORKTREE GO ON THE RECORD HERE, for the identical reason #741's note above does
+  // -- after the race is known to be won, so a losing session never leaves a record naming a worktree it
+  // did not get to keep. `branch`/`worktree` are the values this claim was GIVEN, not values read back:
+  // there is nothing to read back yet, and the comment IS the record.
+  postClaimRecord(issueNumber, { session: mySession, branch, worktree }, run);
   // #400: THE LABEL IS THE RECORD; THIS MOVES THE VIEW TO MATCH IT, IN THE SAME ACT. A view corrected only
   // by a later sweep is wrong between sweeps, and "between sweeps" is where a worker reads it -- measured
   // live, a row read `unlabeled ready / labeled in-progress` for the three minutes between a real claim and
@@ -615,11 +785,7 @@ function reportReachability(issueNumber) {
  *
  * @param {number} issueNumber
  * @param {string} mySession
- * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus,
- *           requiredContexts?: () => (string[] | null),
- *           checkRuns?: (sha: string) => ({name: string, status: string, conclusion: string | null,
- *             completedAt: string | null}[] | null) }} [deps]
- * @returns {{ claimed: true, statusMoved: true } | { claimed: true, statusMoved: false, notOnBoard: boolean, statusReason: string } | { claimed: false, reason: string }}
+ * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus }} [deps]
  */
 export function dispatchRow(issueNumber, mySession, deps = {}) {
   return writeRowLabels(issueNumber, mySession, [], deps);
@@ -642,9 +808,7 @@ export function dispatchRow(issueNumber, mySession, deps = {}) {
  * @param {number} issueNumber
  * @param {string} mySession
  * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus, branch?: string,
- *           worktree?: string, blockedBy?: string, requiredContexts?: () => (string[] | null),
- *           checkRuns?: (sha: string) => ({name: string, status: string, conclusion: string | null,
- *             completedAt: string | null}[] | null) }} [deps]
+ *           worktree?: string, blockedBy?: string }} [deps]
  * @returns {{ claimed: true, statusMoved: true } | { claimed: true, statusMoved: false, notOnBoard: boolean, statusReason: string } | { claimed: false, reason: string }}
  */
 export function claimRow(issueNumber, mySession, deps = {}) {
@@ -789,23 +953,30 @@ function declineOwnershipReason(status, mySession) {
  * @param {number} issueNumber
  * @param {string} mySession
  * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus, blockedReason?: string,
- *           removeWorktree?: typeof removeClaimedWorktree }} [deps]
+ *           removeWorktree?: typeof removeClaimedWorktree,
+ *           fetchComments?: typeof fetchClaimComments }} [deps]
  * @returns {{ declined: true, restoredReady: boolean, blocked: boolean, closed: boolean, statusMoved: true }
  *   | { declined: true, restoredReady: true, blocked: false, closed: false, statusMoved: false,
  *       notOnBoard: boolean, statusReason: string }
  *   | { declined: false, reason: string }}
  */
 export function declineRow(issueNumber, mySession,
-  { run = defaultRun, moveStatus = moveProjectStatus, blockedReason, removeWorktree = removeClaimedWorktree } = {}) {
+  { run = defaultRun, moveStatus = moveProjectStatus, blockedReason, removeWorktree = removeClaimedWorktree,
+    fetchComments = fetchClaimComments } = {}) {
   const before = fetchLabels(issueNumber, { run });
   const status = claimStatus(before.labels);
   const ownershipReason = declineOwnershipReason(status, mySession);
   if (ownershipReason) return { declined: false, reason: ownershipReason };
+  // #987: THE RECORDED OBJECTS COME FROM THE CLAIM COMMENT NOW, with the old `worktree:` label as a
+  // migration read for the three open rows that still carry one -- `claimedObjects`' own header carries
+  // the count and the command that says when the fallback can go. Read AFTER the ownership check, so a
+  // decline this session was never entitled to make costs no extra `gh` call.
+  const recorded = claimedObjects({ labels: before.labels, comments: fetchComments(issueNumber, { run }) });
   // #665: THE WORKTREE COMES OFF FIRST, before any label is touched -- a dirty one refuses the WHOLE
   // decline (see this function's own header for why), so the claim record stays intact until an operator
   // has dealt with the uncommitted work by hand.
-  if (status.worktree) {
-    const removal = removeWorktree(status.worktree, { run });
+  if (recorded.worktree) {
+    const removal = removeWorktree(recorded.worktree, { run });
     if (!removal.removed) return { declined: false, reason: removal.reason };
   }
 
@@ -816,6 +987,10 @@ export function declineRow(issueNumber, mySession,
   run("gh", ["issue", "edit", String(issueNumber), "--repo", REPO,
     ...removeLabels.flatMap((l) => ["--remove-label", l]),
     ...addLabels.flatMap((l) => ["--add-label", l])]);
+
+  // #987: AND THE RELEASE GOES ON THE RECORD, so the newest claim-record comment stops naming a worktree
+  // this call has just removed.
+  postReleaseRecord(issueNumber, { session: mySession, recorded }, run);
 
   if (blockedReason && !isClosed) {
     // A LABEL CARRIES NO FREE TEXT -- the reason has to live somewhere a future reader can see it, and an
@@ -925,7 +1100,8 @@ function usage() {
     + "  node scripts/row-claim.mjs check <issue-number>                       (alias of --row=)\n"
     + "  node scripts/row-claim.mjs dispatch <issue-number> --session=<name>   (mark taken at dispatch)\n"
     + "  node scripts/row-claim.mjs claim <issue-number> --session=<name> [--branch=<name>] "
-    + "[--worktree=<path>] [--blocked-by=#N]  (mark started; #656/#665: records the branch and worktree, "
+    + "[--worktree=<path>] [--blocked-by=#N]  (mark started; #656/#665: records the branch and worktree "
+    + "-- #987: in a claim COMMENT, so a path of ANY length works, where a label capped it at 41 characters, "
     + "so a future escalation can tell portable from held, and decline can remove the worktree safely; "
     + "#741: --blocked-by releases B2 only with a measurement comment already on this session's own open "
     + "PR, and only while #N is open)\n"
@@ -950,10 +1126,13 @@ function usage() {
  * @param {number} issueNumber
  * @param {string} title
  * @param {{ claimed: boolean, started: boolean, sessions: string[], branch: string | null, worktree: string | null }} status
- * @param {string | null} body the row's raw body, for #771's `Filed-by:` line -- `null` on a failed
- *   lookup, printed distinctly from a genuinely absent line (CANNOT_ASK is not "unrecorded")
+ * @param {{ body: string | null, recorded: { branch: string | null, worktree: string | null } }} read
+ *   `body` is the row's raw body, for #771's `Filed-by:` line -- `null` on a failed lookup, printed
+ *   distinctly from a genuinely absent line (CANNOT_ASK is not "unrecorded"). `recorded` is #987's
+ *   branch/worktree, resolved from the claim comment rather than from `status`'s labels; bundled with
+ *   `body` rather than added as a fifth parameter, per this repo's own argument-object convention.
  */
-function renderStatus(issueNumber, title, status, body) {
+function renderStatus(issueNumber, title, status, { body, recorded }) {
   // #771: printed for BOTH branches below -- who filed a row is a fact about the row, independent of
   // whether it is currently claimed.
   const filedBy = body === null ? "(could not read body)" : filedByLine(body) ?? "unrecorded";
@@ -969,10 +1148,10 @@ function renderStatus(issueNumber, title, status, body) {
   // #656: THE RECORDED BRANCH, so a session weighing whether to escalate can tell a portable claim (no
   // branch recorded, or none checked out here) from a held one BEFORE it ever tries `git worktree add`
   // on the branch name -- exactly the check the dispatcher's own #614 attempt had no way to make first.
-  const branchSuffix = status.branch ? `, branch ${status.branch}` : "";
+  const branchSuffix = recorded.branch ? `, branch ${recorded.branch}` : "";
   // #665: THE RECORDED WORKTREE, for the identical reason -- and so a session reading a stale-looking
   // claim can see, from the board alone, whether a local directory is what is actually holding it open.
-  const worktreeSuffix = status.worktree ? `, worktree ${status.worktree}` : "";
+  const worktreeSuffix = recorded.worktree ? `, worktree ${recorded.worktree}` : "";
   process.stdout.write(`${state} by ${by}${branchSuffix}${worktreeSuffix} -- #${issueNumber} "${title}" `
     + `-- Filed-by: ${filedBy}\n`);
   process.exitCode = 1;
@@ -987,7 +1166,11 @@ function runStatus(issueNumber) {
     // #771: same injected-`run` shape `writeRowLabels` already uses for the identical lookup.
     const ghRunForBody = (/** @type {string[]} */ args) => defaultRun("gh", args);
     const body = lookupIssueBody(issueNumber, { run: ghRunForBody });
-    renderStatus(issueNumber, title, claimStatus(labels), body);
+    // #987: the recorded branch/worktree now live in a comment, so `check` reads the thread too. Same
+    // `claimedObjects` resolution `declineRow` uses, so the two can never disagree about which directory
+    // a claim is holding open.
+    const recorded = claimedObjects({ labels, comments: fetchClaimComments(issueNumber) });
+    renderStatus(issueNumber, title, claimStatus(labels), { body, recorded });
   } catch (error) {
     process.stderr.write(`COULD NOT DETERMINE: ${/** @type {Error} */ (error).message}\n`);
     process.exitCode = 2;
@@ -1007,8 +1190,11 @@ function runStatus(issueNumber) {
 function claimLineFor(mode, issueNumber, mySession, { branch, worktree }) {
   const label = mode === "dispatch" ? "DISPATCHED" : "STARTED";
   const startedSuffix = mode === "claim" ? ` / ${STARTED_LABEL}` : "";
-  const branchSuffix = mode === "claim" && branch ? ` / ${BRANCH_LABEL_PREFIX}${branch}` : "";
-  const worktreeSuffix = mode === "claim" && worktree ? ` / ${WORKTREE_LABEL_PREFIX}${worktree}` : "";
+  // #987: `branch <name>`, not `branch:<name>` -- the colon form named a LABEL, and this claim no longer
+  // writes one. The same two facts are in the claim-record comment, and saying `branch:` here would tell a
+  // reader to go looking for a label that is not there.
+  const branchSuffix = mode === "claim" && branch ? ` / branch ${branch}` : "";
+  const worktreeSuffix = mode === "claim" && worktree ? ` / worktree ${worktree}` : "";
   return `${label} -- #${issueNumber} is now ${CLAIM_LABEL} / session:${mySession}`
     + `${startedSuffix}${branchSuffix}${worktreeSuffix}`;
 }
@@ -1166,6 +1352,21 @@ async function main() {
   // thing it protects.
   refuseUnknownFlags(["--session", "--row=", "--found=", "--blocked=", "--branch=", "--worktree=",
     "--blocked-by="], { entry: import.meta.url, command: "node scripts/row-claim.mjs" });
+  // #1014: BEFORE ANY VERDICT, ask whether this checkout's copy of the rule is the current one. A refusal
+  // printed from a retired rule names a policy the org no longer has, and nothing in the message says which
+  // version produced it -- measured 2026-09-12, when BOTH halves of one refusal described rules replaced
+  // four minutes apart. `COULD NOT DETERMINE` and exit 2 deliberately, not a new prefix: this is the
+  // existing "could not determine at all" outcome, and every consumer already classifies it.
+  //
+  // AT THE ONE CHOKE POINT, not per mode. `check` prints the same rule-derived verdict `claim` does, so a
+  // guard on the claim path alone would leave the read that people quote unheld -- this repository's most
+  // expensive recurring shape is a remedy applied at one call site when the behaviour reaches several.
+  const stale = staleRuleReason();
+  if (stale) {
+    process.stderr.write(`COULD NOT DETERMINE: ${stale}\n`);
+    process.exitCode = 2;
+    return;
+  }
   const argv = process.argv.slice(2);
   const rowFlag = argv.find((a) => a.startsWith("--row="));
 

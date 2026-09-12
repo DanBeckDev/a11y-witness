@@ -597,6 +597,98 @@ export function sweepObservation(prev, next) {
 }
 
 /**
+ * WHERE FOCUS SAT WHEN A SWEEP STARTED, as that sweep's own `observed` record carries it -- #953.
+ *
+ * The instrument #951's remedy waits on, and nothing else: it changes no behaviour. `scopeAt` is the DOM
+ * census `collectByType` already reads at the sweep's start (one read per sweep, no second round trip), and
+ * its `focusFrame` names the frame holding focus, or is `null` in the top document.
+ *
+ * FOUR ANSWERS, and collapsing any two is the defect this project pays for most:
+ *   `{ focusInFrame: "<frame>" }`         focus sat inside that frame
+ *   `{ focusInFrame: null }`              the page was read, and focus sat in the top document
+ *   `{ focusInFrameUnknown: "<why>" }`    the page was read and could not say -- a closed shadow root hides
+ *                                         where focus is (worker-judge's review of #963), or the read threw
+ *   `{}`                                  nobody could say: the census failed, a worker predating the field,
+ *                                         or an answer of no known shape
+ *
+ * Only an EXPLICIT `null` is "top document": `null` is a claim, and a malformed answer is not evidence for it.
+ *
+ * NESTED under the sweep's record, never a top-level field: readers that take "every numeric field except
+ * these" turn a new top-level number into an element type. And never a number, whatever the page returned --
+ * so no reader of any shape can count it.
+ *
+ * @param {{ focusFrame?: unknown } | null | undefined} scopeAt the census read at the sweep's start
+ * @returns {{ focusInFrame?: string | null, focusInFrameUnknown?: string }}
+ */
+export function focusInFrameOf(scopeAt) {
+  if (!scopeAt || typeof scopeAt !== "object" || !("focusFrame" in scopeAt)) return {};
+  const frame = scopeAt.focusFrame;
+  if (frame === null) return { focusInFrame: null };
+  if (typeof frame === "string" && frame.length > 0) return { focusInFrame: frame };
+  const why = frame && typeof frame === "object" ? /** @type {{ cannotSay?: unknown }} */ (frame).cannotSay : undefined;
+  return typeof why === "string" && why.length > 0 ? { focusInFrameUnknown: why } : {};
+}
+
+/**
+ * SHOULD FOCUS BE RETURNED TO THE TOP DOCUMENT BEFORE THE SWEEPS? -- #972, the remedy #953 measured.
+ *
+ * #953's half 2 held 6 of 6: on every collapsed capture of #951's page, focus already sat inside the chat
+ * widget's frame at the reading taken before the first probe, so quick navigation started in the widget and
+ * every sweep type walked it instead of the page. On every healthy capture it was in the top document.
+ *
+ * RESTORE ONLY WHEN NOTHING OF OURS PUT IT THERE. The reading is the one `runProbeSequence` takes before its
+ * FIRST step, and only a first step that is the sweep qualifies: under `probeOrder: focus-first` the Tab walk
+ * runs first and may land in a frame itself, and undoing a probe's own focus is not this row -- that path is
+ * named as a limit, not handled. A page that deliberately focuses a frame LATER, after a probe acts, is never
+ * restored either: the decision is taken once, before any probe.
+ *
+ * @param {{ focusFrame?: unknown } | null | undefined} state the census read before the first probe
+ * @param {string | undefined} firstStep the first probe `runProbeSequence` will run ("sweep" or "focus")
+ * @returns {{ restore: true, from: string } | { restore: false, why: string }}
+ */
+export function focusRestoreDecision(state, firstStep) {
+  if (firstStep !== "sweep") {
+    return { restore: false, why: "a probe runs before the sweeps (probeOrder), so where focus is may be its own doing" };
+  }
+  const { focusInFrame } = focusInFrameOf(state);
+  if (typeof focusInFrame === "string") return { restore: true, from: focusInFrame };
+  if (focusInFrame === null) return { restore: false, why: "focus is in the top document" };
+  return { restore: false, why: "the page could not say where focus is" };
+}
+
+/**
+ * What the first sweep's own `observed` record says about a restore -- `focusRestored`, #972. `left` is
+ * whether focus had left the frame by the time that sweep started, read from the sweep's OWN census
+ * (`focusInFrame`), so the restore costs no second read: `true` when it was in the top document, `false`
+ * when it was still in a frame, `null` when the sweep could not say.
+ *
+ * @param {string} from the frame focus was taken out of
+ * @param {{ focusInFrame?: string | null } | undefined} firstSweep the first sweep's observed record
+ * @returns {{ from: string, left: boolean | null }}
+ */
+export function focusRestoredRecord(from, firstSweep) {
+  const now = firstSweep?.focusInFrame;
+  return { from, left: now === null ? true : typeof now === "string" ? false : null };
+}
+
+/**
+ * A SWEEP THAT STARTED INSIDE A FRAME IS NOT THE PAGE'S EVIDENCE -- #972. NVDA's `exhausted` is then true
+ * about the frame, so the record is marked incomplete (`complete: false`) and names what held it
+ * (`heldBy`). `stop` keeps NVDA's own answer: the directions really did exhaust, inside the frame, and
+ * rewriting a stop reason would make the record say something NVDA did not.
+ *
+ * @template {{ complete?: boolean }} O
+ * @param {O} observation the sweep's record, `focusInFrame` already on it
+ * @param {{ focusInFrame?: string | null }} focus `focusInFrameOf` at the sweep's start
+ * @returns {O | (O & { complete: false, heldBy: string })}
+ */
+export function heldInFrame(observation, focus) {
+  return typeof focus.focusInFrame === "string" && focus.focusInFrame.length > 0
+    ? { ...observation, complete: false, heldBy: focus.focusInFrame }
+    : observation;
+}
+
+/**
  * A channel nobody asked about. Distinct from `{asked: true}` with nothing found, and that is the point.
  *
  * `why` is required rather than defaulted: "the probe is opt-in and this case did not request it" and "the

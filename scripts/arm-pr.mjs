@@ -81,6 +81,59 @@ export function sessionLabelsOf(rowLabels) {
  * @param {string[][]} rowLabelLists
  * @returns {string[]}
  */
+/**
+ * #1000/#913: THE FIVE SESSIONS THAT EXIST. Four `session:*` labels are RETIRED BY DESCRIPTION rather than
+ * deleted -- `dispatcher`, `worker-audit`, `worker-contracts`, `worker-config` -- because deleting one
+ * strips it from the merged PRs that carry it as attribution, and eleven of thirteen are read by
+ * `attributionFor` (`claim-provenance.mjs`) to return the `worker` verdict. A record of the past is never
+ * renamed, and GitHub has no deletion that spares history.
+ *
+ * **So four live labels carry a retired meaning, and the only thing keeping them retired is that nobody
+ * applies them.** That is a rule nobody enforces, which in this repository is a rule that has already
+ * drifted: `sessionLabelsOf` copies WHATEVER `session:*` label a row carries onto the closing PR, and a row
+ * hand-labelled `session:dispatcher` tomorrow would put a retired label on a merged PR with nothing saying
+ * so.
+ *
+ * A LITERAL HERE, DELIBERATELY, AND PINNED FROM THE TEST. `docs/roles/README.md`'s roster is not the source
+ * -- measured: it names eleven agents including every retired one, because it is a record of the roles this
+ * org has had. No file holds "who is live" today, so the list lives in ONE place with #913 named, and
+ * `arm-pr.test.ts` pins these two sets against the `session:*` labels that actually exist: disjoint, and
+ * together covering all nine. A sixth session added next month fails there rather than silently
+ * attributing to nothing.
+ */
+export const LIVE_SESSIONS = ["ceo", "product-manager", "orchestrator", "worker-capture", "worker-judge"];
+
+/** Retired 2026-09-10 by the Org Reset (#913), kept as labels because merged PRs carry them. */
+export const RETIRED_SESSIONS = ["dispatcher", "worker-audit", "worker-config", "worker-contracts"];
+
+/**
+ * Pure: which of these labels name a session that is not live, AND WHICH KIND OF NOT-LIVE -- retired by
+ * #913, or unknown to this repository at all. **Named, never dropped**: a silent drop and a correct run
+ * produce identical output, which is the failure shape this repository has the longest record of.
+ *
+ * THE TWO CASES NEED DIFFERENT SENTENCES, and getting that wrong was worker-capture's second finding on
+ * #1020. Filtering on "not in LIVE_SESSIONS" alone refuses all three of `session:dispatcher`,
+ * `session:worker-captur` (a typo) and `session:brand-new-role` -- correct, because failing closed is
+ * right -- but told all three they were RETIRED BY THE ORG RESET, which is false about a typo and about a
+ * session created next week, and sends that reader to a row with nothing to do with their problem.
+ * Consulting `RETIRED_SESSIONS` also makes that export load-bearing rather than decorative, which is what
+ * stops it drifting.
+ * @param {string[]} sessionLabels @returns {{ label: string, retired: boolean }[]}
+ */
+export function unknownSessionLabels(sessionLabels) {
+  return sessionLabels
+    .filter((l) => !LIVE_SESSIONS.includes(l.slice("session:".length)))
+    .map((label) => ({ label, retired: RETIRED_SESSIONS.includes(label.slice("session:".length)) }));
+}
+
+/**
+ * Pure: given the `session:*` labels of every row this PR closes (one label-array per row, in
+ * `closedRowNumbers` order), which labels should the PR carry? A row that carries none contributes
+ * nothing -- an absent claim on the row must not become an invented one on the PR (#725's own ruling:
+ * a row with no session label is unclaimed whoever filed it).
+ * @param {string[][]} rowLabelLists
+ * @returns {string[]}
+ */
 export function sessionLabelsForArm(rowLabelLists) {
   return [...new Set(rowLabelLists.flatMap(sessionLabelsOf))];
 }
@@ -96,10 +149,11 @@ export function sessionLabelsForArm(rowLabelLists) {
  * still carries nothing, because the arm path is the only place the information and the action
  * coincide.
  * @param {{ number: string, repo: string, prBody: string | null | undefined, run?: typeof defaultRun }} args
+ * @returns {{ refused: boolean }} `refused` when a RETIRED session label stopped the arm (#1000)
  */
 export function labelArmedPr({ number, repo, prBody, run = defaultRun }) {
   const rows = closedRowNumbers(prBody);
-  if (rows.length === 0) return;
+  if (rows.length === 0) return { refused: false };
   const rowLabelLists = rows.map((rowNumber) => {
     try {
       return JSON.parse(gh(["issue", "view", String(rowNumber), "--repo", repo, "--json", "labels"], run))
@@ -111,9 +165,124 @@ export function labelArmedPr({ number, repo, prBody, run = defaultRun }) {
     }
   });
   const sessionLabels = sessionLabelsForArm(rowLabelLists);
-  if (sessionLabels.length === 0) return;
+  if (sessionLabels.length === 0) return { refused: false };
+  // #1000: REFUSED, AND THE LABEL IS NAMED. Applying a retired label to a merged PR would put a claim on
+  // the attribution record that no live session can answer for, and a reader of `attributionFor` would get
+  // a verdict naming a session that does not exist. Nothing is applied -- not even the live labels beside
+  // it -- because a partial arm is the state nobody can tell from a complete one.
+  const notLive = unknownSessionLabels(sessionLabels);
+  if (notLive.length > 0) {
+    const why = notLive.map(({ label, retired }) => (retired
+      ? `${label} is RETIRED (#913, the Org Reset of 2026-09-10) -- the label still exists because merged `
+        + "PRs carry it as attribution, but nothing new may be given it"
+      : `${label} is not a session this repository knows`)).join("; ");
+    console.error(`arm-pr: REFUSING to label #${number} -- ${why}.\n`
+      + `  The five live sessions are ${LIVE_SESSIONS.join(", ")}.\n`
+      + `  Fix the ROW's own label first: \`gh issue edit <row> --remove-label ${notLive[0].label} `
+      + "--add-label session:<a live session>`, then re-run this.");
+    // RETURNED, NEVER `process.exitCode` FROM IN HERE: setting the exit code inside a library function
+    // fails its CALLER's whole process -- caught by this row's own test file, where every named test
+    // passed and the FILE failed. `main` owns the exit code; this owns the verdict.
+    return { refused: true };
+  }
   gh(["pr", "edit", number, "--repo", repo, ...sessionLabels.flatMap((l) => ["--add-label", l])], run);
   console.log(`arm-pr: labelled #${number} with ${sessionLabels.join(", ")} from row #${rows.join(", #")}`);
+  return { refused: false };
+}
+
+/** #1022: the PR states in which there is nothing left to arm. Neither is a fault. */
+const SETTLED_STATES = ["MERGED", "CLOSED"];
+
+/** How long to keep asking after a refused merge, and how often. Measured on #1020: `gh pr merge` was
+ * refused at 01:15:33.05Z and the PR's own `mergedAt` is 01:15:33Z -- the SAME SECOND -- so the window
+ * between "already in progress" and a readable `MERGED` is sub-second there. Five reads two seconds apart
+ * is ten seconds of budget against a window measured in one, which is slack rather than a guess. */
+const SETTLE_ATTEMPTS = 5;
+const SETTLE_INTERVAL_MS = 2_000;
+
+/** @param {number} ms */
+const defaultSleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
+/**
+ * Pure: is there anything left to arm on a PR in this state?
+ *
+ * #1022: A PR THAT HAS ALREADY MERGED IS THE SUCCESS STATE, and `arm-pr` used to go red on it. Marking
+ * #1020 ready fired this workflow while `gate` was already green, so GitHub merged the PR immediately and
+ * `gh pr merge --auto` answered `GraphQL: Merge already in progress`; every non-zero `gh` exit throws, so
+ * the step failed on a PR that had merged correctly seconds earlier.
+ *
+ * `null` is not a settled state and never reads as one -- an unreadable PR must not resolve to "nothing to
+ * do", which is the shape `armDecision` above already refuses for labels.
+ * @param {string | null} state
+ * @returns {string | null} a reason there is nothing to arm, or `null` to go ahead
+ */
+export function settledReason(state) {
+  if (state === null) return null;
+  return SETTLED_STATES.includes(state) ? `it is already ${state.toLowerCase()}` : null;
+}
+
+/**
+ * The PR's `state` right now, or `null` if it cannot be read -- never a guess, and never a default.
+ * @param {{ number: string, repo: string, run?: typeof defaultRun }} args
+ * @returns {string | null}
+ */
+export function prState({ number, repo, run = defaultRun }) {
+  try {
+    const state = JSON.parse(gh(["pr", "view", number, "--repo", repo, "--json", "state"], run)).state;
+    return typeof state === "string" ? state : null;
+  } catch (cause) {
+    console.error(`arm-pr: could not read #${number}'s state: ${/** @type {Error} */ (cause).message}`);
+    return null;
+  }
+}
+
+/**
+ * #1022: keeps asking until the PR reaches a SETTLED state, or the budget runs out.
+ *
+ * WAITS ON A POSITIVE VERDICT, never on the absence of one. `OPEN` right after a refused merge is also
+ * what a genuinely un-armable PR looks like, so a single read cannot tell "merging, half a second from
+ * MERGED" from "not merging at all" -- and answering on the first read would trade this row's false RED
+ * for a false GREEN, which is the worse direction. The loop ends the moment the answer is positive; the
+ * budget only bounds how long a negative one takes to become final.
+ * @param {{ number: string, repo: string }} pr
+ * @param {{ run?: typeof defaultRun, sleep?: typeof defaultSleep, attempts?: number, intervalMs?: number }} [deps]
+ * @returns {string | null} the settled state, or `null` if it never settled
+ */
+export function waitForSettled({ number, repo },
+  { run = defaultRun, sleep = defaultSleep, attempts = SETTLE_ATTEMPTS, intervalMs = SETTLE_INTERVAL_MS } = {}) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (attempt > 0) sleep(intervalMs);
+    const state = prState({ number, repo, run });
+    if (state !== null && SETTLED_STATES.includes(state)) return state;
+  }
+  return null;
+}
+
+/**
+ * Enable auto-merge -- AND VERIFY THE OUTCOME FROM THE PR'S STATE, NEVER FROM `gh`'s EXIT CODE (#1022).
+ *
+ * This file's own tests already pin the mirror of this for DISARMING: *"`gh pr merge --disable-auto`
+ * returns success on a PR that is already merging, having changed nothing"* -- so disarming is read from
+ * the state because the exit code lies about SUCCESS. Arming was still read from the exit code, which lies
+ * about FAILURE. One half of the class was fixed and the other was not, and the unfixed half is what made
+ * a correctly merged PR carry a red check.
+ *
+ * A failure on a PR that is demonstrably still OPEN is re-thrown unchanged: an un-armed PR nobody merged
+ * is a real fault, and swallowing it would turn this row's fix into "ignore the error".
+ * @param {{ number: string, repo: string }} pr
+ * @param {{ run?: typeof defaultRun, sleep?: typeof defaultSleep, attempts?: number, intervalMs?: number }} [deps]
+ * @returns {{ armed: boolean, reason: string }}
+ */
+export function armMerge({ number, repo }, deps = {}) {
+  const { run = defaultRun } = deps;
+  try {
+    gh(["pr", "merge", "--auto", "--merge", number, "--repo", repo], run);
+    return { armed: true, reason: "auto-merge enabled" };
+  } catch (cause) {
+    const settled = waitForSettled({ number, repo }, deps);
+    if (settled === null) throw cause;
+    return { armed: false, reason: `${settledReason(settled)} -- nothing was left to arm` };
+  }
 }
 
 function main() {
@@ -130,10 +299,15 @@ function main() {
   let labels = null;
   /** @type {string | null} */
   let prBody = null;
+  /** @type {string | null} */
+  let state = null;
   try {
-    const view = JSON.parse(gh(["pr", "view", number, "--repo", repo, "--json", "labels,body"]));
+    // #1022: `state` rides along on the read that was already happening -- no extra `gh` call for the
+    // common case, where the PR is plainly OPEN and this costs nothing.
+    const view = JSON.parse(gh(["pr", "view", number, "--repo", repo, "--json", "labels,body,state"]));
     labels = view.labels.map((/** @type {{name: string}} */ l) => l.name);
     prBody = view.body;
+    state = typeof view.state === "string" ? view.state : null;
   } catch (cause) {
     console.error(`arm-pr: could not read #${number}'s labels: ${/** @type {Error} */ (cause).message}`);
   }
@@ -147,9 +321,21 @@ function main() {
     console.log(`arm-pr: NOT arming #${number} -- ${verdict.reason}`);
     return;
   }
-  gh(["pr", "merge", "--auto", "--merge", number, "--repo", repo]);
-  labelArmedPr({ number, repo, prBody });
-  console.log(`arm-pr: armed #${number} -- ${verdict.reason}`);
+  // #1022: A PR THAT HAS ALREADY SETTLED IS NOT A FAILURE. Checked BEFORE the merge from the state this
+  // run already read, so the ordinary "it merged before the workflow got here" case costs no call and no
+  // wait at all -- `armMerge`'s poll is only reached when the merge is genuinely refused.
+  const already = settledReason(state);
+  if (already) {
+    console.log(`arm-pr: NOT arming #${number} -- ${already}, so there is nothing left to arm`);
+    return;
+  }
+  const outcome = armMerge({ number, repo });
+  // #1000: `main` owns the exit code. A retired session label refuses the arm, and the workflow step
+  // running this must go red rather than reporting a PR labelled with a session that does not exist.
+  if (labelArmedPr({ number, repo, prBody }).refused) process.exitCode = 1;
+  console.log(outcome.armed
+    ? `arm-pr: armed #${number} -- ${verdict.reason}`
+    : `arm-pr: did not need to arm #${number} -- ${outcome.reason}`);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) main();

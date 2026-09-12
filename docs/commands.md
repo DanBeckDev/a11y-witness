@@ -17,6 +17,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/board-summary-check.mjs` — check on the morning of an edition whether that day's hand-written board summary exists
 - `node scripts/build-packages.mjs` — run tsc --build across every package under packages/ in dependency order
 - `node scripts/carry-branch.mjs` — carry a stalled agent/* branch from a DETACHED checkout -- merge origin/main in and push,
+- `node scripts/changed-files.mjs` — list the paths a range changed, BOTH SIDES OF A RENAME
 - `node scripts/changed-packages.mjs` — list which packages/<name> directories a branch touched against origin/main
 - `node scripts/changeset-precise.mjs` — say whether this diff touches a file npm pack actually ships for a published package
 - `node scripts/check-retired-heads.mjs` — refuse a candidate whose scorer head set shrank without declaring what it retired
@@ -30,6 +31,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/closes-mismatch-check.mjs` — refuse when a PR's declared Closes line disagrees with what GitHub will actually close
 - `node scripts/control-plane-hygiene.mjs` — print every control-plane hygiene number fresh, measured by command, never typed once
 - `node scripts/coverage-failure-classifier.mjs` — turn a nightly coverage.yml failure comment into an actual finding, not just 'it failed'
+- `node scripts/doc-cross-reference-report.mjs` — print the nightly doc cross-reference report -- every doc-to-doc and doc-to-tree check, as markdown
 - `node scripts/generate-commands-doc.mjs` — regenerate docs/commands.md from every script's own `// command:` header
 - `node scripts/generate-consumer-gate.mjs` — regenerate .github/workflows/consumer-gate.yml from README.md's own documented workflow
 - `node scripts/history-purge-rehearsal.mjs` — rehearse deleting non-standard refs and rewriting git history ahead of the org transfer
