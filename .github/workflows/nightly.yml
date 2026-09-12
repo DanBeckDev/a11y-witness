@@ -160,7 +160,9 @@ jobs:
   # comment on #928, the org's reading issue. Silent when clean, but never silent because it did not look:
   # a CANNOT ASK is an ATTENTION. Hourly at :37, on the second cron above; the nightly jobs skip that cron.
   watch:
-    if: github.event.schedule == '37 * * * *'
+    # Runs on the :37 cron AND on workflow_dispatch, so the one job whose failure mode is silence can be
+    # asked to speak by hand (worker-judge's review of #1068).
+    if: github.event.schedule == '37 * * * *' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -178,7 +180,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set +e
-          node scripts/org-watch.mjs > /tmp/org-watch.md; rc=$?
+          node scripts/org-watch.mjs > /tmp/org-watch.md 2>&1; rc=$?
           set -e
           cat /tmp/org-watch.md
           if [ "$rc" -ne 0 ]; then gh issue comment 928 --body-file /tmp/org-watch.md; fi
