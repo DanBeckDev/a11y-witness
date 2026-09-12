@@ -39,7 +39,10 @@ export const SATISFIED = new Set(["success", "skipped", "neutral"]);
  * run should report nothing rather than a red. This is that same ruling applied to the READER, for the
  * cancelled conclusions already sitting on heads.
  */
-const NO_VERDICT = "cancelled";
+// EXPORTED for #1100: `update-branch-sweep.mjs` reads the same conclusion and must mean the same thing by
+// it. Two predicates in this repository disagreeing about the literal string `cancelled` is the
+// fact-stated-twice shape on a value that decides whether a pull request is pushed.
+export const NO_VERDICT = "cancelled";
 
 /**
  * THE NEWEST RUN PER NAME -- #902, and it is a correctness fix rather than tidying.

@@ -45,6 +45,7 @@
 import { execFileSync } from "node:child_process";
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
+import { NO_VERDICT } from "./merge-guard/checks-rule.mjs";
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
@@ -117,7 +118,70 @@ export function headQuietSeconds(runs, now) {
 export const HEAD_QUIET_SECONDS = 300;
 
 /**
+ * #1100: WHICH OF THE THREE ELIGIBLE STATES THE GATE IS IN, for the line somebody reads afterwards.
+ *
+ * "gate green or still running" covered two states and now has to cover three. **A cancelled gate is
+ * neither green nor running**, and describing it as either is the same quietness this row exists to
+ * remove from the refusal branch.
+ *
+ * @param {string | null} gateConclusion
+ * @returns {string}
+ */
+function gateState(gateConclusion) {
+  if (gateConclusion === "SUCCESS") return "gate green";
+  if (gateConclusion === NO_VERDICT) {
+    return `gate ${NO_VERDICT}, so a replacement run is already going and this reached NO VERDICT (#1007)`;
+  }
+  return "gate still running";
+}
+
+/**
  * PURE. Should this PR be pushed up to main's current tip?
+ *
+ * #1100: A RED, ARMED, BEHIND PR IS UPDATED. THE SKIP THAT LIVED HERE WAS SELF-SUSTAINING.
+ *
+ * `gate = FAILURE` HAS TWO CAUSES AND THE CONCLUSION IS IDENTICAL IN BOTH: red because of what the PR
+ * changed, and red because of what MAIN changed underneath it. The correct action is opposite -- leave
+ * the first alone, update the second -- and this predicate could not tell them apart, so it refused the
+ * one action that would.
+ *
+ * Measured on run `34692306488` at 11:55:56Z: #1093 was skipped here, and its failure was `not ok 357`
+ * from `claude-md-content-preservation.test.ts`, **a file #1080 had DELETED from main at 11:27:11Z**.
+ * The merge ref was cut before that deletion, so CI ran a guard main no longer has. **There was no fix
+ * the author could push** -- the assertion did not exist to be satisfied -- and the update that would
+ * clear it was refused BECAUSE OF the red it would clear.
+ *
+ * #498'S REASONING IS RELOCATED, NOT OVERRULED. Pushing main onto a PR that is red on its own contents
+ * burns a CI run and moves nothing, and the author must fix the test. That is still true -- it simply
+ * applies AFTER the update rather than instead of it, and the returned reason says so, because #498's
+ * real value was that its skip named the reading rather than only the verdict.
+ *
+ * WHAT BOUNDS THE COST, and it is stronger than "the population is small": **after an update, a red
+ * that clears was the base's and a red that persists is the PR's own.** Nothing else distinguishes
+ * them, so the update is not a cost paid on a guess -- it is the only instrument that answers the
+ * question this rule used to guess at. One CI run per red armed PR per push to main, paid only when the
+ * base actually moves.
+ *
+ * `armed` still bounds the population and is deliberately untouched: an unarmed PR is skipped below
+ * whatever its colour, because `armed` means a reviewer was convinced, and widening to unarmed PRs is a
+ * different and much larger change.
+ *
+ * #1100, after worker-judge's blocker: A CANCELLED GATE IS NOT A RED, IT IS NO VERDICT.
+ *
+ * `ci.yml:119` is `cancel-in-progress: true`, so a push to main that supersedes a run leaves the gate
+ * CANCELLED -- measured on runs `34693906245`, `34693717423`, `34693471314`, all three `gate:
+ * conclusion=cancelled`. And `"cancelled" !== "SUCCESS"`, so it fell into the update-anyway branch
+ * below and was described in the log as a red.
+ *
+ * **THE ACTION WOULD HAVE PRODUCED THE STATE IT MISREAD**: main moves, the in-flight run is cancelled,
+ * the gate reads "red", this updates, a new run starts, main moves again. The red neither clears nor
+ * persists -- it is REPLACED -- and the update destroys the run whose verdict would have answered the
+ * question. The instrument has no reading for that. Measured rate over the last 40 ci runs: 5
+ * cancelled, 2 failure, 32 success.
+ *
+ * `NO_VERDICT` IS IMPORTED, NOT RESTATED. `checks-rule.mjs` already ruled on this string in #1007 --
+ * cancelled joins the WAIT and is kept out of `failing` -- and two predicates in this repository
+ * meaning different things by the same conclusion is the defect, not the disagreement.
  *
  * @param {{ armed: boolean, gateConclusion: string | null, behind: boolean,
  *           quietSeconds?: number | null }} input
@@ -127,33 +191,6 @@ export function updateBranchDecision({ armed, gateConclusion, behind, quietSecon
   if (!armed) {
     return { update: false, reason: "not armed for auto-merge -- not this job's concern" };
   }
-  // #1100: A RED, ARMED, BEHIND PR IS UPDATED. THE SKIP THAT LIVED HERE WAS SELF-SUSTAINING.
-  //
-  // `gate = FAILURE` HAS TWO CAUSES AND THE CONCLUSION IS IDENTICAL IN BOTH: red because of what the PR
-  // changed, and red because of what MAIN changed underneath it. The correct action is opposite -- leave
-  // the first alone, update the second -- and this predicate could not tell them apart, so it refused the
-  // one action that would.
-  //
-  // Measured on run `34692306488` at 11:55:56Z: #1093 was skipped here, and its failure was `not ok 357`
-  // from `claude-md-content-preservation.test.ts`, **a file #1080 had DELETED from main at 11:27:11Z**.
-  // The merge ref was cut before that deletion, so CI ran a guard main no longer has. **There was no fix
-  // the author could push** -- the assertion did not exist to be satisfied -- and the update that would
-  // clear it was refused BECAUSE OF the red it would clear.
-  //
-  // #498'S REASONING IS RELOCATED, NOT OVERRULED. Pushing main onto a PR that is red on its own contents
-  // burns a CI run and moves nothing, and the author must fix the test. That is still true -- it simply
-  // applies AFTER the update rather than instead of it, and the returned reason says so, because #498's
-  // real value was that its skip named the reading rather than only the verdict.
-  //
-  // WHAT BOUNDS THE COST, and it is stronger than "the population is small": **after an update, a red
-  // that clears was the base's and a red that persists is the PR's own.** Nothing else distinguishes
-  // them, so the update is not a cost paid on a guess -- it is the only instrument that answers the
-  // question this rule used to guess at. One CI run per red armed PR per push to main, paid only when the
-  // base actually moves.
-  //
-  // `armed` still bounds the population and is deliberately untouched: an unarmed PR is skipped below
-  // whatever its colour, because `armed` means a reviewer was convinced, and widening to unarmed PRs is a
-  // different and much larger change.
   if (!behind) {
     return { update: false, reason: "already contains main's current tip -- nothing to update" };
   }
@@ -165,7 +202,8 @@ export function updateBranchDecision({ armed, gateConclusion, behind, quietSecon
   // ONLY when the gate is still running. A GREEN gate means CI has finished, so nobody is mid-push, and
   // narrowing that case would reintroduce #498's stall by a different route: a sweep that syncs too
   // little is indistinguishable from a quiet queue.
-  if (gateConclusion === null) {
+  const noVerdictYet = gateConclusion === null || gateConclusion === NO_VERDICT;
+  if (noVerdictYet) {
     if (quietSeconds === null || quietSeconds === undefined) {
       return { update: false,
         reason: "gate is still running and NOTHING ON THE HEAD SAYS WHEN IT APPEARED -- no check run "
@@ -184,14 +222,14 @@ export function updateBranchDecision({ armed, gateConclusion, behind, quietSecon
   // cannot be diagnosed from the log, which is precisely #498's failure read from the other side: there
   // the skip line named the author instead of the reading. This is the line somebody will be looking at
   // when they ask "why did it push under me?".
-  const quietNote = gateConclusion === null && typeof quietSeconds === "number"
+  const quietNote = noVerdictYet && typeof quietSeconds === "number"
     ? `; the head has been quiet ${Math.round(quietSeconds)}s, over the ${HEAD_QUIET_SECONDS}s window`
     : "";
   // #1100: THE REASON SAYS WHICH CASE IT IS IN. "Updated despite a red base" and "updated because behind
   // and green" are different events and the log must not spell them the same -- a new path that is
   // quieter than the one it replaces is a regression even when the tests pass, which is the other half of
   // #498's lesson read forwards.
-  if (gateConclusion !== null && gateConclusion !== "SUCCESS") {
+  if (!noVerdictYet && gateConclusion !== "SUCCESS") {
     return { update: true,
       reason: `armed and behind, with gate = ${gateConclusion} -- UPDATED ANYWAY (#1100). A red has two `
         + "causes and this is the only thing that tells them apart: if it CLEARS, the red was the base's; "
@@ -199,7 +237,7 @@ export function updateBranchDecision({ armed, gateConclusion, behind, quietSecon
         + "not apply -- a concluded gate means CI has finished, so nobody is mid-push" };
   }
   return { update: true,
-    reason: `armed, gate green or still running, and behind main's current tip${quietNote}` };
+    reason: `armed, ${gateState(gateConclusion)}, and behind main's current tip${quietNote}` };
 }
 
 /**
