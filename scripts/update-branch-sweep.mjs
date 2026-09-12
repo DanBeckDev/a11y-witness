@@ -45,6 +45,7 @@
 import { execFileSync } from "node:child_process";
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
+import { NO_VERDICT } from "./merge-guard/checks-rule.mjs";
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
@@ -117,28 +118,123 @@ export function headQuietSeconds(runs, now) {
 export const HEAD_QUIET_SECONDS = 300;
 
 /**
+ * The one spelling of success, in the normalised vocabulary — lower case, like every other conclusion.
+ *
+ * EXPORTED because `newestConclusion` HAS A SECOND CONSUMER and normalising its return changed what that
+ * consumer reads. `queue-stalled.mjs` compares the same value in three places, and a literal there is a
+ * copy of this fact in a file that learns the vocabulary from this one.
+ */
+export const SUCCESS = "success";
+
+/**
+ * #1100: ONE VOCABULARY, normalised at every edge that reads a conclusion.
+ *
+ * **The two predicates that read a `gate` conclusion read DIFFERENT APIs, and the two APIs spell the same
+ * verdict differently.** Measured on this repository, at the same moment:
+ *
+ *     gh pr list --json statusCheckRollup   (what THIS file reads)     COMPLETED / SUCCESS   FAILURE   ""
+ *     gh api .../check-runs                 (what checks-rule.mjs reads)   completed / success   null
+ *
+ * So importing `NO_VERDICT` made the comparison true in `checks-rule.mjs` and **false here** — the
+ * lowercase literal never matches an uppercase `CANCELLED`, the branch is dead, and the file reads as
+ * though it were closed. **Worse than two honest copies, because it looks like reconciliation.** My test
+ * passed because its fixture was written in the other API's vocabulary: a correct value read from the
+ * wrong place, which is this repository's most-recorded diagnostic shape.
+ *
+ * **The shared fact is the CONCEPT, not the STRING.** `NO_VERDICT` still names it; this is what makes both
+ * readers able to say it. `gh` spells absent three ways across its own sources — `null`, `""` and UPPER
+ * CASE — and a population read across them sums correctly and reports wrongly.
+ *
+ * @param {string | null | undefined} conclusion
+ * @returns {string | null} lower-cased, with every spelling of absence collapsed to `null`
+ */
+export function normaliseConclusion(conclusion) {
+  return conclusion ? conclusion.toLowerCase() : null;
+}
+
+/**
+ * #1100: WHICH OF THE THREE ELIGIBLE STATES THE GATE IS IN, for the line somebody reads afterwards.
+ *
+ * "gate green or still running" covered two states and now has to cover three. **A cancelled gate is
+ * neither green nor running**, and describing it as either is the same quietness this row exists to
+ * remove from the refusal branch.
+ *
+ * @param {string | null} gateConclusion
+ * @returns {string}
+ */
+function gateState(gateConclusion) {
+  if (gateConclusion === SUCCESS) return "gate green";
+  if (gateConclusion === NO_VERDICT) {
+    return `gate ${NO_VERDICT}, so a replacement run is already going and this reached NO VERDICT (#1007)`;
+  }
+  return "gate still running";
+  // WHAT IS DELIBERATELY NOT HERE: `timed_out` and `startup_failure` take the RED path, and a reader
+  // should not have to learn that by elimination. Both are genuine non-verdicts about the pull request's
+  // OWN contents -- a job that ran out of time or could not start is a fact about this head -- in a way a
+  // supersede is not: a cancellation says only that main moved. So they are reds with two causes like any
+  // other, and the update is the instrument that tells the causes apart. Named here rather than listed in
+  // the predicate, because adding them to `NO_VERDICT` is what would be wrong.
+}
+
+/**
  * PURE. Should this PR be pushed up to main's current tip?
+ *
+ * #1100: A RED, ARMED, BEHIND PR IS UPDATED. THE SKIP THAT LIVED HERE WAS SELF-SUSTAINING.
+ *
+ * `gate = FAILURE` HAS TWO CAUSES AND THE CONCLUSION IS IDENTICAL IN BOTH: red because of what the PR
+ * changed, and red because of what MAIN changed underneath it. The correct action is opposite -- leave
+ * the first alone, update the second -- and this predicate could not tell them apart, so it refused the
+ * one action that would.
+ *
+ * Measured on run `34692306488` at 11:55:56Z: #1093 was skipped here, and its failure was `not ok 357`
+ * from `claude-md-content-preservation.test.ts`, **a file #1080 had DELETED from main at 11:27:11Z**.
+ * The merge ref was cut before that deletion, so CI ran a guard main no longer has. **There was no fix
+ * the author could push** -- the assertion did not exist to be satisfied -- and the update that would
+ * clear it was refused BECAUSE OF the red it would clear.
+ *
+ * #498'S REASONING IS RELOCATED, NOT OVERRULED. Pushing main onto a PR that is red on its own contents
+ * burns a CI run and moves nothing, and the author must fix the test. That is still true -- it simply
+ * applies AFTER the update rather than instead of it, and the returned reason says so, because #498's
+ * real value was that its skip named the reading rather than only the verdict.
+ *
+ * WHAT BOUNDS THE COST, and it is stronger than "the population is small": **after an update, a red
+ * that clears was the base's and a red that persists is the PR's own.** Nothing else distinguishes
+ * them, so the update is not a cost paid on a guess -- it is the only instrument that answers the
+ * question this rule used to guess at. One CI run per red armed PR per push to main, paid only when the
+ * base actually moves.
+ *
+ * `armed` still bounds the population and is deliberately untouched: an unarmed PR is skipped below
+ * whatever its colour, because `armed` means a reviewer was convinced, and widening to unarmed PRs is a
+ * different and much larger change.
+ *
+ * #1100, after worker-judge's blocker: A CANCELLED GATE IS NOT A RED, IT IS NO VERDICT.
+ *
+ * `ci.yml:119` is `cancel-in-progress: true`, so a push to main that supersedes a run leaves the gate
+ * CANCELLED -- measured on runs `34693906245`, `34693717423`, `34693471314`, all three `gate:
+ * conclusion=cancelled`. And `"cancelled" !== "SUCCESS"`, so it fell into the update-anyway branch
+ * below and was described in the log as a red.
+ *
+ * **THE ACTION WOULD HAVE PRODUCED THE STATE IT MISREAD**: main moves, the in-flight run is cancelled,
+ * the gate reads "red", this updates, a new run starts, main moves again. The red neither clears nor
+ * persists -- it is REPLACED -- and the update destroys the run whose verdict would have answered the
+ * question. The instrument has no reading for that. Measured rate over the last 40 ci runs: 5
+ * cancelled, 2 failure, 32 success.
+ *
+ * `NO_VERDICT` IS IMPORTED, NOT RESTATED. `checks-rule.mjs` already ruled on this string in #1007 --
+ * cancelled joins the WAIT and is kept out of `failing` -- and two predicates in this repository
+ * meaning different things by the same conclusion is the defect, not the disagreement.
  *
  * @param {{ armed: boolean, gateConclusion: string | null, behind: boolean,
  *           quietSeconds?: number | null }} input
  * @returns {{ update: boolean, reason: string }}
  */
-export function updateBranchDecision({ armed, gateConclusion, behind, quietSeconds }) {
+export function updateBranchDecision({ armed, gateConclusion: rawConclusion, behind, quietSeconds }) {
+  // NORMALISED AT THIS BOUNDARY TOO, not only in `newestConclusion`. This function is exported and is
+  // reached by tests and by any future caller with a conclusion from either API -- and a predicate that is
+  // correct only for the spelling its usual caller happens to use is the defect this row just shipped once.
+  const gateConclusion = normaliseConclusion(rawConclusion);
   if (!armed) {
     return { update: false, reason: "not armed for auto-merge -- not this job's concern" };
-  }
-  if (gateConclusion !== null && gateConclusion !== "SUCCESS") {
-    return {
-      update: false,
-      // #498: NAME THE READING, NOT JUST THE VERDICT. This line used to say only "a failing PR needs a
-      // fix", which addresses the AUTHOR -- so when the sweep skipped two green PRs on a stale
-      // conclusion, the log read as work correctly handed back rather than as the sweep being wrong.
-      // Saying which run this conclusion came from means the next wrong skip is falsifiable from the log
-      // alone: open that run and see whether it is the newest.
-      reason: `this sweep read gate = ${gateConclusion} as the NEWEST gate run on the head`
-        + " -- a failing PR needs a fix, not a stale-main push."
-        + " If that PR looks green, check whether a newer gate run exists and report it (#498's shape)",
-    };
   }
   if (!behind) {
     return { update: false, reason: "already contains main's current tip -- nothing to update" };
@@ -151,7 +247,8 @@ export function updateBranchDecision({ armed, gateConclusion, behind, quietSecon
   // ONLY when the gate is still running. A GREEN gate means CI has finished, so nobody is mid-push, and
   // narrowing that case would reintroduce #498's stall by a different route: a sweep that syncs too
   // little is indistinguishable from a quiet queue.
-  if (gateConclusion === null) {
+  const noVerdictYet = gateConclusion === null || gateConclusion === NO_VERDICT;
+  if (noVerdictYet) {
     if (quietSeconds === null || quietSeconds === undefined) {
       return { update: false,
         reason: "gate is still running and NOTHING ON THE HEAD SAYS WHEN IT APPEARED -- no check run "
@@ -170,11 +267,22 @@ export function updateBranchDecision({ armed, gateConclusion, behind, quietSecon
   // cannot be diagnosed from the log, which is precisely #498's failure read from the other side: there
   // the skip line named the author instead of the reading. This is the line somebody will be looking at
   // when they ask "why did it push under me?".
-  const quietNote = gateConclusion === null && typeof quietSeconds === "number"
+  const quietNote = noVerdictYet && typeof quietSeconds === "number"
     ? `; the head has been quiet ${Math.round(quietSeconds)}s, over the ${HEAD_QUIET_SECONDS}s window`
     : "";
+  // #1100: THE REASON SAYS WHICH CASE IT IS IN. "Updated despite a red base" and "updated because behind
+  // and green" are different events and the log must not spell them the same -- a new path that is
+  // quieter than the one it replaces is a regression even when the tests pass, which is the other half of
+  // #498's lesson read forwards.
+  if (!noVerdictYet && gateConclusion !== SUCCESS) {
+    return { update: true,
+      reason: `armed and behind, with gate = ${gateConclusion} -- UPDATED ANYWAY (#1100). A red has two `
+        + "causes and this is the only thing that tells them apart: if it CLEARS, the red was the base's; "
+        + "if it PERSISTS, it is this PR's own and the author owns the fix (#498). The quiet window does "
+        + "not apply -- a concluded gate means CI has finished, so nobody is mid-push" };
+  }
   return { update: true,
-    reason: `armed, gate green or still running, and behind main's current tip${quietNote}` };
+    reason: `armed, ${gateState(gateConclusion)}, and behind main's current tip${quietNote}` };
 }
 
 /**
@@ -235,7 +343,9 @@ export function newestConclusion(runs, name) {
   // as "not SUCCESS" and skip the PR as failing. `|| null` collapses both spellings of absence to the one
   // the caller already handles. Measured on the real API alongside the zero date above; the two arrive
   // together on every running check, so fixing one without the other just moves the wrong answer.
-  return newest.conclusion || null;
+  //
+  // #1100, after worker-judge's re-read: **CASE IS THE THIRD SPELLING AND BELONGS IN THAT SAME SENTENCE.**
+  return normaliseConclusion(newest.conclusion);
 }
 
 /**
