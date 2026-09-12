@@ -43,22 +43,56 @@ export const PATH_IN_PROSE = /(?:^|[\s`"'(])((?:packages|scripts|docs|\.github)\
  */
 const ROOT_FILE_CANDIDATE = /(?:^|[\s`"'([])([A-Za-z0-9_][A-Za-z0-9_.-]*\.[A-Za-z0-9]{1,10})(?=$|[\s`"',.;:)\]])/g;
 
-/** @type {Set<string> | null} */
-let rootFiles = null;
+/** @typedef {{ files: Set<string>, source: "origin/main" | "HEAD" | null }} RootFileReading */
+
+/** @type {RootFileReading | null} Only a SUCCESSFUL reading is memoised -- see `rootFilesOnMain`. */
+let rootFilesReading = null;
 
 /**
- * The files `origin/main` has at the repository root, read once per process.
+ * The files the repository has at its root, AND WHICH REF ANSWERED -- #995.
  *
  * `origin/main` rather than the working tree: a Region declares a file of THIS project, and an untracked
- * scratch file beside the checkout is not one. Falls back to `HEAD` (a clone with no `origin/main` ref, which
- * a fresh worktree can be mid-fetch), then to the empty set -- a root file then declares nothing, exactly as
- * before this row, rather than throwing inside a claim check.
- * @returns {Set<string>}
+ * scratch file beside the checkout is not one. It falls back to `HEAD` (a clone with no `origin/main` ref,
+ * which a fresh worktree can be mid-fetch), then to nothing.
+ *
+ * ## Why it returns the SOURCE and not just the files
+ *
+ * It used to return a bare `Set`, so **a fallback read, a failed read and a successful read of a tree with
+ * no root files were the same value.** A caller could not tell "this repository has no root-level files"
+ * -- which cannot happen here; there are eleven -- from "I could not ask." The empty answer then silently
+ * declared that no Region names a root-level file, which is the exact state #975 had just fixed the parser
+ * to avoid. A guard that skips quietly is indistinguishable from one that never ran, and this repository
+ * has recorded that shape four times.
+ *
+ * `source` is `null` only when NOTHING answered. A caller that needs to know can ask; `declaredRegionFiles`
+ * does not, because its own contract is unchanged either way -- but the fact now exists to be asserted, and
+ * `region-paths.test.ts` asserts it.
+ *
+ * ## Why a FAILED reading is not memoised
+ *
+ * The memo was on the value, and `new Set()` is truthy -- so one failed read poisoned the process: every
+ * later call returned the cached empty set without retrying, and every root file stayed undeclarable for
+ * the life of that process. A worktree read mid-fetch, or a `git` that failed once, was permanent. Only a
+ * reading with a source is cached now; a failure is re-asked next call.
+ *
+ * ## Why a SUCCESSFUL reading is still memoised
+ *
+ * Measured on this checkout: `git ls-tree origin/main --` costs **25.1 ms** per call (20 calls). A claim
+ * check reads several rows' Regions, and `row-reachability` reads every open row's -- 67 of them tonight,
+ * which is 1.7 s of git for an answer that cannot change while the process runs, since the ref is
+ * `origin/main` and not the working tree. A tree that gains a root file mid-process is a test writing a
+ * fixture, which is why the reading is exported: a test passes its own `rootFiles` rather than fighting a
+ * memo, and `declaredRegionFiles` has taken that option since #975.
+ * `repoRoot` exists so the failure path can be DRIVEN rather than stubbed: point it at a directory git
+ * cannot answer about and the reading really does come back with no source, through the same `execFileSync`
+ * every other call uses. A stub would prove the branch is reachable, not that git's refusal reaches it.
+ * @param {{ repoRoot?: string }} [options]
+ * @returns {RootFileReading}
  */
-export function rootFilesOnMain() {
-  if (rootFiles) return rootFiles;
-  const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-  for (const ref of ["origin/main", "HEAD"]) {
+export function rootFilesOnMain({ repoRoot } = {}) {
+  if (rootFilesReading && repoRoot === undefined) return rootFilesReading;
+  const repo = repoRoot ?? resolve(dirname(fileURLToPath(import.meta.url)), "..");
+  for (const ref of /** @type {const} */ (["origin/main", "HEAD"])) {
     try {
       const listing = execFileSync("git", ["ls-tree", ref, "--"],
         { cwd: repo, env: sandboxGitEnv(), encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
@@ -66,12 +100,18 @@ export function rootFilesOnMain() {
         .filter((line) => line.includes(" blob "))
         .map((line) => line.slice(line.indexOf("\t") + 1).trim())
         .filter(Boolean);
-      if (names.length > 0) return (rootFiles = new Set(names));
+      if (names.length === 0) continue;
+      const reading = { files: new Set(names), source: ref };
+      // The memo is for THIS repository's own reading; a caller that named a root is asking about a
+      // different tree and must not fill, or read, the cache.
+      return repoRoot === undefined ? (rootFilesReading = reading) : reading;
     } catch (error) {
       void error; // an unreadable ref is "cannot say", and the next one may answer
     }
   }
-  return (rootFiles = new Set());
+  // NOT MEMOISED. "Nothing answered" is a fact about this moment -- a fetch in flight, a git that failed
+  // once -- and caching it would make one bad moment permanent for the process.
+  return { files: new Set(), source: null };
 }
 
 /**
@@ -233,7 +273,7 @@ export function regionCovers(entry, file) {
  *   passes its own so the rule can be checked without the repository it runs in
  * @returns {string[] | null}
  */
-export function declaredRegionFiles(body, { rootFiles: known = rootFilesOnMain() } = {}) {
+export function declaredRegionFiles(body, { rootFiles: known = rootFilesOnMain().files } = {}) {
   const section = extractRegionSection(body);
   if (section === null) return null;
   // #975: root-level files, which have no prefix for `PATH_IN_PROSE` to match. Anchored to the tree: a
