@@ -42,7 +42,7 @@ import { pathToFileURL } from "node:url";
 import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 import { REPO } from "./repo-identity.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
-import { regionPathsFromBody } from "./region-paths.mjs";
+import { regionPathsFromBody, declaredRegionFiles } from "./region-paths.mjs";
 
 const EXIT = { STARTABLE: 0, BLOCKED: 1, CANNOT_ASK: 2 };
 
@@ -86,6 +86,29 @@ function unsearchedPopulationNote(refs) {
 }
 
 /**
+ * #1054: A CONTENTION ANSWER WITH NO POPULATION BEHIND IT, SAID RATHER THAN PRINTED AS CLEAN.
+ *
+ * The same shape as `unsearchedPopulationNote` above, one population along. "No unmerged branch is in its
+ * region" is a claim about a set, and it is true and worthless when the set is empty -- which happened
+ * every time a row declared its Region as a bare directory, because the extractor this file used could
+ * not see one.
+ *
+ * `null` means the body has NO Region section at all, which is a different sentence again: nothing was
+ * declared, so nothing was skipped.
+ * @param {number | null | undefined} region @returns {string[]}
+ */
+function unreadRegionNote(region) {
+  if (region === null || region === undefined) {
+    return ["  NOTE: this row declares no `## Region` section, so the region half asked nothing. The "
+      + "symbol verdict above stands on its own."];
+  }
+  if (region > 0) return [];
+  return ["  NOTE: this row's `## Region` section yielded NO path this could read, so the region half "
+    + "searched an empty set. Check the section names files or directories (a directory ends in `/`); "
+    + "until it does, read the region line as \"not asked\" rather than as \"clear\"."];
+}
+
+/**
  * NOTHING TO CHECK — and "named nothing" and "named PROSE" are two different sentences (#228).
  *
  * The `.md` filter is correct: there is no symbol to verify in a README, and pretending to check one
@@ -97,11 +120,15 @@ function unsearchedPopulationNote(refs) {
  * ceiling, which is the lint rule doing its job rather than an obstacle to route around.
  *
  * @param {number} row
- * @param {{paths: number, symbols: number, prose?: number, refs?: number}} examined
+ * @param {{paths: number, symbols: number, prose?: number, refs?: number, region?: number | null}} examined
  * @returns {{code: number, lines: string[]} | null} null when there IS something to check.
  */
 function examinedNothing(row, examined) {
-  if (examined.paths > 0 || examined.symbols > 0) return null;
+  // #1054: THE REGION POPULATION COUNTS AS SOMETHING EXAMINED. A row whose Region is only directories
+  // (`docs/`) names no `paths` and may name no backticked symbol either. Before the region half was
+  // taught to read declared entries, such a row reached here and was reported CANNOT_ASK -- having, in
+  // fact, examined three declared entries against 291 refs.
+  if (examined.paths > 0 || examined.symbols > 0 || (examined.region ?? 0) > 0) return null;
   if ((examined.prose ?? 0) > 0) {
     return { code: EXIT.CANNOT_ASK, lines: [
       `CANNOT SAY whether #${row} is startable: it names ${examined.prose} document(s) and no source `
@@ -119,6 +146,70 @@ function examinedNothing(row, examined) {
 }
 
 /**
+ * #1054: "A MERGE COST, NOT A BLOCKER" IS TRUE OF A DEAD BRANCH AND FALSE OF AN OPEN PR.
+ *
+ * The old line said it of both. A closed PR or an unproposed branch is exactly a merge cost -- nobody is
+ * coming, you resolve it once. An OPEN PR is the thing B4 refuses a claim over: `row-claim claim` will
+ * not let this row start while that PR is open, and telling a reader it is merely a merge cost sends them
+ * to a refusal they were just assured would not happen.
+ *
+ * This still does not RUN B4 -- it cannot, from here -- so it names the rule and what it will say rather
+ * than pretending to have applied it.
+ * @param {number} row
+ * @param {{path: string, refs: string[], openPrs?: string[]}[]} heldRegions
+ * @returns {string[]}
+ */
+function contendedVerdict(row, heldRegions) {
+  const contested = heldRegions.filter(({ openPrs }) => (openPrs ?? []).length > 0);
+  if (contested.length === 0) {
+    return [`#${row} is STARTABLE -- its subject is on \`main\`.`,
+      "  The contention above is a merge cost, not a blocker: no OPEN pull request is in its region."];
+  }
+  const paths = contested.map(({ path }) => `\`${path}\``).join(", ");
+  return [`#${row}'s subject is on \`main\`, but ${paths} ${contested.length === 1 ? "is" : "are"} held `
+    + "by an OPEN pull request.",
+  "  EXPECT `row-claim claim` TO REFUSE THIS. B4 -- no two open pull requests touch the same file -- runs",
+  "  on the claim path, not here, and it reads the same declared Region this line does.",
+  "  Sequence with that PR's author. Narrowing the Region to route around it is not a remedy."];
+}
+
+/**
+ * #1054: THE CLEAN VERDICT'S OWN WORDING, extracted so `startability` stays under the complexity ceiling
+ * and so the two claims it makes can be read apart from each other.
+ *
+ * The region sentence is stated ONLY when a region was actually examined. It used to be unconditional,
+ * and a row whose Region this file could not read got "no unmerged branch is in its region" over a set of
+ * zero -- a positive claim about an empty population, which is the defect this file's own
+ * `examinedNothing` header calls the one this repo records most.
+ *
+ * AND IT NAMES THE RULE IT DID NOT RUN. This verdict is what a reader consults before `row-claim claim`,
+ * and `claim` additionally applies B4 -- no two open PRs touching one file -- which lives on the claim
+ * path and is not reachable from here. A pre-check that answers in the deciding rule's vocabulary and
+ * omits the deciding rule is worse than no pre-check, because nothing tells the reader to ask again.
+ * @param {number} row
+ * @param {{paths: number, symbols: number, prose?: number, refs?: number, region?: number | null}} examined
+ * @returns {string[]}
+ */
+function startableLines(row, examined) {
+  const counted = `${examined.paths} path(s), ${examined.symbols} symbol(s), `
+    + `${examined.region ?? 0} declared region entr(ies), ${examined.refs ?? 0} unmerged ref(s) examined`;
+  const regionClause = (examined.region ?? 0) > 0
+    ? "and no unmerged branch is in its region"
+    : "and its region was NOT examined";
+  return [
+    `#${row} is STARTABLE: every symbol it names is on \`main\`, ${regionClause} (${counted}).`,
+    ...unsearchedPopulationNote(examined.refs ?? 0),
+    ...unreadRegionNote(examined.region),
+    "  This checks SYMBOLS, this row's DECLARED region against unmerged branches, and the `blocked`",
+    "  label. IT DOES NOT RUN B4 -- whether an OPEN PR already touches one of these files. `row-claim",
+    "  claim` does, and refuses on it, so this can read STARTABLE where the claim is refused.",
+    "  A row can still be blocked by something none of these express -- an unstated dependency, a "
+      + "decision",
+    "  nobody has taken -- so STARTABLE means \"nothing I can see\", never \"nothing blocks this\".",
+  ];
+}
+
+/**
  * THE VERDICT, PURE — so every state is reachable without a network or a checkout.
  *
  * `null` for a lookup means it failed and is never read as an empty answer, the distinction this whole
@@ -126,11 +217,12 @@ function examinedNothing(row, examined) {
  *
  * @param {{row: number,
  *          subjectsMissing: {name: string, refs: string[]}[] | null,
- *          heldRegions: {path: string, refs: string[]}[] | null,
+ *          heldRegions: {path: string, refs: string[], openPrs?: string[]}[] | null,
  *          blockedLabel?: boolean,
  *          state?: string | null,
  *          closedAt?: string | null,
- *          examined: {paths: number, symbols: number, prose?: number, refs?: number}}} facts
+ *          examined: {paths: number, symbols: number, prose?: number, refs?: number,
+ *            region?: number | null}}} facts
  * @returns {{code: number, lines: string[]}}
  */
 
@@ -181,20 +273,8 @@ export function startability({ row, subjectsMissing, heldRegions, examined, bloc
       "  Startable, but you will merge against them. Worth knowing before you begin, not at review.");
   }
   if (subjectsMissing.length > 0 || blockedLabel) return { code: EXIT.BLOCKED, lines };
-  if (heldRegions.length > 0) {
-    return { code: EXIT.STARTABLE,
-      lines: [...lines,
-        `#${row} is STARTABLE — its subject is on \`main\`.`,
-        "  The contention above is a merge cost, not a blocker."] };
-  }
-  return { code: EXIT.STARTABLE,
-    lines: [`#${row} is STARTABLE: every symbol it names is on \`main\`, and no unmerged branch is in its `
-      + `region (${examined.paths} path(s), ${examined.symbols} symbol(s), ${examined.refs ?? 0} unmerged `
-      + "ref(s) examined).",
-    ...unsearchedPopulationNote(examined.refs ?? 0),
-    "  This checks REGIONS, SYMBOLS and the `blocked` label. A row can still be blocked by something none",
-    "  of those express -- an unstated dependency, a decision nobody has taken -- so STARTABLE means "
-      + "\"nothing I can see\", never \"nothing blocks this\"."] };
+  if (heldRegions.length > 0) return { code: EXIT.STARTABLE, lines: [...lines, ...contendedVerdict(row, heldRegions)] };
+  return { code: EXIT.STARTABLE, lines: startableLines(row, examined) };
 }
 
 /**
@@ -396,8 +476,15 @@ export function refsCarryingSymbol(symbol, refs) {
  * standing between a test and the git tree it actually needs to exercise. `facts(row)` below is now a
  * thin wrapper: fetch the body and the board's own record (label, state), then hand off here.
  * @param {string} body
+ * @param {{run?: (args: string[]) => string, refs?: () => string[], state?: (ref: string) => string,
+ *   regionFiles?: (body: string) => string[] | null}} [deps] (#1054) injected so the CONTENTION WALK
+ *   be driven over a synthetic repository with synthetic refs. The walk's own logic -- the two-diff
+ *   conjunction, the MERGED filter -- is the part that must be exercised; a test that reached only the
+ *   extraction would prove a directory prefix is PARSED and never that it is SEARCHED.
  */
-export function subjectAndRegionFacts(body) {
+export function subjectAndRegionFacts(body, deps = {}) {
+  const { run = git, refs: refsOf = unmergedRefs, state: stateOf = prState,
+    regionFiles = declaredRegionFiles } = deps;
   // PROSE PATHS ARE COUNTED, NOT DISCARDED. The `.md` filter is correct -- there is no symbol to verify
   // in a README, and pretending to check one would be worse than saying nothing. But dropping them
   // SILENTLY made the verdict say a docs row "names no source path" when it named one, which sent the
@@ -406,7 +493,24 @@ export function subjectAndRegionFacts(body) {
   const paths = named.filter((path) => !path.endsWith(".md"));
   const prose = named.filter((path) => path.endsWith(".md"));
   const symbols = unique([...body.matchAll(SYMBOL_IN_PROSE)].map((m) => m[1]));
-  const refs = unmergedRefs();
+  // #1054: THE CONTENTION HALF ASKS THE DECLARED REGION, THE SUBJECT HALF ASKS THE WHOLE BODY, AND THEY
+  // ARE DIFFERENT QUESTIONS. #710 left this file on `regionPathsFromBody` deliberately, and that was
+  // right for the subject: a symbol is searched tree-wide on purpose (#719), so a path mentioned anywhere
+  // is a fair place to look for one. It is wrong for contention, which is a claim about what this row
+  // INTENDS TO CHANGE -- the same narrower question `fileOverlapReason` already asks -- and the two
+  // extractors then drifted apart when #941 taught `declaredRegionFiles` about directory prefixes and
+  // left the prose scan unable to see them.
+  //
+  // Measured on #907, whose Region is `CLAUDE.md`, `docs/` and `packages/lab/src/packaging/`:
+  //
+  //   regionPathsFromBody  ->  ["docs/backlog.md"]   <- from the row's PROSE, not its Region
+  //   declaredRegionFiles  ->  the three it declares
+  //
+  // The `.md` split above is NOT applied here, and that is the point of keeping them separate: there is
+  // no symbol to verify in a README, which is why the subject half drops one -- but a branch editing
+  // `CLAUDE.md` holds `CLAUDE.md` against you exactly as a branch editing a `.mjs` does.
+  const declared = regionFiles(body);
+  const refs = refsOf();
   // #772: THE COUNT TRAVELS WITH THE VERDICT. An empty ref list is a real state -- a fresh clone, a
   // checkout that has never fetched branches -- and a subject search across it proves nothing. Counted
   // here rather than guarded, because zero refs is legitimate and its cost is only that the answer is
@@ -416,7 +520,7 @@ export function subjectAndRegionFacts(body) {
   // other ref, means the row's subject has not landed -- which no region check can see, because nobody is
   // editing the file it is missing from. #719: this used to ask the question of the row's own named files
   // rather than of `main` itself -- see `symbolOnMain`'s own header for why that is a different question.
-  const present = paths.filter((path) => onMain(path));
+  const present = (declared ?? []).filter((path) => onMain(path, { run }));
   const subjectsMissing = [];
   for (const name of symbols) {
     if (symbolOnMain(name)) continue;
@@ -426,6 +530,23 @@ export function subjectAndRegionFacts(body) {
     }
   }
 
+  const heldRegions = heldRegionsFor({ present, refs, run, stateOf });
+  return { subjectsMissing, heldRegions,
+    examined: { paths: paths.length, symbols: symbols.length, prose: prose.length, refs: refs.length,
+      region: declared === null ? null : declared.length } };
+}
+
+/**
+ * #1054: THE CONTENTION HALF, ON ITS OWN.
+ *
+ * Pulled out of `subjectAndRegionFacts` when that function went past the 90-physical-line ceiling, which
+ * is the lint rule naming something true: the two halves ask different questions of different
+ * populations, and reading one no longer means reading past the other.
+ * @param {{present: string[], refs: string[], run: (args: string[]) => string,
+ *   stateOf: (ref: string) => string}} inputs
+ * @returns {{path: string, refs: string[], openPrs: string[]}[]}
+ */
+function heldRegionsFor({ present, refs, run, stateOf }) {
   // BOTH DIFFS, AND EACH ALONE GIVES A WRONG ANSWER. This tool produced both wrong answers in turn, on
   // its first two runs, which is why the conjunction is spelled out rather than assumed.
   //
@@ -441,12 +562,12 @@ export function subjectAndRegionFacts(body) {
   //
   // A ref genuinely holds a path when it has changed that path since the merge base AND the result still
   // differs from `main`: its own work, not yet landed. Neither condition is sufficient; the pair is.
-  /** @type {{ path: string, refs: string[] }[]} */
+  /** @type {{ path: string, refs: string[], openPrs: string[] }[]} */
   const heldRegions = [];
   /** @param {string[]} range @param {string} path */
   const changed = (range, path) => {
     try {
-      return git(["diff", "--numstat", ...range, "--", path]).trim().length > 0;
+      return run(["diff", "--numstat", ...range, "--", path]).trim().length > 0;
     } catch { return false; }
   };
   for (const path of present) {
@@ -466,14 +587,48 @@ export function subjectAndRegionFacts(body) {
     // THE FAILURE MODE THIS ACCEPTS, named rather than hidden: a branch that was merged and then REUSED
     // for new commits is dropped here, and it does genuinely hold. That is rare, and the alternative --
     // listing every squash-merged branch for ever -- is the eighty-five-branch report nobody reads.
-    const live = holders.map((ref) => ({ ref, state: prState(ref) }))
+    const live = holders.map((ref) => ({ ref, state: stateOf(ref) }))
       .filter(({ state }) => !/\bMERGED\b/.test(state));
     if (live.length > 0) {
-      heldRegions.push({ path, refs: live.map(({ ref, state }) => `${ref} (${state})`) });
+      heldRegions.push({ path, refs: heldRefsSummary(live),
+        openPrs: live.filter(({ state }) => /\bOPEN\b/.test(state)).map(({ ref }) => ref) });
     }
   }
-  return { subjectsMissing, heldRegions,
-    examined: { paths: paths.length, symbols: symbols.length, prose: prose.length, refs: refs.length } };
+  return heldRegions;
+}
+
+/**
+ * #1054: EVERY OPEN PR BY NAME, THE REST BY COUNT AND STATE.
+ *
+ * A file-shaped Region names one or two holders. A DIRECTORY-shaped one names twelve, most of them dead
+ * branches and closed PRs, and this file's own header already records what happens then: "EIGHTY-FIVE
+ * branches as holding one file, which is not a report anyone reads." Teaching the region half to see
+ * directory prefixes is what made that reachable, so the summary ships with it rather than after it.
+ *
+ * THE SPLIT IS BY WHAT THE READER WILL DO ABOUT IT, not by how many fit on a line. An OPEN PR is the one
+ * B4 refuses a claim over, so every one is named. A closed PR or an unproposed branch is a merge cost,
+ * and a merge cost is a number.
+ *
+ * IT IS NOT A TRUNCATION. The count is stated, the states behind it are stated, and nothing is dropped
+ * silently -- a list cut to fit reads as a complete list, which is the failure this repo has recorded
+ * against `tail` and `head` more than once.
+ * @param {{ref: string, state: string}[]} live
+ * @returns {string[]}
+ */
+export function heldRefsSummary(live) {
+  const open = live.filter(({ state }) => /\bOPEN\b/.test(state));
+  const rest = live.filter(({ state }) => !/\bOPEN\b/.test(state));
+  const named = open.map(({ ref, state }) => `${ref} (${state})`);
+  if (rest.length === 0) return named;
+  const closed = rest.filter(({ state }) => /\bCLOSED\b/.test(state)).length;
+  const unproposed = rest.length - closed;
+  const parts = [];
+  if (unproposed > 0) parts.push(`${unproposed} with no PR`);
+  if (closed > 0) parts.push(`${closed} whose PR is CLOSED`);
+  // The two readings need two sentences. With an open PR named, the rest are "and N more"; with none, a
+  // dangling "and N more" reads as a continuation of a list that was never printed.
+  const tail = `${rest.length} branch(es) (${parts.join(", ")}) -- a merge cost, nobody to wait for`;
+  return named.length > 0 ? [...named, `and ${tail}`] : [tail];
 }
 
 /** @param {number} row */
