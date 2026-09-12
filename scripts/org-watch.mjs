@@ -29,8 +29,28 @@ export const EXIT = { QUIET: 0, ATTENTION: 1, CANNOT_ASK: 2 };
 const defaultRun = (args) => execFileSync("gh", args, { encoding: "utf8" }).trim();
 
 // #1154: how far main's tip may lead the newest run before the run list is treated as STOPPED rather than
-// quiet. `trunk` runs on every push to main, so a tip that has moved and a workflow that has not run is a
-// contradiction within one run's duration -- two hours is generous against a queue, not a staleness budget.
+// quiet.
+//
+// **THE NUMBER IS BOUNDED BY THE FIELD, NOT TUNED AGAINST A QUEUE.** My first reason here was a
+// cost-asymmetry argument, which is true and leaves the two looking arbitrary. worker-capture's reading is
+// better and it is about `created_at`: GitHub stamps it when the run is REGISTERED, not when it finishes or
+// starts, so a backed-up runner pool cannot inflate this lag. Measured over the five most recent `trunk`
+// runs on main, `created_at` minus the commit's own committer date:
+//
+//   9941bef4  3s     464c22e1  3s     88920fe8  3s     51c125b7  3s     2f6b21cf  3s
+//
+// So a lag above two hours does not mean a slow queue -- it means **no run was CREATED while main moved**,
+// which is the defect itself. Two hours is three orders of magnitude of headroom over the observed 3s and
+// could come down a long way; there is no reason to, because nothing legitimate accumulates in the window.
+//
+// (Stated exactly: all five runs show `created_at === run_started_at`, so no queueing OCCURRED in the
+// sample. What rules queueing out is that they are separate fields with separate meanings, not that these
+// five agree. A queued run would move `run_started_at` and leave `created_at` where it is.)
+//
+// **THE ONE LEGITIMATE FOREVER-LAG, and it is not this workflow.** A workflow with a `paths:` or branch
+// filter can sit un-run across many pushes by design, and this metric would call it stopped. `trunk` runs
+// on every push to main, unfiltered, which is what makes the comparison sound here. A filtered workflow
+// needs a different question, not a bigger number.
 const STOPPED_AFTER_LAG_HOURS = 2;
 
 /**
