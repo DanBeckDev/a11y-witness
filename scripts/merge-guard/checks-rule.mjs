@@ -70,6 +70,22 @@ export function newestPerName(runs) {
 }
 
 /**
+ * Is anything still going, so that a context with no run yet may simply not have started?
+ *
+ * A SUPERSEDED RUN COUNTS, and that is #1007's ruling rather than a convenience: a cancelled context
+ * means a replacement run is already going, which is the same world as one in flight and the same
+ * remedy. Taking only `inFlight` here would report an absence on a head whose replacement run has not
+ * yet produced its check-runs -- the exact moment this is for.
+ *
+ * @param {string[]} inFlight
+ * @param {string[]} superseded
+ * @returns {boolean}
+ */
+function unfinishedElsewhere(inFlight, superseded) {
+  return inFlight.length > 0 || superseded.length > 0;
+}
+
+/**
  * @param {{headRefOid: string}} pr
  * @param {string[]} required
  * @param {{id?: number, name: string, status: string, conclusion: string | null}[]} runs
@@ -90,7 +106,29 @@ export function checkReasons(pr, required, runs) {
   const inFlight = latest.filter((run) => run.status !== "completed").map((run) => run.name);
   const superseded = latest.filter((run) => run.status === "completed" && run.conclusion === NO_VERDICT)
     .map((run) => `${run.name} (cancelled: superseded, so it reached no verdict)`);
-  const unfinished = [...inFlight, ...superseded];
+  // #1009: A REQUIRED CONTEXT WITH NO RUN, WHILE SOMETHING ELSE IS STILL GOING, IS A WAIT.
+  //
+  // `gate` on this repository `needs: [changed, ts, python, ansible, changeset, rulesFitness]`, so it is
+  // the LAST job to report on every single pull request and produces no check-run at all until its needs
+  // finish. **That is the normal state of every `needs:`-gated aggregate for most of every run** -- and it
+  // was reported with the same sentence as a job that was deleted, renamed, or never triggered.
+  //
+  // The two never-rans send a reader to different places: *ask again* versus *go and find out why that
+  // job never fired*. Measured on #1008 at 23:3xZ: 15 runs, `ts / run` in flight, no `gate` at all,
+  // everything else success or skipped -- a perfectly healthy mid-run pull request, reported as an
+  // absence.
+  //
+  // JOINED TO `STILL RUNNING` WITH ITS OWN ANNOTATION RATHER THAN GIVEN A NEW SENTENCE, which is
+  // #1007's shape in this same function one line up: a cancelled context reports under the wait it
+  // shares a remedy with, annotated so nobody mistakes it for a job in flight. A new prefix would also
+  // need a new entry in `reason-kind.mjs`, whose miss is SILENT -- an unmatched reason reads
+  // `UNCLASSIFIED` -- so the sentence and its classification would be a second copy with nothing
+  // comparing them. That file's own header says so.
+  const waiting = unfinishedElsewhere(inFlight, superseded)
+    ? missing.map((context) => `${context} (required, and no run has reported it yet)`)
+    : [];
+  const neverRan = waiting.length > 0 ? [] : missing;
+  const unfinished = [...inFlight, ...superseded, ...waiting];
   const failing = latest.filter((run) => run.status === "completed"
     && run.conclusion !== NO_VERDICT && !SATISFIED.has(run.conclusion ?? ""))
     .map((run) => `${run.name} (${run.conclusion})`);
@@ -98,8 +136,10 @@ export function checkReasons(pr, required, runs) {
   // `.filter(Boolean)` does not narrow `(string | false)[]` to `string[]` -- a well-known TS gap, not a
   // behaviour bug -- so the predicate says so explicitly.
   return [
-    missing.length > 0 && `REQUIRED CONTEXT NEVER RAN: ${missing.join(", ")}.\n`
-      + "  Present-and-failing and never-ran are different states; this is the second.",
+    neverRan.length > 0 && `REQUIRED CONTEXT NEVER RAN: ${neverRan.join(", ")}.\n`
+      + "  Present-and-failing and never-ran are different states; this is the second.\n"
+      + "  Every other run has CONCLUDED, so this is not \"not yet\": that job was removed, renamed, or\n"
+      + "  never triggered. Go and find out which.",
     unfinished.length > 0 && `STILL RUNNING: ${unfinished.join(", ")}. Not a refusal forever — ask again.`,
     failing.length > 0 && `FAILING: ${failing.join(", ")}.`,
   ].filter(/** @returns {reason is string} */ (reason) => Boolean(reason));
