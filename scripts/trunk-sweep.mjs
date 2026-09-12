@@ -5,7 +5,7 @@
 //
 // GITHUB_TOKEN events trigger no workflows (#394's overnight measurement, 37 data points, no exceptions):
 // a merge completed by `github-actions[bot]` -- every merge `auto-arm.yml` completes -- fires neither
-// `pull_request: closed` nor `push`, so `trunk-guard.yml`'s own trigger never runs. Measured 2026-09-08:
+// `pull_request: closed` nor `push`, so `trunk.yml`'s own trigger never runs. Measured 2026-09-08:
 // `main`'s tip after one such merge carried ZERO check runs. Unit 3's whole revert mechanism (#316) is
 // silent for exactly the merges the pipeline itself performs.
 //
@@ -16,7 +16,7 @@
 // ## What this checks, and what it does about it
 //
 // `needsGateSweep` is the whole decision: does `main`'s tip have zero check runs? If so, trigger
-// `trunk-guard.yml` directly via `workflow_dispatch` (added to that workflow in this same PR) -- no `ref`
+// `trunk.yml` directly via `workflow_dispatch` (added to that workflow in this same PR) -- no `ref`
 // needed, since a dispatch with none given runs against the repository's default branch, which is `main`.
 // `decideRevert`'s own `if: needs.trunkGate.result == 'failure'` then fires exactly as it would for a
 // real push, driving the SAME revert machinery -- nothing new to build there.
@@ -82,11 +82,11 @@ function main() {
     process.exit(EXIT.DONE);
   }
 
-  console.log(`TRUNK-SWEEP: main's tip (${sha}) carries ZERO check runs -- triggering trunk-guard.yml.`);
+  console.log(`TRUNK-SWEEP: main's tip (${sha}) carries ZERO check runs -- triggering trunk.yml.`);
   try {
-    gh(["workflow", "run", "trunk-guard.yml", "--repo", repo]);
+    gh(["workflow", "run", "trunk.yml", "--repo", repo]);
   } catch (cause) {
-    console.error(`TRUNK-SWEEP: could not trigger trunk-guard.yml -- `
+    console.error(`TRUNK-SWEEP: could not trigger trunk.yml -- `
       + `${cause instanceof Error ? cause.message : cause}`);
     process.exit(EXIT.COULD_NOT_TRIGGER);
   }

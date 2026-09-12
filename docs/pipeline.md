@@ -13,9 +13,9 @@ the machinery that merges everything else.
 |---|---|---|
 | **1** | auto-arm every non-draft PR against `main` on `opened`/`ready_for_review` | `.github/workflows/auto-arm.yml` |
 | **1c** | sweep the PRs unit 1 structurally cannot see — the ones already open when it shipped | `scripts/auto-arm-sweep.mjs`, same workflow |
-| **1d** | close the rows a merged PR declared, because GitHub does not do it for a bot merge | `.github/workflows/close-rows.yml`, `scripts/close-rows-for-merged-pr.mjs` |
+| **1d** | close the rows a merged PR declared, because GitHub does not do it for a bot merge | `trunk.yml`'s `closeRows` job (#909; `close-rows.yml` until 2026-09-12), `scripts/close-rows-sweep.mjs`, `scripts/close-rows-for-merged-pr.mjs` |
 | **2** | run the `Acceptance:`/`Mutation:` commands out of a PR body (#353) | not built |
-| **3** | revert a push that fails `gate` on `main` | `trunk-guard`, `decideRevert` |
+| **3** | revert a push that fails `gate` on `main` | `trunk.yml`, `decideRevert` |
 | **4** | continuous delivery to npm `next`, and fleet self-deploy | not built |
 
 **Arming is safe by construction, and the reason is worth keeping.** `gh pr merge --auto` only ARMS; GitHub
@@ -89,7 +89,7 @@ The token `gh` authenticates with. In CI every job that spawns `gh` declares
 `GH_TOKEN: ${{ github.token }}`, and `gh-token-jobs.test.ts` discovers each job that can reach a `gh` spawn
 — transitively, through local imports — and fails until it does. Locally, `gh auth login` covers it.
 
-The permissions each workflow grants are deliberately narrow and are pinned by tests. `close-rows.yml` has
+The permissions each workflow grants are deliberately narrow and are pinned by tests. `trunk.yml`'s `closeRows` job has
 `issues: write`, `pull-requests: read`, `contents: read` and nothing else: **a workflow triggered by a
 merged PR must never be able to push**, and `close-rows-on-merge.test.ts` goes red if `contents` is raised.
 
