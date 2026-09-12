@@ -502,3 +502,39 @@ Three consequences worth stating plainly.
   training corpus, and the training corpus is where the blind spot comes from. This ADR's own headline —
   *a metric computed on data that shares the flaw cannot see the flaw* — applies to the audit built for it.
   The held-out multi-defect set is the first thing that could, and it works.
+
+## Addendum, 2026-09-12 (#1178, #1189): the training role admits ONE published-inaccessible page, and why the novelty numbers did not move
+
+**why-2 recorded that the training distribution contains no real broken page**, and that this is *why* a real inaccessible page sits further from the training set than its conformant twin — an effect ADR 0010 first attributed to broken pages "failing in several ways at once". `real-page-corpus.test.ts` pinned the composition so the day it changed, it changed deliberately.
+
+**It has changed once**, for `https://the-internet.herokuapp.com/login`, and the decision was taken from a measurement rather than an argument.
+
+### Both arms, same disk corpus, declaration the only difference
+
+Captures 19:49–20:11Z, lab at `32f774d5c474`, 41/41, 0 failed.
+
+| | arm A — main's declaration | arm B — the entry present |
+|---|---|---|
+| training captures | 40 | **41** |
+| realism records | 39 | **40** |
+| **`4.1.3` tier** | **0 of 39** | **1 of 40** |
+| dataset sha256 | `7f1f31b01946…` | **`d5c641149225…`** |
+| dataset records | 2869 | **2870** |
+| training-report sha256 | `ff44ed1e2e4b…` | **`a2a44cf5e6b4…`** |
+| `after/tickets.html` | 0.8231 | 0.8231 |
+| `before/tickets.html` | 0.7208 | 0.7208 |
+| derived floor | 0.6557 | 0.6557 |
+
+**The tier moves and the page is genuinely driven** — `observed.formChanges` shows `activated: 2`, the interaction names the control `"Login, button"`, `postSubmitFields` carries 3 entries, and the transcript's 11 phrases contain **zero** matching `invalid`. **The submit happened and `Your username is invalid!` was never announced. That silence is the 4.1.3 failure the tier lacked.**
+
+### The distance pair did not move, and the instrument demonstrably did
+
+Different dataset hash, one more record, a different report hash — **and the same pair to four decimals.** That is not "nothing happened"; it is the pair being insensitive to this change, and the mechanism says why.
+
+**`distinctStructures` is 837 in BOTH arms.** The OOD reference is 512 rows sampled by evenly spaced indices over the distinct structures, so an identical 837 draws an identical reference, and **every** novelty figure is unchanged rather than only `tickets.html`'s.
+
+### The falsifier, which is the half that matters
+
+**A page that RAISES `distinctStructures` would move the reference**, and every novelty figure with it.
+
+So this addendum is not *"broken pages are free"* — it is *"this page added no structure, and that is checkable."* **`distinctStructures` is the field to read first for any future invited origin**, before the distance pair, because the pair is downstream of it. A second inaccessible training page admitted without that reading is exactly the silent change why-2's guard was written to refuse, and `real-page-corpus.test.ts` now admits this one **by name** so the next needs its own measurement.
