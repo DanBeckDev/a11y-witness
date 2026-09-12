@@ -177,6 +177,43 @@ function gateState(gateConclusion) {
 }
 
 /**
+ * THE SENTENCE FOR A RED THAT IS BEING UPDATED, naming the cause when time decided it.
+ *
+ * #1126: #1100's line said the update IS the instrument -- *"if it CLEARS, the red was the base's; if it
+ * PERSISTS, it is this PR's own"* -- which is true and is a plan rather than a finding. When the newest
+ * gate concluded before main's tip landed, the finding is already available and the log should state it.
+ *
+ * **BOTH CLASSIFIED CASES STILL UPDATE.** The verdict must not become a refusal: #498's rule lives on this
+ * path, and a sweep that syncs too little is indistinguishable from a quiet queue. What changes is what
+ * the line SAYS, which is the thing somebody reads when they ask why their PR moved.
+ *
+ * And the unreadable case keeps #1100's sentence verbatim, because there the experiment really is the only
+ * instrument -- the post-hoc reason is correct whenever the *a priori* one cannot be computed.
+ *
+ * @param {string} gateConclusion
+ * @param {"base" | "its own" | null} cause
+ * @returns {string}
+ */
+function redReason(gateConclusion, cause) {
+  const head = `armed and behind, with gate = ${gateConclusion} -- UPDATED ANYWAY (#1100).`;
+  if (cause === "base") {
+    return `${head} The red is THE BASE'S, determined rather than guessed (#1126): this gate CONCLUDED `
+      + "BEFORE main's current tip landed, so it cannot have been evaluated against current main. The "
+      + "update is the fix, not an experiment";
+  }
+  if (cause === "its own") {
+    return `${head} The red is THIS PR'S OWN, determined rather than guessed (#1126): this gate concluded `
+      + "AFTER main's current tip landed, so it WAS evaluated against current main and the author owns "
+      + "the fix (#498). Updated anyway -- being current is not the author's job to arrange";
+  }
+  return `${head} A red has two causes and the timing CANNOT BE READ here -- no completion stamp on the `
+    + "newest gate, or main's tip time could not be asked for -- so this remains the only thing that "
+    + "tells them apart: if it CLEARS, the red was the base's; if it PERSISTS, it is this PR's own and "
+    + "the author owns the fix (#498). The quiet window does not apply -- a concluded gate means CI has "
+    + "finished, so nobody is mid-push";
+}
+
+/**
  * PURE. Should this PR be pushed up to main's current tip?
  *
  * #1100: A RED, ARMED, BEHIND PR IS UPDATED. THE SKIP THAT LIVED HERE WAS SELF-SUSTAINING.
@@ -225,10 +262,17 @@ function gateState(gateConclusion) {
  * meaning different things by the same conclusion is the defect, not the disagreement.
  *
  * @param {{ armed: boolean, gateConclusion: string | null, behind: boolean,
- *           quietSeconds?: number | null }} input
+ *           quietSeconds?: number | null,
+ *           gateCompletedAt?: string | null, mainTipAt?: string | null }} input
+ *
+ * #1126: `gateCompletedAt` and `mainTipAt` are STATED here rather than left to inference. `tsc` caught
+ * their absence when the tests did not -- the tests pass the fields and the runtime reads them, so only
+ * the declared shape disagreed. An inferred type is a claim about the sample; a stated one is a claim
+ * about the thing, and this is the second time today that distinction has cost somebody a red.
  * @returns {{ update: boolean, reason: string }}
  */
-export function updateBranchDecision({ armed, gateConclusion: rawConclusion, behind, quietSeconds }) {
+export function updateBranchDecision({ armed, gateConclusion: rawConclusion, behind, quietSeconds,
+  gateCompletedAt = null, mainTipAt = null }) {
   // NORMALISED AT THIS BOUNDARY TOO, not only in `newestConclusion`. This function is exported and is
   // reached by tests and by any future caller with a conclusion from either API -- and a predicate that is
   // correct only for the spelling its usual caller happens to use is the defect this row just shipped once.
@@ -275,11 +319,7 @@ export function updateBranchDecision({ armed, gateConclusion: rawConclusion, beh
   // quieter than the one it replaces is a regression even when the tests pass, which is the other half of
   // #498's lesson read forwards.
   if (!noVerdictYet && gateConclusion !== SUCCESS) {
-    return { update: true,
-      reason: `armed and behind, with gate = ${gateConclusion} -- UPDATED ANYWAY (#1100). A red has two `
-        + "causes and this is the only thing that tells them apart: if it CLEARS, the red was the base's; "
-        + "if it PERSISTS, it is this PR's own and the author owns the fix (#498). The quiet window does "
-        + "not apply -- a concluded gate means CI has finished, so nobody is mid-push" };
+    return { update: true, reason: redReason(gateConclusion, redCause({ gateCompletedAt, mainTipAt })) };
   }
   return { update: true,
     reason: `armed, ${gateState(gateConclusion)}, and behind main's current tip${quietNote}` };
@@ -323,6 +363,32 @@ export function updateBranchDecision({ armed, gateConclusion: rawConclusion, beh
  * @returns {string | null}
  */
 export function newestConclusion(runs, name) {
+  const newest = newestRun(runs, name);
+  // AND AN EMPTY CONCLUSION IS "NOT YET ANSWERED", NOT A VERDICT. GitHub reports an IN_PROGRESS run as
+  // `conclusion: ""`, and `?? null` keeps the empty string -- which `updateBranchDecision` would then read
+  // as "not SUCCESS" and skip the PR as failing. `normaliseConclusion` collapses both spellings of absence
+  // to the one the caller already handles. Measured on the real API alongside the zero date above; the two
+  // arrive together on every running check, so fixing one without the other just moves the wrong answer.
+  //
+  // #1100, after worker-judge's re-read: **CASE IS THE THIRD SPELLING AND BELONGS IN THAT SAME SENTENCE.**
+  return newest === null ? null : normaliseConclusion(newest.conclusion);
+}
+
+/**
+ * The newest run of `name` on this head, chosen by the timestamp rule documented above -- or `null`.
+ *
+ * #1126: EXTRACTED SO THE CONCLUSION AND THE TIMESTAMP COME FROM THE SAME RUN. This row needs *when* the
+ * newest gate concluded, and a second scan written to find it would be a second derivation of "the newest
+ * run": the two could disagree on a head whose runs tie or carry no stamps, and the verdict would then be
+ * classified by a run that did not produce it. That is the fact-stated-twice shape landing on the exact
+ * pair of facts the classification compares, so there is one scan and both readers call it.
+ *
+ * @param {{name?: string, conclusion?: string | null, completedAt?: string | null,
+ *          startedAt?: string | null}[] | null | undefined} runs
+ * @param {string} name
+ * @returns {{conclusion?: string | null, completedAt?: string | null, startedAt?: string | null} | null}
+ */
+export function newestRun(runs, name) {
   const matching = (runs ?? []).filter((run) => run?.name === name);
   if (matching.length === 0) return null;
   // THE ZERO DATE IS ABSENCE WEARING A TIMESTAMP -- #488, measured against the real API.
@@ -337,16 +403,79 @@ export function newestConclusion(runs, name) {
     (value && value !== ZERO_DATE ? value : null);
   const stamp = (/** @type {{completedAt?: string | null, startedAt?: string | null}} */ run) =>
     real(run.completedAt) ?? real(run.startedAt) ?? "";
-  const newest = matching.reduce((best, run) => (stamp(run) >= stamp(best) ? run : best));
-  // AND AN EMPTY CONCLUSION IS "NOT YET ANSWERED", NOT A VERDICT. GitHub reports an IN_PROGRESS run as
-  // `conclusion: ""`, and `?? null` keeps the empty string -- which `updateBranchDecision` would then read
-  // as "not SUCCESS" and skip the PR as failing. `|| null` collapses both spellings of absence to the one
-  // the caller already handles. Measured on the real API alongside the zero date above; the two arrive
-  // together on every running check, so fixing one without the other just moves the wrong answer.
-  //
-  // #1100, after worker-judge's re-read: **CASE IS THE THIRD SPELLING AND BELONGS IN THAT SAME SENTENCE.**
-  return normaliseConclusion(newest.conclusion);
+  return matching.reduce((best, run) => (stamp(run) >= stamp(best) ? run : best));
 }
+
+/**
+ * When the newest `name` run CONCLUDED, as an ISO string -- or `null` when nothing says.
+ *
+ * `completedAt` only, never falling back to `startedAt` the way the newest-run choice does. A run that has
+ * started and not finished has no conclusion to classify, and reading its start as its end would date a
+ * verdict earlier than it exists -- which, in the comparison this feeds, is the direction that wrongly
+ * reports "the base did it".
+ *
+ * @param {{name?: string, conclusion?: string | null, completedAt?: string | null,
+ *          startedAt?: string | null}[] | null | undefined} runs
+ * @param {string} name
+ * @returns {string | null}
+ */
+export function newestRunCompletedAt(runs, name) {
+  const newest = newestRun(runs, name);
+  const at = newest?.completedAt;
+  return at && at !== ZERO_DATE ? at : null;
+}
+
+/**
+ * WHICH CAUSE A RED HAS, decided from TIME rather than from watching whether it clears.
+ *
+ * #1126, from worker-judge's review of #1104. #1100 made an armed, behind, red PR updatable on the
+ * argument that the update is the only instrument separating a red caused by the BASE from one caused by
+ * the PR's own contents. That is sound and it is *post hoc*: you learn the cause by running the
+ * experiment. **The discriminator already exists and is not the conclusion -- it is time.**
+ *
+ * > A red whose newest `gate` run COMPLETED BEFORE main's current tip landed cannot have been evaluated
+ * > against current main.
+ *
+ * That is "red because of the base" stated POSITIVELY instead of guessed, and the sweep already reads the
+ * timestamps it needs.
+ *
+ * **THREE ANSWERS, NOT TWO.** `null` is "could not be read" and is not "its own" -- a gate with no
+ * completion stamp, a `git log` that failed, a date that does not parse. Collapsing that into either
+ * verdict would be this repo's most expensive recurring shape: an absence rendering identically to an
+ * answer. The caller keeps #1100's post-hoc sentence for that case, which is exactly right, because when
+ * the timing cannot be read the experiment IS still the only instrument.
+ *
+ * Compared as instants, never as strings: `git log --format=%cI` emits a local offset (`+01:00`) while
+ * GitHub emits `Z`, and lexicographic order across those two spellings is wrong for up to a day.
+ *
+ * @param {{ gateCompletedAt?: string | null, mainTipAt?: string | null }} input
+ * @returns {"base" | "its own" | null}
+ */
+export function redCause({ gateCompletedAt, mainTipAt }) {
+  const gate = gateCompletedAt ? Date.parse(gateCompletedAt) : Number.NaN;
+  const tip = mainTipAt ? Date.parse(mainTipAt) : Number.NaN;
+  if (Number.isNaN(gate) || Number.isNaN(tip)) return null;
+  return gate < tip ? "base" : "its own";
+}
+
+/**
+ * When main's current tip landed, read from git -- or `null` when git could not answer.
+ *
+ * The COMMITTER date (`%cI`), not the author date: a rebased or cherry-picked commit keeps its author
+ * date from whenever it was first written, which can predate every gate run on every open PR and would
+ * make this classifier answer "its own" for the whole queue. `%cI` is when it arrived on this branch,
+ * which is the event the comparison is about.
+ *
+ * @param {(args: string[]) => { status: number, stdout?: string }} runGit
+ * @returns {string | null}
+ */
+export function mainTipCommittedAt(runGit) {
+  const result = runGit(["log", "-1", "--format=%cI", "origin/main"]);
+  if (result.status !== 0) return null;
+  const value = (result.stdout ?? "").trim();
+  return value === "" ? null : value;
+}
+
 
 /**
  * Runs the real `git merge-base --is-ancestor`, never re-implements it. `runGit` is injectable so this is
@@ -364,10 +493,15 @@ export function isBehind(base, headSha, runGit) {
 /** @param {string[]} args */
 function runGitForReal(args) {
   try {
-    execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: sandboxGitEnv() });
-    return { status: 0 };
+    const stdout = execFileSync("git", args,
+      { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: sandboxGitEnv() });
+    return { status: 0, stdout };
   } catch (cause) {
     const err = /** @type {{ status?: number }} */ (cause);
+    // #1126: NO `stdout` ON THE FAILURE PATH, deliberately. A caller that reads output must see the
+    // difference between "git answered" and "git failed"; handing back `""` here would let a failed
+    // `git log` read as an empty answer, and an unreadable timestamp is a case this row must keep
+    // distinct from a timestamp that says "before".
     return { status: err.status ?? 1 };
   }
 }
@@ -436,13 +570,19 @@ export function readHeadNow({ number, repo, run = gh }) {
 export function sweepPrs(prs, { repo, run = gh, readHead = readHeadNow, runGit = runGitForReal, now = new Date() }) {
   const failed = [];
   const lines = [];
+  // ONCE PER SWEEP, not once per PR. Main's tip is one fact and every PR is compared against the same
+  // one; reading it in the loop would let the answer change mid-sweep if main moved, so two PRs with
+  // identical gates could be classified differently by an accident of ordering.
+  const mainTipAt = mainTipCommittedAt(runGit);
   let updated = 0;
   for (const pr of prs) {
     const armed = pr.autoMergeRequest != null;
     const gateConclusion = newestConclusion(pr.statusCheckRollup, "gate");
     const behind = isBehind("origin/main", pr.headRefOid, runGit);
     const quietSeconds = headQuietSeconds(pr.statusCheckRollup, now);
-    const { update, reason } = updateBranchDecision({ armed, gateConclusion, behind, quietSeconds });
+    const gateCompletedAt = newestRunCompletedAt(pr.statusCheckRollup, "gate");
+    const { update, reason } = updateBranchDecision({ armed, gateConclusion, behind, quietSeconds,
+      gateCompletedAt, mainTipAt });
     if (!update) {
       lines.push(`#${pr.number} SKIPPED -- ${reason}`);
       continue;
