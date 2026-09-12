@@ -434,6 +434,38 @@ const LANDMARK_ROLES = ["main", "navigation", "banner", "contentinfo", "compleme
  * So the oracle is counted HERE, from the accessibility tree, over the roles NVDA actually visits.
  * Deliberately a separate bucket from `dom.formField` rather than a widening of it: that count is load
  * bearing for 2.1.2 and changing it would move a denominator this is not about.
+ *
+ * ## #844: THIS LIST IS NOT THE FIRST PROBLEM, AND WIDENING IT IS AIMED THE WRONG WAY
+ *
+ * #800 asked whether IKEA serves 265 form controls or the sweep walks more than is there, and the obvious
+ * reading was that this bucket is too narrow. **Measured on the first captures to carry
+ * `structureCensus.readAt` (#854), it is not.** The DOM census sitting beside this one is the
+ * discriminator:
+ *
+ *     capture       DOM formField    AX formControl    sweep found    heading ratio
+ *     ikea                     51               136            270             1.16
+ *     salesforce                7                18             27             1.11
+ *     tfl                    1392                15             34             1.00
+ *     w3.org                   15                15             15             1.00
+ *
+ * **On ikea and salesforce this bucket is already WIDER than the DOM's form elements** — 136 against 51.
+ * Widening it moves the denominator further from the page, not closer, so the row's first option is
+ * refused by measurement rather than by preference.
+ *
+ * **And the moment comes first, which is why no correction to this list could have settled it.** The
+ * census is read at 28–67 s; `formField` walks at 37–280 s and activates every control it finds while it
+ * walks. `heading` is the control — no `onItem`, and a heading is a heading to every instrument — and its
+ * ratio is exactly 1 on w3.org and tfl while `formField` reads 2.27 on tfl. **A gap that survives a
+ * still page is not the page changing, and it is not this list being short.**
+ *
+ * **The decision, recorded here because this is where the next reader will come looking:** neither
+ * widening this list (option 1, refuted above) nor a per-role breakdown (option 2, which costs nothing
+ * and attributes nothing) answers the question. **Only recording the role each announcement came from can
+ * tell a narrow bucket from a growing page**, because only that compares the two bucket by bucket. That is
+ * its own row and it is the successor to this one.
+ *
+ * Until then `sweep-vs-census.mjs` issues no verdict from a comparison the `heading` control has not
+ * cleared, which is #844's acceptance 2 and 4.
  */
 /** @type {string[]} */
 const FORM_CONTROL_ROLES = [
@@ -1005,7 +1037,10 @@ const NAVIGATION_OUTCOME_EXPRESSION = `(() => {
  * only check it can have. And splitting it kept `domCensus` under the line budget: the page-side program
  * and the CDP round-trip that carries it are two things, which is what the budget was telling me.
  */
-const DOM_CENSUS_EXPRESSION = `(() => {
+// EXPORTED (#969) so a test runs the very string the page receives: the template literal AS EVALUATED, with every
+// escape applied. The harness that read this from source and undid two escapes by hand would pass a slash-escaped
+// regex that throws on the page -- a second copy of template-literal semantics, one escape short.
+export const DOM_CENSUS_EXPRESSION = `(() => {
     const visible = (el) => !el.closest("[aria-hidden='true']");
     const all = (selector) => [...document.querySelectorAll(selector)].filter(visible);
     // An image with an EMPTY alt is decorative by the author's instruction; Chromium marks it ignored and
@@ -1105,8 +1140,151 @@ const DOM_CENSUS_EXPRESSION = `(() => {
           && !el.hasAttribute("hidden") && !el.hasAttribute("disabled")
           && (typeof el.checkVisibility !== "function" || el.checkVisibility())
           && (typeof el.closest !== "function" || !el.closest("[inert]"))).length,
+      // WHAT THE QUICK-NAVIGATION CURSOR IS SEALED INSIDE, if anything -- #897.
+      //
+      // A screen reader's quick navigation is confined to an open modal, and NVDA's "no next link" is
+      // then TRUE about the dialog rather than about the page. Measured on
+      // \`runs/781-r1-hubspot.json/capture-1\`: the \`landmark\` sweep's last stop was literally
+      // "Hub Bot, dialog", and the three sweeps that ran while it was open found 12 chat-widget
+      // controls, 2 Hub Bot avatars and 1 link against a census of 79 -- each reporting \`exhausted\`,
+      // each correct about the dialog. Nothing on the record said which they had examined.
+      //
+      // A STRING, NEVER A COUNT, and that is load-bearing rather than stylistic. \`censusElementCounts\`
+      // and \`censusFromDiagnostics\` build the element counts from every NUMERIC field on a census mark
+      // except two, so a numeric \`openDialogCount\` would arrive downstream as an element type. A label
+      // cannot, and it is also the more useful thing: "Hub Bot" names the dialog a reader has to go and
+      // look at, where a 1 only says one exists.
+      //
+      // MODAL ONLY. A non-modal dialog does not seal quick navigation, so reporting one would mark
+      // sweeps that were never confined -- the false-accusation direction this project pays most for.
+      // \`<dialog open>\` without \`modal\` is deliberately excluded for the same reason: only
+      // \`showModal()\` sets \`:modal\`, and only that form is inert-backed.
+      openDialog: (() => {
+        const modal = all("[role='dialog'][aria-modal='true'], [role='alertdialog'][aria-modal='true']")
+          .find((el) => typeof el.checkVisibility !== "function" || el.checkVisibility())
+          || [...document.querySelectorAll("dialog")]
+            .find((el) => typeof el.matches === "function" && el.matches(":modal")
+              // RENDERED on this branch too, and the symmetry is the point rather than the case.
+              // \`:modal\` means the dialog is in the top layer, which normally implies it renders — but a
+              // \`showModal()\` dialog given \`display: none\` afterwards stays \`:modal\` and shows nothing,
+              // and a check that is explicit on one branch and implied on the other is a difference the
+              // next reader has to reason about. It costs nothing to not make them.
+              && (typeof el.checkVisibility !== "function" || el.checkVisibility()));
+        if (!modal) return null;
+        // The dialog's own accessible name where it has one, else a shape a human can find it by.
+        return ((modal.getAttribute("aria-label") || "").trim()
+          || (modal.getAttribute("aria-labelledby") || "").trim()
+          || (modal.getAttribute("id") || "").trim()
+          || modal.tagName.toLowerCase()).slice(0, 80);
+      })(),
+      // WHICH FRAME HOLDS FOCUS, if any -- #953, the diagnostic #951's remedy waits on.
+      //
+      // #951 marks a sweep that found far less than the census and does not say why. The hypothesis
+      // (worker-capture's, 2026-09-11; not yet a finding) is that a sweep landing on a focusable control
+      // inside a chat widget's frame moves DOM focus into it, and NVDA's quick navigation is then held by
+      // that frame. No capture records where focus was, so nothing on disk can test it.
+      //
+      // From the top document, focus anywhere inside a nested browsing context -- cross-origin included --
+      // reads as \`activeElement\` being the element that hosts it: an <iframe> or <frame>, and equally an
+      // <object>, <embed> or <fencedframe>. So this needs no access to the frame's content. An open shadow
+      // root is followed to the element focused inside it: a widget that mounts its frame in one would
+      // otherwise read as "focus in the top document", and that would refute the hypothesis falsely.
+      //
+      // THREE ANSWERS, and the third is why the second can be trusted:
+      //   a string                the frame holding focus: its title, name or id, else its source's HOST --
+      //                           never a path or query, which can carry a session token
+      //   null                    focus is in the top document, or in an OPEN shadow root, on an element
+      //                           that holds focus itself
+      //   { cannotSay: "..." }    this page cannot say. A CLOSED shadow root reads as \`shadowRoot === null\`
+      //                           from outside, so focus inside one lands on its host, and page script cannot
+      //                           tell that from a host with no shadow root. So a host that cannot hold focus
+      //                           itself, or any custom element with no readable root, is "cannot say", never
+      //                           \`null\` -- worker-judge's review of #963. The read throwing is the same answer.
+      // Never a count, for \`openDialog\`'s reason: readers of this mark take its numeric fields.
+      focusFrame: (() => {
+        try {
+          let el = document.activeElement;
+          while (el && el.shadowRoot && el.shadowRoot.activeElement) el = el.shadowRoot.activeElement;
+          if (!el) return null;
+          const tag = String(el.tagName || "").toUpperCase();
+          if (["IFRAME", "FRAME", "OBJECT", "EMBED", "FENCEDFRAME"].includes(tag)) {
+            // String operations, not a regex: this text is a template literal, which turns an escaped slash
+            // into a bare one before the page parses it -- a harness reading the source would never see it.
+            const src = (el.getAttribute("src") || el.getAttribute("data") || "").trim();
+            const scheme = src.indexOf("://");
+            const host = scheme > 0
+              ? src.slice(scheme + 3).split("/")[0].split("?")[0].split("#")[0].split(":")[0] : "";
+            return ((el.getAttribute("title") || "").trim()
+              || (el.getAttribute("name") || "").trim()
+              || (el.getAttribute("id") || "").trim()
+              || host
+              || tag.toLowerCase()).slice(0, 80);
+          }
+          if (tag === "BODY" || tag === "HTML" || el.shadowRoot) return null;
+          const holdsFocusItself = el.hasAttribute("tabindex") || el.isContentEditable === true
+            || (typeof el.tabIndex === "number" && el.tabIndex >= 0);
+          if (tag.includes("-") || !holdsFocusItself) {
+            return { cannotSay: "focus is on <" + tag.toLowerCase().slice(0, 40) + ">, whose shadow root, if it "
+              + "has one, page script cannot read" };
+          }
+          return null;
+        } catch (error) {
+          return { cannotSay: "reading focus threw: " + String((error && error.message) || error).slice(0, 80) };
+        }
+      })(),
     };
 })()`;
+
+/**
+ * RETURN FOCUS TO THE TOP DOCUMENT -- #972, run once before the sweeps when focus sits in a frame the page put
+ * it in (`focusRestoreDecision`).
+ *
+ * From the top document a focused frame is `activeElement` itself (the census's `focusFrame` rests on the same
+ * fact), and blurring it runs the unfocusing steps for the nested document, cross-origin included. Then the
+ * window takes focus, so NVDA's next focus event is the top document's. Nothing is added to the page: no
+ * tabindex, no element -- a restore that edited the DOM would change the evidence it exists to rescue.
+ *
+ * Whether it WORKED is not answered here: the first sweep's own census reads `focusInFrame` a moment later,
+ * and `focusRestoredRecord` takes `left` from that, so this costs no second read. `blurred` only says the
+ * page accepted the calls.
+ *
+ * EXPORTED so a test runs the evaluated string the page receives (#969).
+ */
+export const FOCUS_RESTORE_EXPRESSION = `(() => {
+  const el = document.activeElement;
+  let blurred = false;
+  if (el && typeof el.blur === "function") { el.blur(); blurred = true; }
+  if (typeof window.focus === "function") window.focus();
+  return { blurred };
+})()`;
+
+/**
+ * Run `FOCUS_RESTORE_EXPRESSION` on the page under test. `null` on any failure, which the caller records as
+ * "not restored": a diagnostic step must never fail a capture.
+ * @returns {Promise<{ blurred: boolean } | null>}
+ */
+export async function restoreTopDocumentFocus() {
+  try {
+    const target = await pageTarget();
+    const socket = new WebSocket(target.webSocketDebuggerUrl);
+    try {
+      await once(socket, "open", CDP_READY_TIMEOUT_MS);
+      const result = waitForResult(socket, 1, AX_TREE_TIMEOUT_MS);
+      socket.send(JSON.stringify({
+        id: 1,
+        method: "Runtime.evaluate",
+        params: { expression: FOCUS_RESTORE_EXPRESSION, returnByValue: true },
+      }));
+      const value = (await result)?.result?.value;
+      return value && typeof value === "object" ? { blurred: value.blurred === true } : null;
+    } finally {
+      try { socket.close(); } catch (error) { void error; }
+    }
+  } catch (error) {
+    void error; // the restore is a remedy, never a reason to fail the capture; null reads as "not restored"
+    return null;
+  }
+}
 
 export async function domCensus() {
   try {
@@ -1503,6 +1681,98 @@ export async function launchReusable({ exe, args, onEvent = () => {} }) {
   throw new Error(`Edge did not open its DevTools port within ${CDP_READY_TIMEOUT_MS}ms`);
 }
 
+
+/**
+ * Where `FORM_INPUT_CENSUS_EXPRESSION` stops listing -- #170. A real page's form rarely passes a hundred controls
+ * (IKEA's 100 is the largest measured); ten times that bounds the payload without ever truncating one we
+ * have seen, and `total` on the mark says when it did.
+ */
+export const FORM_INPUT_CAP = 1000;
+
+/**
+ * EVERY FORM CONTROL'S `autocomplete` ATTRIBUTE -- #170, the census 1.3.5's rule has been waiting for.
+ *
+ * `addUnidentifiedInputPurpose` (`packages/judge/src/rules.ts`) reads `formInputs` and has never had
+ * anything to read: `autocomplete` is an HTML attribute with no accessibility-tree equivalent, so NVDA
+ * cannot report it, exactly as `media`'s `autoplay` cannot be. Same channel, same reasoning, different
+ * attribute.
+ *
+ * THE ATTRIBUTE, NEVER THE PROPERTY. `el.autocomplete` is the IDL value, which the browser normalises and
+ * returns as "" for a token it does not recognise -- the malformed `fname` F107's syntactic half exists to
+ * catch would read as no value at all. `getAttribute` returns what the author wrote, and `null` when
+ * there is no attribute: the rule treats null, "", "on" and "off" as making no claim about purpose.
+ *
+ * ONE ENTRY PER CONTROL, WITH OR WITHOUT THE ATTRIBUTE. A control with no `autocomplete` is reported with
+ * `autocomplete: null`, never skipped: "no control carries the attribute" and "no control was examined"
+ * must come back as different values, and skipping would make them the same empty list. `total` counts
+ * every control and `elements` is capped, so a truncated list says so (`FORM_INPUT_CAP`).
+ *
+ * `input` (not `type=hidden`, which collects nothing from the user), `select` and `textarea` -- the
+ * controls `autocomplete` applies to. `type` is the attribute lower-cased, "text" when absent (the
+ * browser's own default), and `null` for `select`/`textarea`, which have no type attribute.
+ *
+ * THE TOP DOCUMENT ONLY, like `domCensus`: a control inside a frame or a shadow root is not in
+ * `querySelectorAll`'s reach. Named rather than discovered later.
+ *
+ * EXPORTED so `form-input-census.test.ts` runs the very string the page receives -- the evaluated literal,
+ * not its source text with escapes undone by hand (#969's shape).
+ */
+export const FORM_INPUT_CENSUS_EXPRESSION = `(() => {
+  const controls = [...document.querySelectorAll("input, select, textarea")]
+    .filter((el) => (el.getAttribute("type") || "").trim().toLowerCase() !== "hidden");
+  return {
+    total: controls.length,
+    elements: controls.slice(0, ${FORM_INPUT_CAP}).map((el) => {
+      const tag = el.tagName.toLowerCase();
+      return {
+        tag,
+        type: tag === "input" ? ((el.getAttribute("type") || "").trim().toLowerCase() || "text") : null,
+        autocomplete: el.getAttribute("autocomplete"),
+      };
+    }),
+  };
+})()`;
+
+/**
+ * Form controls' `autocomplete` attributes, for 1.3.5 -- the `mediaCensus` of that criterion, and read at
+ * the same moment (`censusBeforeNavigating`). See `FORM_INPUT_CENSUS_EXPRESSION` for what it reads and
+ * why the attribute rather than the property.
+ *
+ * Returns `null` rather than throwing on total failure, and `null` means NOT CHECKED -- the rule makes no
+ * claim on it. Carries `targetMatch`/`candidates`/`targetUrl`/`expectedUrl` like every
+ * `pageTarget()`-dependent read, so a capture can say which document the list describes.
+ *
+ * @returns {Promise<{ elements: { tag: string, type: string | null, autocomplete: string | null }[] | null,
+ *   total: number | null, targetMatch: unknown, candidates: unknown, targetUrl: unknown, expectedUrl: unknown }
+ *   | null>}
+ */
+export async function formInputCensus() {
+  try {
+    const target = await pageTarget();
+    const socket = new WebSocket(target.webSocketDebuggerUrl);
+    try {
+      await once(socket, "open", CDP_READY_TIMEOUT_MS);
+      const result = waitForResult(socket, 1, AX_TREE_TIMEOUT_MS);
+      socket.send(JSON.stringify({
+        id: 1,
+        method: "Runtime.evaluate",
+        params: { expression: FORM_INPUT_CENSUS_EXPRESSION, returnByValue: true },
+      }));
+      const value = (await result)?.result?.value;
+      return {
+        elements: Array.isArray(value?.elements) ? value.elements : null,
+        total: typeof value?.total === "number" ? value.total : null,
+        targetMatch: target.targetMatch, candidates: target.candidates,
+        targetUrl: target.url, expectedUrl: expectedPageUrl,
+      };
+    } finally {
+      try { socket.close(); } catch (error) { void error; }
+    }
+  } catch (error) {
+    void error; // a diagnostic probe must never fail a capture; null reads as "not checked"
+    return null;
+  }
+}
 
 /**
  * Media elements the page declares, for 1.4.2 Audio Control.

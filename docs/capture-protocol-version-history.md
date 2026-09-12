@@ -238,3 +238,27 @@ exists precisely so an old corpus can come back.
 
 Deployed with `--allow-protocol-change` stated deliberately. The deploy refusal that guards this constant
 is doing its job: it exists so a bump is never shipped as a side effect of an unrelated change.
+
+## 16 → 17 (2026-09-11): `formInputs`, a new field a rule and a signal read
+
+1.3.5's `addUnidentifiedInputPurpose` (`packages/judge/src/rules.ts`) and the `inputPurposeInvalid` signal
+have read `capture.formInputs` since #869. Until #170, no worker populated it, so every capture on disk
+lacks it, and both readers correctly treat that as not checked. #170 adds the worker-side census
+(`formInputCensus`, `packages/nvda-worker/src/browser-session.mjs`): each form control's `autocomplete`
+**attribute**, read at the same moment as `mediaCensus`.
+
+**This is the constant's own trigger, and 14 → 15 is what skipping it looks like.** #869's five 1.3.5 cases
+were captured fresh under 16 on 2026-09-11 (#957; product-manager's reading on #170), before the census existed. Without a bump the cache
+would keep serving them without `formInputs`, and they would stay BLIND while any case captured later
+fired. A corpus half on one shape and half on another is the mixed-dataset rule in another currency.
+`ceo` ruled for the bump on #170.
+
+The recapture is paid in orchestrator's fleet window, alongside #953's half 2. Deploy uses
+`--allow-protocol-change` there and nowhere else.
+
+**#972 rides the same 17**, by `ceo`'s ruling: the 17 deploy was held until 09:00Z for it, so that one
+recapture covers both changes. It changes what a capture *does*. #953 measured focus already inside the
+chat widget's frame before the first probe on 6 of 6 collapsed captures of #951's page. So before the sweeps,
+focus is now returned to the top document when it sits inside a frame nothing of ours put it there
+(`focusRestore` mark, `observed.headings.focusRestored`). A sweep that still starts inside a frame is marked
+incomplete (`heldBy`). Had #972 missed the window it would have been 18.

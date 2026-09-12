@@ -32,10 +32,11 @@ const flag = (name) => argv.find((a) => a.startsWith(`${name}=`))?.split("=").sl
 
 /** ONE FUNCTION PER SECTION, and not as a style preference.
  *
- * A comment-dense renderer runs to twice its lint budget without lint noticing: `max-lines-per-function`
- * sets `skipComments: true`, so it measures CODE lines while a board report is mostly prose. This file's
- * `render` reached 157 physical lines against a 90-line budget with `npm run lint` green throughout, and
- * `function-size.test.ts` -- which measures PHYSICAL lines -- is the guard that actually holds here.
+ * A comment-dense renderer runs to twice its code-line budget without that budget noticing:
+ * `max-lines-per-function` sets `skipComments: true`, so it measures CODE lines while a board report is
+ * mostly prose. This file's `render` reached 157 physical lines against a 90-line budget with `npm run lint`
+ * green throughout, because the physical budget was then a test (`function-size.test.ts`). It is a lint rule
+ * now, `local/max-physical-lines-per-function` (#908), and it is the budget that actually holds here.
  *
  * Each section takes the whole fact set and destructures only what it reads, so what a section depends on
  * is visible in its first line rather than inferred from its body.
@@ -144,7 +145,8 @@ export function authorship(d, L) {
 /** @param {any} d @param {string[]} L */
 export function lastGate(d, L) {
   const { latestGate, gateIsFresh } = d;
-  L.push("## Last gate result");
+  // WHICH GATE, named (#429): `latestGate` is the newest CONFORMANCE result, not the newest entry of any kind.
+  L.push("## Last conformance gate result (`rules-real-pages`)");
   if (!latestGate) {
     L.push("**Not reported.** No gate output has been recorded in `docs/board/reported/`. This report "
       + "does not read gates itself and must not: a checkout's `runs/` is only as fresh as its last sync "

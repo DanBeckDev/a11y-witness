@@ -17,20 +17,21 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { DOM_CENSUS_EXPRESSION } from "./browser-session.mjs";
 
-const SOURCE = readFileSync(fileURLToPath(new URL("./browser-session.mjs", import.meta.url)), "utf8");
-
-/** The expression as the page will receive it, with the template escapes undone. */
+/**
+ * The expression as the page receives it: IMPORTED, so the template literal is evaluated by module load with
+ * every escape applied -- never read from source with some escapes undone by hand (#969).
+ *
+ * This used to reconstruct the string itself, undoing escaped backticks and escaped dollar signs and nothing
+ * else. The page applies every escape, so a slash-escaped regex passed here and threw on the page: a second
+ * copy of template-literal semantics, one escape short. By NAME still, for the reason the old reader gave --
+ * this module also holds `mediaCensus`'s expression, and a pattern for "the const named EXPRESSION" once
+ * pointed this test at the wrong program.
+ */
 function pageExpression(): string {
-  // Named, because this file shares its module with `mediaCensus`, which has an expression of its own.
-  // A regex for "the const named EXPRESSION" matched whichever came first, so extracting the census to
-  // module level silently pointed this test at the wrong program — it kept passing having examined
-  // something else. Reading a NAME is the difference between a fixture and a coincidence.
-  const match = SOURCE.match(/const DOM_CENSUS_EXPRESSION = `([\s\S]*?)`;/);
-  assert.ok(match, "the census expression must be findable BY NAME, or this test examines nothing");
-  return match[1].replace(/\\`/g, "`").replace(/\\\$/g, "$");
+  assert.equal(typeof DOM_CENSUS_EXPRESSION, "string", "the census expression must be importable BY NAME");
+  return DOM_CENSUS_EXPRESSION;
 }
 
 type El = Record<string, unknown>;
@@ -51,6 +52,10 @@ function element(
     hasAttribute: (k: string) => k in attrs,
     checkVisibility: () => opts.rendered !== false,
     querySelector: () => (titleText ? { textContent: titleText } : null),
+    // `<dialog>` opened with `showModal()` matches `:modal`; one opened with the `open` attribute does
+    // not, and does not seal quick navigation either. The harness has to be able to express both or the
+    // expression's deliberate exclusion of the second is untested.
+    matches: (selector: string) => selector === ":modal" && attrs.modal === "true",
   };
 }
 
@@ -72,6 +77,11 @@ function elementWithoutVisibilityApi(tag: string, attrs: Record<string, string>)
 function runAgainst(
   graphics: El[], tabbable: El[] = [],
   lang: { documentLang?: string; parts?: El[] } = {},
+  // THE DIALOG SELECTORS, served explicitly for the reason the comment above gives: an unserved selector
+  // returns `[]`, `openDialog` comes back `null`, and every assertion about it would pass having run
+  // nothing. `aria` is what the `[role='dialog'][aria-modal='true']` query returns; `native` is what a
+  // bare `dialog` query returns, which the expression then filters by `:modal` itself.
+  dialogs: { aria?: El[]; native?: El[] } = {},
 ): Record<string, unknown> {
   // `documentElement` is a real object here, not a stub returning nothing, because the census compares
   // AGAINST it: a `[lang]` on <html> is the document's language, not a part's, and a harness where the
@@ -86,6 +96,8 @@ function runAgainst(
       if (selector.startsWith("img")) return graphics;
       if (selector.startsWith("a[href]")) return tabbable;
       if (selector === "[lang]") return lang.parts ?? [];
+      if (selector.startsWith("[role='dialog']")) return dialogs.aria ?? [];
+      if (selector === "dialog") return dialogs.native ?? [];
       return [];
     },
   };
@@ -256,4 +268,76 @@ test("a page with no lang anywhere says so, rather than throwing", () => {
   const out = runAgainst([], [], {});
   assert.equal(out.documentLang, "");
   assert.deepEqual(out.partLangs, []);
+});
+
+/**
+ * WHAT THE QUICK-NAVIGATION CURSOR IS SEALED INSIDE — #897.
+ *
+ * A screen reader's quick navigation is confined to an open modal, so `exhausted` inside one is true
+ * about the dialog and not about the page. On `runs/781-r1-hubspot.json/capture-1` the `landmark` sweep's
+ * last stop was `"Hub Bot, dialog"` and the three sweeps after it found 12 chat-widget controls, 2
+ * avatars and 1 link against a census of 79 — each `exhausted`, each correct about where it was, and
+ * nothing on the record saying which.
+ *
+ * The capture that produced the finding predates this field, so these are the only tests that can
+ * exercise it until a capture is taken after the deploy. That is the honest division: the fixture below
+ * proves the defect happened, this proves the field detects it.
+ */
+test("an open ARIA modal is named, so a sealed sweep is distinguishable from a one-link page", () => {
+  const out = runAgainst([], [], {}, {
+    aria: [element("div", { role: "dialog", "aria-modal": "true", "aria-label": "Hub Bot" })],
+  });
+  assert.equal(out.openDialog, "Hub Bot",
+    "the dialog's NAME, not a count — a reader has to go and look at it, and `1` does not say where");
+});
+
+test("no modal is `null`, which is a different answer from nobody asking", () => {
+  assert.equal(runAgainst([], []).openDialog, null,
+    "a page read with no modal open must say so; `undefined` is reserved for a census that failed");
+});
+
+test("a NON-modal dialog does not seal quick navigation and must not be reported", () => {
+  // The false-accusation direction. A `role=dialog` without `aria-modal` leaves the rest of the page
+  // reachable, so marking its sweeps as confined would condemn captures that examined the page fine.
+  const out = runAgainst([], [], {}, {
+    aria: [],
+    native: [element("dialog", { open: "", id: "cookie-banner" })],
+  });
+  assert.equal(out.openDialog, null,
+    "`<dialog open>` is not `showModal()`: only the second matches `:modal` and only the second is "
+    + "inert-backed");
+});
+
+test("a native dialog opened with showModal() IS reported", () => {
+  const out = runAgainst([], [], {}, {
+    native: [element("dialog", { modal: "true", id: "consent" })],
+  });
+  assert.equal(out.openDialog, "consent");
+});
+
+test("a modal that is not rendered is not open", () => {
+  const out = runAgainst([], [], {}, {
+    aria: [element("div", { role: "dialog", "aria-modal": "true", "aria-label": "Hidden" },
+      undefined, { rendered: false })],
+  });
+  assert.equal(out.openDialog, null,
+    "`aria-modal` left on a hidden node is markup the page HAS, not a dialog that is open");
+});
+
+test("a native `:modal` dialog that renders nothing is not open either", () => {
+  // worker-judge's review note on #922: `checkVisibility` was explicit on the ARIA branch and implied on
+  // the native one. `:modal` normally implies rendered — a top-layer dialog — but `showModal()` followed
+  // by `display: none` stays `:modal` and shows nothing, and an asymmetry between the two branches is a
+  // difference the next reader has to reason about.
+  const out = runAgainst([], [], {}, {
+    native: [element("dialog", { modal: "true", id: "hidden-modal" }, undefined, { rendered: false })],
+  });
+  assert.equal(out.openDialog, null);
+});
+
+test("alertdialog counts too, and an unnamed modal falls back to something findable", () => {
+  const out = runAgainst([], [], {}, {
+    aria: [element("div", { role: "alertdialog", "aria-modal": "true", id: "session-expiry" })],
+  });
+  assert.equal(out.openDialog, "session-expiry");
 });

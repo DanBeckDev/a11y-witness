@@ -1333,7 +1333,8 @@ change nothing about what the evidence MEANS, so this is additive exactly as `fa
 **Boy-scout, in passing:** `runCapture` crossed the 90-line physical budget, so the desktop preparation is
 now `prepareDesktop` — extracted because it does one thing at one level of abstraction, not merely to
 shorten its caller. `function-size.test.ts` caught it; ESLint could not, because `skipComments: true`
-lets a comment-dense function run to twice its budget.
+lets a comment-dense function run to twice its budget. (As of #986 ESLint does catch it: the same
+budget is `local/max-physical-lines-per-function`, and the test is gone.)
 
 ---
 
@@ -3006,6 +3007,24 @@ it is a recorded gap and not a feature.
 **And the five captures were never one population.** `7a00f961` (2026-09-09 12:20:26 +0100, #685/#691) moved `censusBeforeNavigating()` from after `runProbeSequence` to before it — its own comment says *"before the sweep, before the focus probe"* — and the five captures straddle it. They ran **four different worker builds** (`74f37905`, `94e91f68`, `691969f6` twice, `9ad992a4`). So the morning pair counted the page **after the sweeps had walked and activated it** (`formControl` 224) and the afternoon three counted it **at load** (125). Same page, two definitions of *present*, and **the 0.45-to-2.1 swing is the instrument crossing a code change mid-dataset** rather than anything about IKEA. Any ratio table over these five compares builds, not captures.
 
 The one comparison that survives inside a single build is `heading` on the afternoon three: the census counts **69 at load** and the sweep announces **80 by ~100 s**, on the one sweep with no `onItem`, so nothing the tool did can explain the gap. **The page gained at least eleven headings in the first hundred seconds of the capture**, and that is the fact under every ratio here: a completeness denominator taken at one instant does not bound a numerator gathered over the next seven minutes.
+
+**How many captures this actually costs, across the corpus:**
+
+```bash
+npm run lab:job -- -e job=full-page-claims      # the VERDICT, on the lab, which owns the corpus
+npm run lab:full-page-claims                    # the same script locally -- a PRE-CHECK only
+```
+
+`ranOutShortOfTheCensus` (#894) withholds Requirement 2's full-page sentence from a sweep that said it ran
+out having made fewer round trips than the census counts elements. `lab:full-page-claims` applies it to every
+real-page capture and names, per page, the sweep that withheld the claim and the three numbers behind it. It
+keeps *lost the claim*, *no usable census* and *predates #887's `trips`* as three separate totals, because
+collapsing them is the defect this whole area keeps producing — and it refuses below five captures, since a
+zero over an empty directory reads as "nothing was found" rather than "nothing was examined".
+
+**Run it on the lab or not at all.** `runs/` in any checkout is a copy only as fresh as its last sync; two
+local copies produced two different page lists for this question on 2026-09-09, which is why neither reached
+the board.
 
 **Three definitions remain three definitions** — `domCensus.formField` counts DOM elements, `structureCensus.formControl` counts AX nodes in `FORM_CONTROL_ROLES` (excluding `link`, `menuitem`, `option`, `tab`), and `sweep.found` counts distinct announcements — but the role set cannot be settled before the moment is. A wider bucket measured at load, compared against a sweep that ran five minutes later on content it partly revealed itself, is a corrected number about the wrong instant.
 

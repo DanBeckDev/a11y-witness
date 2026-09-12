@@ -88,7 +88,7 @@ import { requireControlPlaneHost, requireControlPlaneKey } from "./control-plane
  * An unrecognised flag is otherwise IGNORED, so it runs the default and reports success.
  */
 refuseUnknownFlags(
-  ["--playbook=", "--ref=", "--limit=", "--serial=", "--allow-protocol-change", "--allow-edge-downgrade"],
+  ["--playbook=", "--ref=", "--limit=", "--serial=", "--allow-protocol-change", "--allow-edge-downgrade", "--apply"],
   { entry: import.meta.url, command: "npm run fleet:deploy" });
 
 /** CT 120. Named here rather than parsed out of the inventory, which needs Ansible to read properly. */
@@ -119,8 +119,37 @@ const CHECKOUT = CONTROL_PLANE_CHECKOUT;
 // keyboard. It also inherits the zero-host refusal below, which is the guard whose absence let a deploy to
 // nothing exit 0 -- though it targets `control_plane`, not `a11y_workers`, so an empty fleet is not its
 // failure mode.
-const PLAYBOOKS =
-  ["deploy.yml", "sleep.yml", "provision-role.yml", "recover.yml", "inventory-install.yml", "control-host-install.yml"];
+// `os-rollback.yml` (#921) is the one entry that changes a box's OPERATING SYSTEM, so it is also the one
+// that refuses to run without `--limit=<one worker>` and does nothing but read without `--apply`
+// (`osRollbackRefusal` below, and the playbook's own guards).
+const PLAYBOOKS = ["deploy.yml", "sleep.yml", "provision-role.yml", "recover.yml", "inventory-install.yml",
+  "control-host-install.yml", "os-rollback.yml"];
+
+/** Exactly one worker, by name -- what `os-rollback.yml` needs where every other playbook takes a list. */
+const ONE_WORKER = /^a11y-worker-[0-9]{1,3}$/;
+
+/**
+ * THE TWO REFUSALS THAT BELONG TO AN OS CHANGE, and to nothing else in this allowlist (#921).
+ *
+ * `--limit` is optional everywhere else because omitting it means "the fleet", which is what a deploy
+ * wants. For a Windows rollback, "the fleet" is the one target that must never be expressible, so the
+ * flag is required and must name exactly ONE worker. `--apply` is the switch that turns the playbook's
+ * read-only dry run into the change; on any other playbook it would be accepted and ignored, which is the
+ * silently-discarded-flag shape `refuseUnknownFlags` exists for, so it is refused there by name.
+ *
+ * @param {{ chosen: string, limitFlag: string | undefined, apply: boolean }} args
+ * @returns {string | null} the refusal to print, or null when the combination is allowed
+ */
+function osRollbackRefusal({ chosen, limitFlag, apply }) {
+  if (apply && chosen !== "os-rollback.yml") {
+    return `refusing --apply with --playbook=${chosen}: only os-rollback.yml has a change it holds back.`;
+  }
+  if (chosen === "os-rollback.yml" && !ONE_WORKER.test(limitFlag ?? "")) {
+    return "refusing os-rollback.yml without --limit=<one worker>: it changes ONE box's operating system, "
+      + `and "${limitFlag ?? "(no --limit, i.e. the whole fleet)"}" is not one worker.`;
+  }
+  return null;
+}
 
 /**
  * Ansible host patterns this may target, by SHAPE. Same containment as the playbook list, and needed for
@@ -173,7 +202,9 @@ function validRef(ref) {
  *
  * @type {Record<string, number>}
  */
-const PLAYBOOK_TIMEOUT_MS = { "provision-role.yml": 4 * 60 * 60 * 1000 };
+// `os-rollback.yml`: a Windows rollback runs inside a restart that can take the better part of an hour, and
+// the play waits for it (`win_reboot`'s own ceiling is 90 minutes), so the default would kill a working one.
+const PLAYBOOK_TIMEOUT_MS = { "provision-role.yml": 4 * 60 * 60 * 1000, "os-rollback.yml": 2 * 60 * 60 * 1000 };
 const DEFAULT_PLAYBOOK_TIMEOUT_MS = 30 * 60 * 1000;
 
 /**
@@ -231,6 +262,28 @@ function ssh(command, { capture = false, timeoutMs = DEFAULT_PLAYBOOK_TIMEOUT_MS
  * `-e ref=<sha>` becoming an unresolvable `origin/<sha>`, and two of the uses had `failed_when: false`, so
  * the empty read was taken for a zero.
  */
+/**
+ * #971: what a revision resolves to in THIS checkout, or `null` when it does not resolve at all.
+ *
+ * `null` rather than a throw, because a missing `origin/<ref>` is a state the caller decides about, not an
+ * error to unwind on -- and rather than the empty string, because `""` compares falsy-equal to too many
+ * things and this value is compared for EQUALITY with another SHA.
+ * @param {string} rev
+ * @returns {string | null}
+ */
+function resolveOrNull(rev) {
+  try {
+    const sha = execFileSync("git", ["rev-parse", "--verify", "--quiet", `${rev}^{commit}`],
+      { encoding: "utf8", env: sandboxGitEnv() }).trim();
+    return sha === "" ? null : sha;
+  } catch {
+    // `rev-parse --verify --quiet` exits 1 on an unresolvable revision, which is the ANSWER here rather
+    // than a failure -- and swallowing it is safe only because the answer is `null`, which this file's
+    // callers refuse rather than treat as agreement.
+    return null;
+  }
+}
+
 function localBranch() {
   return execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8", env: sandboxGitEnv() }).trim();
 }
@@ -246,7 +299,7 @@ const argOf = (/** @type {string} */ name) => flagValue(process.argv, name);
  * these refusals exists because the value reaches a shell on the box holding the fleet SSH key.
  *
  * @returns {{chosen: string, limitFlag: string|undefined, serialFlag: string|undefined, ref: string,
- *            allowEdgeDowngrade: boolean}}
+ *            allowEdgeDowngrade: boolean, apply: boolean}}
  */
 function parseArgs() {
   const refuse = (/** @type {string} */ message) => {
@@ -282,10 +335,13 @@ function parseArgs() {
     refuse(`refusing --serial with --playbook=${chosen}: only provision-role.yml batches.`);
   }
 
+  const apply = process.argv.includes("--apply");
+  const osRefusal = osRollbackRefusal({ chosen, limitFlag, apply });
+  if (osRefusal) refuse(osRefusal);
   const ref = argOf("ref") ?? localBranch();
   if (!validRef(ref)) refuse(`refusing --ref=${ref}: a commit or simple branch name only.`);
 
-  return { chosen, limitFlag, serialFlag, ref, allowEdgeDowngrade };
+  return { chosen, limitFlag, serialFlag, ref, allowEdgeDowngrade, apply };
 }
 
 /**
@@ -396,14 +452,14 @@ function runBootstrapFromHere(chosen) {
  * `main` at 92 lines — a check ESLint cannot make, since `skipComments: true` lets a comment-dense
  * function run to twice its 70-line lint budget.
  *
- * ONE OBJECT, not six positionals — `max-params` is 4 here and the repo's rule is to bundle cohesive
- * arguments rather than raise the ceiling. These six are one thing: what to deploy and how.
+ * ONE OBJECT, not seven positionals — `max-params` is 4 here and the repo's rule is to bundle cohesive
+ * arguments rather than raise the ceiling. These seven are one thing: what to deploy and how.
  *
  * @param {{ chosen: string, ref: string, expected: string, limitFlag: string|undefined,
- *           serialFlag: string|undefined, allowEdgeDowngrade: boolean }} spec
+ *           serialFlag: string|undefined, allowEdgeDowngrade: boolean, apply: boolean }} spec
  * @returns {string} the unit name
  */
-function startPlaybookUnit({ chosen, ref, expected, limitFlag, serialFlag, allowEdgeDowngrade }) {
+function startPlaybookUnit({ chosen, ref, expected, limitFlag, serialFlag, allowEdgeDowngrade, apply }) {
   // SUPERVISED, NOT FOREGROUND — and this is the whole reason a deploy can no longer be half-done.
 //
 // It used to be one synchronous `ssh ... ansible-playbook`, so the ten-machine reboot was only as
@@ -460,7 +516,8 @@ try {
     // only what it recognises — and `refuseUnknownFlags` inspected only `--` arguments, so the whole
     // fleet was provisioned believing an authorisation had been given that never arrived. Both halves
     // are fixed; this is the half that gives the operator something real to type.
-    + (allowEdgeDowngrade ? " -e worker_edge_allow_downgrade=true" : ""),
+    + (allowEdgeDowngrade ? " -e worker_edge_allow_downgrade=true" : "")
+    + (apply ? " -e a11y_os_rollback_apply=true" : ""),
   { timeoutMs: PLAYBOOK_TIMEOUT_MS[chosen] ?? DEFAULT_PLAYBOOK_TIMEOUT_MS });
 } catch (cause) {
   // `execFileSync` throws an Error carrying the child's exit status, which node's types do not describe.
@@ -521,6 +578,70 @@ export function controlPlaneCheckout(ref, expected) {
 }
 
 /**
+ * REFUSE A REF THAT MEANS SOMETHING DIFFERENT HERE THAN IT DOES ON ORIGIN -- pure, over two SHAs (#971).
+ *
+ * `expected` is resolved with `git rev-parse <ref>` IN THIS CHECKOUT, and on a machine with worktrees a
+ * local branch sits wherever the last worktree left it. Measured 2026-09-11: `primary:update` put the
+ * local `main` on `f0d69cb7` at 05:44Z; by the deploy, `origin/main` was `25a5f680`. **The control plane
+ * shipped `f0d69cb7` and the read-back passed** -- everything internally consistent and one merge stale.
+ * `worker:code` found it afterwards as 10 of 10 STALE.
+ *
+ * The trap was already documented thirty lines up ("`--ref=main` is not the fix and makes it worse") and
+ * nothing refused it. A fact recorded in a comment is a fact somebody has to remember, which is the same
+ * sentence the SHA refusal below this one was written under.
+ *
+ * `origin === null` -- `origin/<ref>` does not resolve -- IS ALSO A REFUSAL, and deliberately so. "Could
+ * not ask" answering "clear" is this repository's most expensive recurring shape, and it is the rule the
+ * two guards either side of this one already follow (`requireCommitIsOnOrigin`'s empty answer is the
+ * refusal; `armDecision`'s null labels are refused rather than read as unheld). It also fails EARLIER
+ * than the alternative: the control plane's own `git checkout <ref>` would fail on a branch it does not
+ * have, in git's words, naming neither the flag nor the reason.
+ *
+ * THE MESSAGE NAMES BOTH WAYS OUT rather than guessing which. A local tip that differs may be BEHIND
+ * origin (deploy origin's tip: `primary:update`) or AHEAD of it (deploy your own commit: push it and name
+ * its branch). Telling an operator to fast-forward when they meant to ship unpushed work is a refusal
+ * that cannot be followed, and this file's neighbours already treat that as the defect rather than a
+ * wording preference.
+ *
+ * @param {{ ref: string, local: string, origin: string | null }} resolved
+ * @returns {string | null} the refusal to print, or `null` when the two agree
+ */
+export function staleRefRefusal({ ref, local, origin }) {
+  if (origin === local) return null;
+  const short = (/** @type {string} */ sha) => sha.slice(0, 12);
+  if (origin === null) {
+    return [
+      `REFUSING: --ref=${ref} resolves to ${short(local)} here, and \`origin/${ref}\` does not resolve.`,
+      "There is nothing to compare it against, and the control plane has no such branch to check out --",
+      "its own `git checkout` would fail in git's words, naming neither the flag nor the reason.",
+      "",
+      `  Push the branch:   git push -u origin ${ref}`,
+      "  Or name one origin already has:   --ref=main   (with `npm run primary:update` run first)",
+      "",
+    ].join("\n");
+  }
+  // Both SHAs on their own line and COLUMN-ALIGNED, so the eye lands on the digits that differ rather than
+  // on two 12-character strings buried in prose. `padEnd` to whichever label is longer, so it is the SHORT
+  // one that moves -- computing a pad for one side only misaligns by the difference, which is how the
+  // first version of this shipped and what its own test caught.
+  const labels = ["  this checkout:", `  origin/${ref}:`];
+  const column = Math.max(...labels.map((l) => l.length)) + 1;
+  return [
+    `REFUSING: --ref=${ref} means a DIFFERENT COMMIT here than on origin.`,
+    `${labels[0].padEnd(column)}${short(local)}`,
+    `${labels[1].padEnd(column)}${short(origin)}`,
+    "",
+    "Deploying would ship the local one and the read-back would PASS, because both halves of that check",
+    "use the same stale SHA -- internally consistent and a merge behind. That is how 10 of 10 boxes went",
+    "stale on 2026-09-11 with every check green.",
+    "",
+    "  To deploy origin's tip:      npm run primary:update   (then re-run this)",
+    "  To deploy your own commit:   push it, and pass --ref=<that branch>",
+    "",
+  ].join("\n");
+}
+
+/**
  * REFUSE A COMMIT THE CONTROL PLANE CANNOT FETCH, rather than letting `merge --ff-only` say it in git's
  * words. An operator on an unpushed commit is the ordinary case -- work in a worktree, deploy from the
  * primary -- and `fatal: not something we can merge` names neither the flag nor the reason, which is this
@@ -550,7 +671,7 @@ async function main() {
   // Throws before anything else if neither A11Y_CONTROL_HOST nor its installed file exist -- see #83, #285.
   CONTROL_PLANE = requireControlPlaneHost();
   requireControlPlaneKey(); // same, for A11Y_PVE_KEY -- see #85
-  const { chosen, limitFlag, serialFlag, ref, allowEdgeDowngrade } = parseArgs();
+  const { chosen, limitFlag, serialFlag, ref, allowEdgeDowngrade, apply } = parseArgs();
   await guardProtocolChange(chosen);
 
   // What that ref means HERE, resolved before anything is asked of the control plane. Comparing a commit
@@ -581,6 +702,15 @@ async function main() {
     process.exit(2);
   }
 
+  // #971: WHAT THAT REF MEANS ON ORIGIN, asked before anything is shipped. `null` when `origin/<ref>`
+  // does not resolve, which `staleRefRefusal` refuses rather than reads as agreement.
+  const onOrigin = resolveOrNull(`origin/${ref}`);
+  const stale = staleRefRefusal({ ref, local: expected, origin: onOrigin });
+  if (stale) {
+    process.stderr.write(stale);
+    process.exit(2);
+  }
+
   process.stdout.write(`\n  control plane: ${CONTROL_PLANE}   playbook: ${chosen}\n`
     + `  ref: ${ref} (${expected.slice(0, 12)})\n\n`);
   requireCommitIsOnOrigin(ref, expected);
@@ -606,7 +736,7 @@ async function main() {
   // whole command line and whose stack is node's internals, which buries "which box failed" under twelve
   // lines of module loader — and the wrapper around it then reported success. Ansible has already printed
   // its own PLAY RECAP by this point; the job here is to exit with its status and say so in one line.
-  const unit = startPlaybookUnit({ chosen, ref, expected, limitFlag, serialFlag, allowEdgeDowngrade });
+  const unit = startPlaybookUnit({ chosen, ref, expected, limitFlag, serialFlag, allowEdgeDowngrade, apply });
 
   process.stdout.write(`  started as ${unit} on ${CONTROL_PLANE}. It now outlives this terminal.\n`
     + `  if this command dies, the deploy does not — follow it again with the same command, or:\n`
@@ -750,4 +880,4 @@ async function followUnit(unit, budgetMs) {
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) await main();
 
 export { validRef, PLAYBOOKS, LIMIT_PATTERN, SERIAL_PATTERN, PLAYBOOK_TIMEOUT_MS,
-  DEFAULT_PLAYBOOK_TIMEOUT_MS, onTheControlPlane, journalScope };
+  DEFAULT_PLAYBOOK_TIMEOUT_MS, onTheControlPlane, journalScope, osRollbackRefusal };

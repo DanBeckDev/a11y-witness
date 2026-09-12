@@ -22,11 +22,13 @@ import { nvda } from "@guidepup/guidepup";
 import {
   crossCheckStructure, dedupeKey, elementsListRowName, MIN_CONTROL_NAME_LEN, probeKindFor,
   sweepStepFromSpeech, focusOrderCycled, focusWalkTruncated, sweepObservation, notObserved, recordWhatWasAsked,
+  focusInFrameOf, focusRestoreDecision, focusRestoredRecord, heldInFrame,
   focusRevealVerdict, focusEventVerdict, censusGrowth, focusResetOutcome, titleSourceVerdict,
   activationDeadline, activationBudgetMark,
 } from "./capture-pure.mjs";
 import {
-  currentPageUrl, mediaCensus, structuralCensus, domCensus, truncatedAnnouncements,
+  currentPageUrl, mediaCensus, formInputCensus, structuralCensus, domCensus, truncatedAnnouncements,
+  restoreTopDocumentFocus,
   installFocusEventLog, collectFocusEventLog, resetFocusToDocumentStart, documentTitle,
 } from "./browser-session.mjs";
 import { matchesFieldName, matchesWithin, fillActionFor } from "./field-match.mjs";
@@ -90,7 +92,7 @@ import {
 //
 // Bumping it forces a full recapture. That is the point.
 //
-// Full history of every bump (2 -> 14) and why: docs/capture-protocol-version-history.md. The
+// Full history of every bump and why: docs/capture-protocol-version-history.md. The
 // pattern that repeats: additive alone does not excuse skipping a bump if the SAME page can now
 // produce DIFFERENT evidence than before, and bundling an evidence change with a recapture already
 // in flight is how this file's own rule pays for the fleet time once rather than twice.
@@ -161,6 +163,43 @@ const SWEEP_SILENT_RETRIES = 3;
 // the announcements only interaction reveals. Returns the structure model and
 // the interaction model.
 /**
+ * THE DOM-ONLY EVIDENCE onto the result, and each census's diagnostics onto its own mark -- attributes no
+ * screen reader can report, so the only fields in a capture NVDA could not have produced.
+ *
+ *   `media`       1.4.2 Audio Control: `autoplay` and `muted` have no accessibility-tree equivalent.
+ *   `formInputs`  1.3.5 Identify Input Purpose (#170, `media`'s twin): each control's `autocomplete`
+ *                 attribute. `[]` means the page has no form control. `total` sits BESIDE `count` on its mark
+ *                 because `elements` is capped (`FORM_INPUT_CAP`), and a truncated list that reads as complete
+ *                 is the defect one layer on. Both are numbers on a `formInputCensus` mark, which no census
+ *                 reader takes element counts from (`censusElementCounts` and `censusFromDiagnostics` read
+ *                 `structureCensus` only).
+ *
+ * Null means the census did not run, and the rules reading these make no claim on null -- a probe failure
+ * must never become a silent pass. Assigned onto `result` rather than a new top-level field so each travels
+ * with the rest of the evidence. `.elements` only -- `targetMatch`/`candidates`/`targetUrl`/`expectedUrl` are
+ * diagnostic, not evidence, and go on the mark instead, exactly like `census`/`dom`.
+ *
+ * @param {Record<string, any>} result the structural pass's accumulator
+ * @param {{ mediaRead: Record<string, any> | null, formsRead: Record<string, any> | null,
+ *           readAt: Record<string, { readAt: { startedAtMs: number, tookMs: number } }> }} reads
+ * @param {Diag} diag
+ */
+function recordDomOnlyEvidence(result, { mediaRead, formsRead, readAt }, diag) {
+  result.media = mediaRead?.elements ?? null;
+  diag.mark("mediaCensus", mediaRead
+    ? { count: mediaRead.elements?.length ?? null, targetMatch: mediaRead.targetMatch,
+        candidates: mediaRead.candidates, targetUrl: mediaRead.targetUrl, expectedUrl: mediaRead.expectedUrl,
+        ...readAt.media }
+    : { error: "not counted", ...readAt.media });
+  result.formInputs = formsRead?.elements ?? null;
+  diag.mark("formInputCensus", formsRead
+    ? { count: formsRead.elements?.length ?? null, total: formsRead.total, targetMatch: formsRead.targetMatch,
+        candidates: formsRead.candidates, targetUrl: formsRead.targetUrl, expectedUrl: formsRead.expectedUrl,
+        ...readAt.formInputs }
+    : { error: "not counted", ...readAt.formInputs });
+}
+
+/**
  * Ask Chromium how much there WAS to find — the census, taken during `navigateByStructure` itself — then
  * mark it and cross-check it against the sweep.
  *
@@ -190,12 +229,13 @@ export async function navigateByStructureThenAudit(options) {
   // `navigateByStructure`: an inferred type makes adding evidence the error and dropping it the default.
   /** @type {{ structure: CapturedStructure, interaction: CapturedInteraction,
    *           observed: Record<string, Observation>, media?: Record<string, unknown>[] | null,
+   *           formInputs?: Record<string, unknown>[] | null,
    *           census: Record<string, any>, dom: Record<string, any> | null,
-   *           mediaCensus: Record<string, any> | null,
-   *           readAt: Record<"census"|"dom"|"media",
+   *           mediaCensus: Record<string, any> | null, formInputCensus: Record<string, any> | null,
+   *           readAt: Record<"census"|"dom"|"media"|"formInputs",
    *                          { readAt: { startedAtMs: number, tookMs: number } }> }} */
   const result = await navigateByStructure(options);
-  const { census, dom, mediaCensus: mediaRead, readAt } = result;
+  const { census, dom, mediaCensus: mediaRead, formInputCensus: formsRead, readAt } = result;
   // BESIDE the tree census, never instead of it. The two answer different questions — what Chromium
   // EXPOSES versus what the markup CONTAINS — and it is their disagreement that is informative:
   // `dom.heading 40, census.heading 0` is a finding about the page, `0 and 0` is a finding about us.
@@ -210,18 +250,7 @@ export async function navigateByStructureThenAudit(options) {
   // Marked even when NULL, because "the DOM was not counted" and "the DOM has none of these" must never
   // be the same silence — the rule `refreshBrowseBuffer` cost this project a whole corpus by breaking.
   options.diag.mark("domCensus", { ...(dom ?? { error: "not counted" }), ...readAt.dom });
-  // 1.4.2 Audio Control, from the DOM. `autoplay` and `muted` have no accessibility-tree equivalent, so
-  // this is the one field here that no screen reader could have produced. Null means the probe did not
-  // run, and the rule reading it makes no claim on null — a probe failure must never become a silent pass.
-  // Assigned onto `result` rather than a new top-level field so it travels with the rest of the evidence.
-  // `.elements` only — `targetMatch`/`candidates`/`targetUrl`/`expectedUrl` are diagnostic, not evidence,
-  // and go on the mark below instead, exactly like `census`/`dom` above.
-  result.media = mediaRead?.elements ?? null;
-  options.diag.mark("mediaCensus", mediaRead
-    ? { count: mediaRead.elements?.length ?? null, targetMatch: mediaRead.targetMatch,
-        candidates: mediaRead.candidates, targetUrl: mediaRead.targetUrl, expectedUrl: mediaRead.expectedUrl,
-        ...readAt.media }
-    : { error: "not counted", ...readAt.media });
+  recordDomOnlyEvidence(result, { mediaRead, formsRead, readAt }, options.diag);
   // `"error" in census` rather than `!census.error`. Both are true at runtime, but only the first NARROWS
   // -- the success branch carries an index signature, so reading `.error` off it is legal and tells the
   // compiler nothing. This check is the one place that already handled the error branch correctly;
@@ -490,8 +519,8 @@ function probePasses(ctx) {
  *
  * @param {Diag} diag the diagnostics recorder, for its clock only -- this function marks nothing
  * @returns {Promise<{ census: Record<string, any>, dom: Record<string, any> | null,
- *                      mediaCensus: Record<string, any> | null,
- *                      readAt: Record<"census"|"dom"|"media",
+ *                      mediaCensus: Record<string, any> | null, formInputCensus: Record<string, any> | null,
+ *                      readAt: Record<"census"|"dom"|"media"|"formInputs",
  *                                     { readAt: { startedAtMs: number, tookMs: number } }> }>}
  */
 async function censusBeforeNavigating(diag) {
@@ -504,6 +533,11 @@ async function censusBeforeNavigating(diag) {
   const dom = await domCensus();
   const mediaAt = diag.sinceStart();
   const media = await mediaCensus();
+  // #170: 1.3.5's DOM census, at the same moment as 1.4.2's and for the same reason -- `autocomplete`, like
+  // `autoplay`, is an attribute no screen reader can report, and a navigating probe must not have moved the
+  // tab first.
+  const formsAt = diag.sinceStart();
+  const forms = await formInputCensus();
   // START and DURATION, because a read is an interval and only the pair says how wide it is. The
   // alternative -- recording the end and calling the read instantaneous -- is a claim in a comment, and
   // `markPageState`'s `tookMs` exists because this file already learned that a claim about cost has to be
@@ -516,9 +550,10 @@ async function censusBeforeNavigating(diag) {
   const readAt = {
     census: { readAt: { startedAtMs: censusAt, tookMs: domAt - censusAt } },
     dom: { readAt: { startedAtMs: domAt, tookMs: mediaAt - domAt } },
-    media: { readAt: { startedAtMs: mediaAt, tookMs: diag.sinceStart() - mediaAt } },
+    media: { readAt: { startedAtMs: mediaAt, tookMs: formsAt - mediaAt } },
+    formInputs: { readAt: { startedAtMs: formsAt, tookMs: diag.sinceStart() - formsAt } },
   };
-  return { census, dom, mediaCensus: media, readAt };
+  return { census, dom, mediaCensus: media, formInputCensus: forms, readAt };
 }
 
 /**
@@ -615,7 +650,7 @@ function activationBudgetFor({ formState, probeForms, deadline, interaction, tas
 async function navigateByStructure({ deadline, diag, probeForms, probeFocus, probeTables, probeNavigation,
   formState, probeDialog, probeArrows, probeTyping, probeFocusReveal, probeFocusContext: probeFocusContext_,
   probeElementsList, probeOrder, task }) {
-  const { census, dom, mediaCensus: mediaCensus_, readAt } = await censusBeforeNavigating(diag);
+  const reads = await censusBeforeNavigating(diag);
   // BOTH ACCUMULATORS ARE DECLARED, because both are filled in by probes that run later and elsewhere.
   // An inferred type here describes only the fields present at construction -- `never[]` for each array,
   // and no `navigatedOnSubmit`, `postSubmitNames` or `media` at all -- so every probe that adds evidence
@@ -659,7 +694,7 @@ async function navigateByStructure({ deadline, diag, probeForms, probeFocus, pro
     structure, interaction, observed, onFormField: activation.onFormField, probeForms, probeTables, probeFocus,
     probeDialog, probeArrows, probeTyping, probeFocusReveal, probeFocusContext: probeFocusContext_, deadline, diag, trips,
   });
-  await runProbeSequence({ probeOrder, diag, runSweep, runFocus });
+  await runProbeSequence({ probeOrder, diag, runSweep, runFocus, observed });
   activation.markInto(diag);
   // AFTER the sweep, because the sweep is what establishes where the fields are and reads them in browse
   // mode — and because filling changes the page, so a sweep afterwards would describe a document the
@@ -700,7 +735,7 @@ async function navigateByStructure({ deadline, diag, probeForms, probeFocus, pro
   return { structure, interaction: assembleAndMark({
     structure, interaction, postSubmitFields, focusOrder, routeChange, dialogEscape, arrowNavigation,
     typedFeedback, focusContext, focusReveal, focusEvents, diag,
-  }), observed, census, dom, mediaCensus: mediaCensus_, readAt };
+  }), observed, ...reads };
 }
 
 /**
@@ -992,7 +1027,7 @@ async function collectByType(commands, ctx) {
   // `sweep:<label>` rather than a new mark type: `probeStates` already groups `pageState` by
   // `beforeProbe` and compares them with `FINGERPRINT_KEYS`, so this answers per sweep with no new
   // comparator and no second spelling of the key list.
-  await markPageState(`sweep:${ctx.label}`, ctx.diag);
+  const scopeAt = await markPageState(`sweep:${ctx.label}`, ctx.diag);
   /** @type {string[]} */
   const out = [];
   /** @type {Set<string>} */
@@ -1032,6 +1067,16 @@ async function collectByType(commands, ctx) {
     prevStop: prevOutcome?.stop, nextStop: nextOutcome?.stop,
     prevStopPhrase: prevOutcome?.stopPhrase, nextStopPhrase: nextOutcome?.stopPhrase,
     prevCount,
+    // WHAT THIS SWEEP WAS SEALED INSIDE, if anything -- #897. `exhausted` is NVDA's own "no next link",
+    // and inside an open modal it is true about the dialog rather than the page: on
+    // `runs/781-r1-hubspot.json/capture-1` the `landmark` sweep ended on "Hub Bot, dialog" and the three
+    // sweeps after it found 12 chat-widget controls, 2 avatars and 1 link against a census of 79, each
+    // reporting `exhausted` and each correct about where it was.
+    //
+    // `undefined` when the census could not be read at all, and `null` when it was read and there was no
+    // modal -- a distinction this project pays for whenever it is collapsed. A reader must be able to tell
+    // "no dialog" from "nobody asked".
+    scope: scopeAt ? { openDialog: scopeAt.openDialog ?? null } : undefined,
     phrases: out.slice(),
   });
   // BESIDE the mark, not instead of it. The mark goes to `diagnostics`, which is a FORBIDDEN_INPUT_KEY --
@@ -1040,7 +1085,15 @@ async function collectByType(commands, ctx) {
   // Keyed by the CHANNEL it fills (`headings`), not by the sweep's diagnostic label (`heading`). The mark's
   // `type` is existing evidence and must not move: renaming it to line the two up would change every
   // capture's diagnostics to save one lookup.
-  if (ctx.observed) ctx.observed[ctx.observedAs ?? ctx.label] = sweepObservation(prevOutcome, nextOutcome);
+  //
+  // `focusInFrame` (#953) rides on the same record: where focus sat when this sweep started, from the census
+  // read above. HERE for the same reason as that read -- every sweep reaches the page through this function.
+  if (ctx.observed) {
+    ctx.observed[ctx.observedAs ?? ctx.label] = { ...sweepObservation(prevOutcome, nextOutcome), ...focusInFrameOf(scopeAt) };
+    // #972: a sweep that STARTED inside a frame walked the frame, so it is not the page's evidence however
+    // cleanly NVDA ran out -- marked incomplete, naming what held it. After a restore this is the backstop.
+    ctx.observed[ctx.observedAs ?? ctx.label] = heldInFrame(ctx.observed[ctx.observedAs ?? ctx.label], focusInFrameOf(scopeAt));
+  }
   return out;
 }
 
@@ -1093,6 +1146,12 @@ async function markPageState(beforeProbe, diag) {
   // without a benchmark. `sweep` is already the largest phase of a real page (#397) and a fingerprint
   // that made it larger would be the next thing worth a row.
   diag.mark("pageState", { beforeProbe, tookMs: Date.now() - startedAt, ...(dom ?? { error: "not counted" }) });
+  // RETURNED as well as marked, so the sweep can carry its own scope rather than being joined to this
+  // mark by position -- #863's finding, where a walk's document lived on a separate mark and the two were
+  // related only by ordering. `beforeProbe` keys this one by NAME, which is better, but a verdict and the
+  // scope it is about belong on one record: a reader of `sweep` should not have to know `pageState` exists.
+  // No second read and no extra round trip; this is the same `dom` already fetched above.
+  return dom;
 }
 
 /**
@@ -1115,19 +1174,54 @@ async function markPageState(beforeProbe, diag) {
  * navigate. Three of three pages differed; the property this plan is built on was simply not true.
  *
  * @param {{ probeOrder: string | undefined, diag: Diag,
- *           runSweep: () => Promise<void>, runFocus: () => Promise<void> }} ctx
+ *           runSweep: () => Promise<void>, runFocus: () => Promise<void>,
+ *           observed?: Record<string, any> }} ctx
  */
-async function runProbeSequence({ probeOrder, diag, runSweep, runFocus }) {
+async function runProbeSequence({ probeOrder, diag, runSweep, runFocus, observed }) {
   const sequence = probeSequence(probeOrder);
   diag.mark("probeOrder", { order: sequence.join(","), requested: probeOrder ?? "default" });
+  /** @type {string | null} */
+  let restoredFrom = null;
   for (const [i, step] of sequence.entries()) {
     if (i > 0) await establishBrowseMode(diag);
     // BEFORE each probe, so two probes' evidence can be told apart from two probes' PAGES. D3 restores what
     // the screen reader carries between probes; this records what the PAGE carried, which D3 cannot fix
     // because a disclosure the sweep opened cannot be un-opened.
-    await markPageState(step, diag);
+    const state = await markPageState(step, diag);
+    // #972: THIS reading is where #953 found focus already inside the chat widget's frame, before any probe.
+    if (i === 0) restoredFrom = await restoreFocusBeforeSweeps(state, step, diag);
     await (step === "sweep" ? runSweep() : runFocus());
   }
+  // On the FIRST sweep's own record (headings leads `sweepEveryStructuralType`), with `left` read from that
+  // sweep's own census -- so whether the restore held costs no second read.
+  if (restoredFrom !== null && observed?.headings) {
+    observed.headings = { ...observed.headings, focusRestored: focusRestoredRecord(restoredFrom, observed.headings) };
+  }
+}
+
+/**
+ * Before the sweeps, return focus to the top document if it sits inside a frame nothing of ours put it in
+ * (`focusRestoreDecision`, #972). Marks `focusRestore` EVERY time -- `attempted: false` with why, or
+ * `attempted: true` with the frame and whether the page took the blur -- so "no restore was needed" and
+ * "nobody checked" never read the same.
+ *
+ * After a restore, `establishBrowseMode`: the caret may still sit in the frame's own tree interceptor, and
+ * `moveToContainingBrowseModeDocument` is the between-probe remedy for exactly that.
+ *
+ * @param {Record<string, any> | null} state the census read before the first probe
+ * @param {string} firstStep @param {Diag} diag
+ * @returns {Promise<string | null>} the frame focus was taken out of, or null when no restore was attempted
+ */
+async function restoreFocusBeforeSweeps(state, firstStep, diag) {
+  const decision = focusRestoreDecision(state, firstStep);
+  if (!decision.restore) {
+    diag.mark("focusRestore", { attempted: false, why: decision.why });
+    return null;
+  }
+  const outcome = await restoreTopDocumentFocus();
+  await establishBrowseMode(diag);
+  diag.mark("focusRestore", { attempted: true, from: decision.from, blurred: outcome?.blurred ?? null });
+  return decision.from;
 }
 
 /**

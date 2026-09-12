@@ -96,6 +96,44 @@
 # structurally cannot run either one (`runs/` is gitignored, so a GitHub-hosted runner has no corpus to
 # read), so nothing else in the pipeline covers what they cover. Cutting them here would not move the
 # check to CI, it would delete it.
+# ## UPDATE 2026-09-11 (#911): three checks, and everything above this line is history
+#
+# Step 4 of the CI Reset, chairman-approved. **This hook is a courtesy, not a gate. CI is the gate**, and
+# everything here that CI also runs was a second copy of it minutes earlier. What remains:
+#
+#   - **lint**, scoped to the changed PATHS (not the changed packages -- see the call site for why the
+#     distinction is load-bearing rather than pedantic);
+#   - **typecheck**, the whole program, because tsc's unit IS the program -- again, see the call site;
+#   - **the leak scan**, `tracked-source-leak-guard.test.ts` and `tracked-prose-leak-guard.test.ts`,
+#     the one check here whose value is being BEFORE the push rather than before the merge. This
+#     repository is public; a pushed branch is visible the moment it lands.
+#
+# THREE CLAIMS ABOVE ARE NOW FALSE, and they are named rather than quietly left to be re-read as current:
+#
+#   1. **The FAST/FULL split is gone.** One path, whatever the branch. The board-only path is gone with
+#      it -- and it had a hole: it never ran the sweep, so it never ran the leak guards, on the one kind
+#      of diff (`docs/board/summaries/*.md`) made entirely of the prose they scan.
+#   2. **`mjs-parses.test.ts` no longer runs here.** CI runs the full suite on every PR. It was kept for
+#      the window between a branch push and its PR; that window is now covered by nothing local, which is
+#      the same trade every other check here just took.
+#   3. **The corpus-gated block is gone, and the paragraph arguing to keep it is superseded.** That
+#      paragraph said cutting `check-signals`/`rules:gate` here would delete the check rather than move
+#      it. The 2026-09-06 ruling answers it: a gate that reads `runs/` gives a VERDICT only when the
+#      agent driving the fleet and the lab runs it -- anyone else may run one as a PRE-CHECK, never as a
+#      reported result. So this hook never held that check to begin with; it held a pre-check, and the
+#      authoritative one lives on the lab. What replaces it is an UNCONDITIONAL line naming both checks
+#      and where the verdict comes from -- unconditional because the old form was silent on exactly the
+#      machine that has a stale `runs/`, which is the machine that most needs telling.
+#
+# Measured on this checkout at `40e36ba4`, wall clock: the tree-wide sweep (22 files, 177 tests) 30.22s;
+# lint 3.93s; typecheck 4.86s; the two leak guards together 1.39s. So the hook goes from about 39s to
+# about 10s, and 75% of that saving is the sweep alone.
+#
+# `pre-push-hook-scope.test.ts` is what holds this to three: it enumerates this file's own `run` call
+# sites and every npm/node invocation outside them, and a fourth check fails it. The git-only refusals
+# below -- the stale-base check, resolve-toward-main, the 300-deletion warning, the armed-PR lookup and
+# the A11Y_SKIP_VERIFY gate -- are outside that assertion by name: none is a copy of CI, each costs
+# milliseconds, and they are push SAFETY rather than verification.
 set -euo pipefail
 
 # A BYPASS NEEDS A REASON, AND THE REASON IS PRINTED -- the same shape as A11Y_STALE_BASE_REASON,
@@ -120,7 +158,9 @@ set -euo pipefail
 # So the general disclaimer is replaced by two things a reader cannot scroll past:
 #
 #   - THE LIST of what is being skipped, by name. "nothing was verified" is true and abstract; "lint,
-#     typecheck, mjs parse check" is three specific things you are choosing not to do.
+#     typecheck and the leak scan" is three specific things you are choosing not to do -- and after #911
+#     the third one is the reason this matters more than it used to: the leak scan is the only check here
+#     that cannot be caught up by CI, because the push it would have stopped has already happened.
 #   - A REASON, required. A bare `=1` can be inherited from an exported variable, a wrapper script, or a
 #     habit from an hour ago; a sentence has to be written by whoever is pushing, now, and it lands in
 #     the log rather than in somebody's memory.
@@ -129,7 +169,7 @@ if [ "${A11Y_SKIP_VERIFY:-0}" = "1" ]; then
   if [ -z "${A11Y_SKIP_VERIFY_REASON:-}" ]; then
     echo "pre-push: REFUSING to skip -- A11Y_SKIP_VERIFY=1 no longer skips on its own." >&2
     echo "" >&2
-    echo "It would skip: lint, typecheck, mjs parse check, and the corpus-gated checks." >&2
+    echo "It would skip: lint, typecheck and the leak scan." >&2
     echo "" >&2
     echo "If that is deliberate: A11Y_SKIP_VERIFY_REASON=\"<why>\" A11Y_SKIP_VERIFY=1 git push ..." >&2
     echo "The reason is printed, not just the override, so a deliberate exception is in the log rather" >&2
@@ -137,7 +177,7 @@ if [ "${A11Y_SKIP_VERIFY:-0}" = "1" ]; then
     echo "variable. #702: three pushes carried tsc errors this hook reports, past a bare =1." >&2
     exit 1
   fi
-  echo "pre-push: SKIPPED -- lint, typecheck, mjs parse check and the corpus-gated checks did NOT run." >&2
+  echo "pre-push: SKIPPED -- lint, typecheck and the leak scan did NOT run." >&2
   echo "pre-push: overridden: $A11Y_SKIP_VERIFY_REASON" >&2
   exit 0
 fi
@@ -426,11 +466,15 @@ run() { # run <label> <command...>
   rm -f /tmp/a11y-prepush.$$
 }
 
-# BEGIN #704 GUARDS-BUDGET TIMING -- extraction markers for guards-budget.test.ts; keep both if edited.
+# HOW THIS HOOK TIMES ITSELF.
+#
+# #911 removed the tree-wide sweep and with it the guards BUDGET (#704/#716) -- a ratio between the gate's
+# CPU and the sweep's, which is a rule about a thing that no longer runs. The timing itself is kept,
+# because a hook that cannot say what it cost is a hook nobody can argue about.
 #
 # WALL CLOCK ON THIS HOST MEASURES THE OTHER SESSIONS ON IT, NOT THIS HOOK'S WORK -- ceo's ruling,
 # 2026-09-09, after three runs of the identical 21-guard sweep on one machine read 28.0s, 45.1s and 44.2s
-# with no code change between them (#716). So the BUDGET this hook enforces is CPU (`user`+`sys`), never
+# with no code change between them (#716). So the cost this hook REPORTS is CPU (`user`+`sys`), never
 # wall: `times` reports the CUMULATIVE CPU this shell's finished children have consumed since the shell
 # started, so a snapshot before and after a phase, subtracted, is that phase's own CPU cost -- immune to
 # how many OTHER processes the host happened to be running at the moment, which is exactly what makes it
@@ -465,83 +509,85 @@ now_ms() { node -e "process.stdout.write(String(Date.now()))"; }
 cpu_delta() { awk -v a="$1" -v b="$2" 'BEGIN{printf "%.3f", b - a}'; }
 ms_delta_seconds() { awk -v a="$1" -v b="$2" 'BEGIN{printf "%.1f", (b - a) / 1000}'; }
 
-# `run "lint"`/`"typecheck"`/`"mjs parse check"` (the GATE) then `run "tree-wide guards"` (#716's 21,
-# `npm run guards:sweep`, no exclusion list -- #704's own stated point), timed on both sides. Shared by the
-# `main` and fast-gate branches below so the timing logic exists once. #704's ANCHOR: the guards may cost
-# at most DOUBLE the gate's own CPU, in this SAME run -- never a fixed figure, because the gate itself
-# costs something different on every host and every day.
-run_gate_with_guards_budget() { # run_gate_with_guards_budget <branch-label>
+# THE WHOLE GATE, and after #911 it is three checks: lint, typecheck and the leak scan. Each is a `run`
+# call, which is the hook's own mechanism for "a check that can fail this push" --
+# `pre-push-hook-scope.test.ts` enumerates those call sites from this file's text and refuses a fourth.
+run_gate() { # run_gate <branch-label>
   local branch_label="$1"
-  local gate_cpu_start_file gate_cpu_end_file
-  gate_cpu_start_file="/tmp/a11y-cpu-gate-start.$$"; gate_cpu_end_file="/tmp/a11y-cpu-gate-end.$$"
-  local gate_wall_start gate_wall_end
-  snapshot_children_cpu "$gate_cpu_start_file"; gate_wall_start="$(now_ms)"
+  local cpu_start_file cpu_end_file wall_start wall_end
+  cpu_start_file="/tmp/a11y-cpu-gate-start.$$"; cpu_end_file="/tmp/a11y-cpu-gate-end.$$"
+  snapshot_children_cpu "$cpu_start_file"; wall_start="$(now_ms)"
 
-  run "lint"       npm run --silent lint
-  run "typecheck"  npm run --silent typecheck
-  run "mjs parse check"  npx tsx --test packages/worker-fleet/src/mjs-parses.test.ts
-
-  snapshot_children_cpu "$gate_cpu_end_file"; gate_wall_end="$(now_ms)"
-  local gate_cpu gate_wall
-  gate_cpu="$(cpu_delta "$(children_cpu_seconds "$gate_cpu_start_file")" "$(children_cpu_seconds "$gate_cpu_end_file")")"
-  gate_wall="$(ms_delta_seconds "$gate_wall_start" "$gate_wall_end")"
-  rm -f "$gate_cpu_start_file" "$gate_cpu_end_file"
-
-  local guards_cpu_start_file guards_cpu_end_file
-  guards_cpu_start_file="/tmp/a11y-cpu-guards-start.$$"; guards_cpu_end_file="/tmp/a11y-cpu-guards-end.$$"
-  local guards_wall_start guards_wall_end
-  snapshot_children_cpu "$guards_cpu_start_file"; guards_wall_start="$(now_ms)"
-
-  run "tree-wide guards (21, #716)" npm run --silent guards:sweep
-
-  snapshot_children_cpu "$guards_cpu_end_file"; guards_wall_end="$(now_ms)"
-  local guards_cpu guards_wall
-  guards_cpu="$(cpu_delta "$(children_cpu_seconds "$guards_cpu_start_file")" "$(children_cpu_seconds "$guards_cpu_end_file")")"
-  guards_wall="$(ms_delta_seconds "$guards_wall_start" "$guards_wall_end")"
-  rm -f "$guards_cpu_start_file" "$guards_cpu_end_file"
-
-  # THE RATIO, NOT JUST THE TWO NUMBERS -- printed every run, so a reader can watch it drift before it
-  # ever reaches a threshold. `ga+0==0` guards a division that should never happen (the gate always runs
-  # real lint/typecheck/mjs-check work) without crashing the hook on the day it somehow does.
-  local ratio
-  ratio="$(awk -v gu="$guards_cpu" -v ga="$gate_cpu" \
-    'BEGIN{ if (ga + 0 == 0) { print "0.00" } else { printf "%.2f", gu / ga } }')"
-  echo "pre-push: gate ($branch_label) -- wall ${gate_wall}s, CPU ${gate_cpu}s | guards (#716, 21) -- wall ${guards_wall}s, CPU ${guards_cpu}s | ratio ${ratio}x"
-
-  # A MEASURED RANGE, NEVER A FIXED FIGURE -- CLAUDE.md's own rule about quoting a timing number applies to
-  # this hook's own header exactly as it applies to any other. The numbers above are THIS run's; they will
-  # differ on a busier or quieter host, and neither reading makes the other one wrong.
+  # LINT IS SCOPED BY CHANGED PATH, NOT BY CHANGED PACKAGE -- #911, measured rather than argued.
+  # `changed-packages.mjs` lists `packages/<name>` directories only, so a `scripts/`-only change (the most
+  # common shape of a row in this repository) scopes to the EMPTY LIST, and a check handed an empty
+  # population reports clean about a population it never read. eslint's unit IS the file, so a path list
+  # costs nothing in coverage. `changed-files.mjs` (#939) is the one place this repo asks git which paths a
+  # range touched, and it lists BOTH SIDES of a rename -- a file moved out of a linted directory is still
+  # linted here.
   #
-  # GRADUATED, NOT A BARE "REFUSE AT 2x" -- ceo's ruling 2026-09-09, revised the SAME day this hook's first
-  # version shipped, after its own real end-to-end run refused a push at 2.06x an hour after three quiet
-  # measurements averaged 1.77x, no code change between them. FOUR OBSERVED RATIOS on this host: ~1.72x,
-  # ~1.74x, ~1.84x, 2.06x -- the ratio of two independently noisy CPU measurements crosses a bare 2x line
-  # on HOST CONTENTION ALONE, and a hook that refuses pushes on noise is the #706 lesson (nine
-  # A11Y_SKIP_VERIFY=1 pushes in one evening, on a wrong belief about cost) arriving through the very guard
-  # built to stop exactly that pattern. So: under 2x is silent (the header line above already states the
-  # number); [2x, 3x) WARNS, naming the 2x design target, and does NOT fail the push; 3x or more REFUSES --
-  # a threshold none of the four observed ratios came near, and a real regression cannot miss (the
-  # unfixed #716 population, before its own fix, measured at roughly 10x the gate's cost).
-  if awk -v r="$ratio" 'BEGIN{exit !(r >= 3)}'; then
-    if [ -n "${A11Y_GUARDS_BUDGET_REASON:-}" ]; then
-      echo "pre-push: guards CPU ${guards_cpu}s is ${ratio}x the gate's own ${gate_cpu}s (refusing at 3x), overridden: $A11Y_GUARDS_BUDGET_REASON" >&2
-    else
-      echo "pre-push: REFUSING -- the tree-wide guards cost ${guards_cpu}s CPU (user+sys) this run, ${ratio}x" >&2
-      echo "the gate's own ${gate_cpu}s -- at or past the 3x refusal line, which is past every ratio measured" >&2
-      echo "on this host so far (worst: 2.06x) and past what host-contention noise alone plausibly explains." >&2
-      echo "Find which guard drifted slow with 'npm run guards:sweep', time each file, and fix it, or:" >&2
-      echo "A11Y_GUARDS_BUDGET_REASON=\"<why>\" git push ... -- the reason is printed, not just the override," >&2
-      echo "so a deliberate exception is in the log rather than in somebody's memory." >&2
-      failed+=("tree-wide guards budget (${ratio}x the gate's own CPU, refusing at 3x)")
-    fi
-  elif awk -v r="$ratio" 'BEGIN{exit !(r >= 2)}'; then
-    echo "pre-push: WARNING -- the tree-wide guards cost ${ratio}x the gate's own CPU this run (design" >&2
-    echo "target: 2x, refusal at 3x). Not refusing -- two independently noisy CPU measurements can cross" >&2
-    echo "the 2x design line on host contention alone (measured on this host: 1.72x-2.06x with no code" >&2
-    echo "change). Worth a look with 'npm run guards:sweep' if this keeps happening on a quiet host." >&2
+  # THE COMMITTED DIFF **AND** THE DIRTY TREE, which is not the same list and the difference is a silent
+  # hole. Every other note in this hook says the gate reads the TREE rather than the commits being pushed
+  # -- that is why the dirty-tree notes at the bottom exist. A path list built from `origin/main...HEAD`
+  # alone would lint exactly the files that ARE committed and skip the one you just edited, so the first
+  # push of a freshly branched worktree would report `ok` having read nothing. Measured while writing
+  # this: a new branch at origin/main with this very file edited scopes to ZERO committed paths.
+  local lint_paths=()
+  local seen_paths=""
+  add_lint_path() { # add_lint_path <path> -- extension-filtered, existence-checked, de-duplicated
+    case "$1" in *.ts|*.mjs|*.js|*.cjs) ;; *) return 0 ;; esac
+    [ -f "$1" ] || return 0   # deleted, or the source side of a rename: nothing left on disk to lint
+    case "$seen_paths" in *"|$1|"*) return 0 ;; esac
+    seen_paths="$seen_paths|$1|"
+    lint_paths+=("$1")
+  }
+  if git rev-parse --verify -q origin/main >/dev/null; then
+    while IFS= read -r changed_path; do
+      [ -n "$changed_path" ] && add_lint_path "$changed_path"
+    done < <(node scripts/changed-files.mjs origin/main...HEAD)
+  else
+    # FAILS CLOSED, not open: with no base ref there is no committed diff to scope by, so read the whole
+    # tree rather than read nothing and print "ok".
+    add_lint_path "."
+    lint_paths=(".")
+    echo "pre-push: origin/main is not resolvable here, so lint reads the whole tree rather than a diff." >&2
   fi
+  while IFS= read -r dirty_path; do
+    [ -n "$dirty_path" ] && add_lint_path "$dirty_path"
+  done < <(git status --porcelain | cut -c4-)
+  if [ "${#lint_paths[@]}" -eq 0 ]; then
+    skipped+=("lint (no .ts/.mjs/.js file changed against origin/main -- nothing for eslint to read)")
+  else
+    run "lint (${#lint_paths[@]} changed file(s))" npx eslint "${lint_paths[@]}"
+  fi
+
+  # TYPECHECK IS NOT SCOPED, AND THE REASON IS THE MECHANISM RATHER THAN A PREFERENCE -- #911.
+  # tsc's unit is the PROGRAM, not the file. Measured on this checkout at 40e36ba4: the root program is
+  # 953 files (534 of them `.test.ts`, 130 of them top-level `scripts/`); `tsc -p packages/<name>` is 0
+  # test files, because every package tsconfig carries `"exclude": ["src/**/*.test.ts"]` so tests cannot
+  # reach a consumer's node_modules; and no package program contains top-level `scripts/` at all. So
+  # "typecheck the changed packages" drops 664 of the 953 and reports clean -- the root tsconfig's own
+  # comment records that regression happening once already, 25 test files silently unchecked. It costs
+  # 4.86s, against the 30.22s the tree-wide sweep cost before this row removed it.
+  run "typecheck (the whole program)"  npm run --silent typecheck
+
+  # THE LEAK SCAN IS THE ONE CHECK HERE WHOSE VALUE IS BEING BEFORE THE PUSH -- #911, and it is named by
+  # file rather than swept for. Everything else this hook used to run is a second copy of CI minutes
+  # later; a pushed branch on a public repository is visible the moment it lands, so this one cannot wait
+  # for the merge. It was two of the 22 files in `guards:sweep`, which is why "keep the leak scan while
+  # deleting the sweep" would have deleted it.
+  run "leak scan" npx tsx --test \
+    packages/lab/src/packaging/tracked-source-leak-guard.test.ts \
+    packages/lab/src/packaging/tracked-prose-leak-guard.test.ts
+
+  snapshot_children_cpu "$cpu_end_file"; wall_end="$(now_ms)"
+  local gate_cpu gate_wall
+  gate_cpu="$(cpu_delta "$(children_cpu_seconds "$cpu_start_file")" "$(children_cpu_seconds "$cpu_end_file")")"
+  gate_wall="$(ms_delta_seconds "$wall_start" "$wall_end")"
+  rm -f "$cpu_start_file" "$cpu_end_file"
+  # A MEASURED NUMBER FROM THIS RUN, never a fixed figure quoted from a header -- CLAUDE.md's own rule.
+  echo "pre-push: gate ($branch_label) -- wall ${gate_wall}s, CPU ${gate_cpu}s"
 }
-# END #704 GUARDS-BUDGET TIMING
 
 BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 
@@ -588,162 +634,40 @@ if [ "$BRANCH" != "main" ]; then
 fi
 # END #386 ARMED-PR PUSH GUARD
 
-if [ "$BRANCH" = "main" ]; then
-  run_gate_with_guards_budget "main"
-  echo "pre-push: gate (main). Package test suites run in CI's acceptance job now, not here -- see the"
-  echo "2026-09-07 UPDATE above. Release gates are separate: npm run release:gate"
-elif [ "$(node scripts/board-only-check.mjs)" = "true" ]; then
-  # BOARD-ONLY, THE SAME SHAPE `ci.yml`'s `board` job GATES ON -- chairman's direction, 2026-09-06, the
-  # product manager's single largest recurring cost that night: docs/board/summaries/*.md and
-  # docs/board/reported.json are edited far more often than anything else under docs/, and neither is
-  # source code. No lint, no typecheck, no build here -- there is nothing of either KIND in a genuine
-  # board-only diff to check (`board-only-check.mjs`'s own #296 fix is what makes that true: the WHOLE
-  # diff must be board files, not just its docs/ subset, or a diff smuggling in a script took this path
-  # too). #296 ALSO REMOVED a false claim that used to stand here -- CI's `board` job builds and re-runs
-  # the board guards, but it does NOT lint or typecheck EITHER, so it was never the authority for the
-  # checks this branch skips; a guard that names a wrong authority is worse than one that names none.
-  echo "pre-push: BOARD-ONLY gate ($BRANCH) -- every file against origin/main is docs/board/reported.json"
-  echo "or docs/board/summaries/*.md -- neither is source code, so lint/typecheck/the general suite have"
-  echo "nothing to check. Running the board guards below is the real gate for this diff, here and in CI."
-  # #355: a glob matching NOTHING is a clean, empty PASS to `tsx --test` -- checked first, outside the
-  # suite it would otherwise have silently skipped. `--run` execs `tsx --test` on the SAME argv this
-  # process just checked, rather than a second, separately-typed copy of the same globs (see
-  # assert-glob-not-empty.mjs's header for why the two-line form was provably unsafe).
-  run "board guards" node scripts/assert-glob-not-empty.mjs \
-    "packages/lab/src/packaging/board-*.test.ts" "packages/lab/src/packaging/public-claim.test.ts" --run
-else
-  run_gate_with_guards_budget "$BRANCH"
-  echo "pre-push: gate ($BRANCH) -- lint, typecheck, an .mjs parse check, and the tree-wide guards (#716/"
-  echo "#704). Package test suites run in CI's acceptance job on this branch's PR now, not here -- see the"
-  echo "2026-09-07 UPDATE above."
-  # Still needed for the changeset gate below, which is scoped to whether this push touches a published
-  # package at all -- unrelated to which package's TESTS used to run here.
-  changed="$(node scripts/changed-packages.mjs)"
-  [ -n "$changed" ] && echo "  touched: $changed"
-
-  # #261: THE CHANGESET GATE WAS MISSING FROM THIS HOOK ENTIRELY. `changeset` is a required CI context and
-  # an input to the aggregate `gate`, so a fully green local push (this hook, above) was twice followed by
-  # a CI refusal and a round trip -- measured 2026-09-07, #252 and #258, forty minutes apart, both correct
-  # about everything they had actually run.
-  #
-  # GATED ON `changeset-precise.mjs`, never unconditional: `changeset status --since=origin/main` alone
-  # measured 3.8-7.8s (direct binary vs `npx`, this checkout, warm) -- more than the rest of this gate
-  # combined, which would more than double the hook's stated budget on every push touching a package
-  # directory, most of which are test files or a private package nothing installs. `changeset-precise.mjs`
-  # reuses `ci-changed.mjs`'s own `classify()`, real `npm pack`-backed, to ask the PRECISE question -- does
-  # this push touch a file npm actually SHIPS for a PUBLISHED package -- so a docs-only, test-only or
-  # private-package push pays nothing here at all: measured delta ~0.5s (node startup) on such a push,
-  # against ~3.9s (npm pack) + ~3.8s (changeset status) = ~7.7s on one that touches a published, packed
-  # file. THE DIRECT BINARY, NOT `npx changeset` -- measured here 3.8s against 7.8s for the identical
-  # command through `npx`'s resolution; `node_modules/.bin/changeset` is guaranteed present by the
-  # toolchain guard above, which already refuses the whole hook before this point if it is not.
-  if [ -n "$changed" ]; then
-    # #288: `$(cmd)` DISCARDS `cmd`'s OWN EXIT STATUS -- the `if` only ever tested the STRING it printed.
-    # Measured live: an unresolvable base ref throws inside `changeset-precise.mjs`'s own `execFileSync`,
-    # uncaught, so the process exits non-zero having printed NOTHING -- and `[ "" = "true" ]` is false,
-    # so the hook took the ELSE branch and printed a POSITIVE CLAIM ("no file this push touches is one npm
-    # actually ships") from a check that had examined nothing at all. Captured into a variable first, so
-    # `$?` immediately after is `changeset-precise.mjs`'s REAL exit status, never the `[ ]` comparison's.
-    changeset_precise_out="$(node scripts/changeset-precise.mjs origin/main 2>/tmp/a11y-changeset-precise-err.$$)"
-    changeset_precise_status=$?
-    if [ "$changeset_precise_status" -ne 0 ]; then
-      echo "  COULD NOT RUN  changeset — changeset-precise.mjs could not answer whether this push touches a published package; nothing was examined"
-      tail -5 /tmp/a11y-changeset-precise-err.$$ | sed 's/^/            /'
-      skipped+=("changeset (could not run)")
-    elif [ "$changeset_precise_out" = "true" ]; then
-      if ./node_modules/.bin/changeset status --since=origin/main >/tmp/a11y-changeset.$$ 2>&1; then
-        echo "  ok      changeset"
-      else
-        echo "  FAILED  changeset"
-        tail -20 /tmp/a11y-changeset.$$ | sed 's/^/            /'
-        echo "            This push changes a file npm actually ships for a published package, with no changeset."
-        echo "            Run 'npm run changeset', pick the package(s) and bump level, and write one sentence a"
-        echo "            CONSUMER would want to read. See .changeset/README.md -- the bump level does NOT"
-        echo "            follow from the size of the diff, and for the scorer any retrain is a MAJOR."
-        echo "            If this genuinely cannot affect a consumer: 'npx changeset add --empty' records that"
-        echo "            decision explicitly rather than leaving it to be inferred from silence."
-        failed+=("changeset")
-      fi
-      rm -f /tmp/a11y-changeset.$$
-    else
-      skipped+=("changeset (no file this push touches is one npm actually ships for a published package)")
-    fi
-    rm -f /tmp/a11y-changeset-precise-err.$$
-  fi
-fi
-
-# The corpus lives in gitignored `runs/`, so these two cannot run on a fresh clone or in CI. Say so out
-# loud rather than passing quietly: a check that reports success when it examined nothing is how "verified"
-# comes to mean "unexamined", which is the specific defect this project keeps finding in its own tooling.
-# check-signals answers what a working copy CAN answer — does every signal with evidence here discriminate
-# — and exits 2 INCONCLUSIVE when there is too little of it, rather than failing. It used to fail on a stale
-# `runs/`, which is not a defect and not something this machine can even distinguish from a corpus needing
-# capture. The consequence was the reason this changed: the only way past it was A11Y_SKIP_VERIFY=1, which
-# disables lint, typecheck, tests and rules:gate too — so the check that could not answer its own question
-# switched off four that could, nine times in one day.
+# ONE PATH, NOT THREE -- #911. This used to branch: `main` ran the gate plus the corpus checks, a
+# BOARD-ONLY diff ran the board guards INSTEAD of lint and typecheck, and every other branch ran the gate
+# plus a changeset gate. The three paths were a way of paying less on the diffs that needed less, and with
+# the sweep gone the gate is small enough that the branching cost more than it saved -- in correctness,
+# not in seconds.
 #
-# The strict form lives where the corpus is authoritative: `release:gate` and the lab job pass
-# --require-complete, and there a hole in the corpus IS the answer.
+# AND THE BOARD-ONLY PATH WAS A HOLE THIS ROW CLOSES BY ACCIDENT, which is worth naming rather than
+# leaving to be re-found: it never ran `guards:sweep`, so it never ran the leak guards either. A push
+# whose whole diff is `docs/board/summaries/*.md` is PROSE, which is exactly the population
+# `tracked-prose-leak-guard.test.ts` reads -- the one kind of diff the leak scan was skipped for was the
+# one kind made entirely of the text it scans. Now every push runs it.
 #
-# main ONLY: these are corpus-scale checks, not package-scoped ones, so the FAST gate above has no smaller
-# version of them to run — an agent/lead push skips straight past this section, same as it always would on
-# a fresh worktree with no corpus, and CI (which also has no corpus) still cannot run them either.
-if [ "$BRANCH" = "main" ] && [ -d runs/screenreader-dataset/captures ]; then
-  # `&& x=0 || x=$?`, never `cmd; x=$?`: `set -e` is on (line 31), so a non-zero exit terminates the hook
-  # BEFORE the status can be captured -- which meant the INCONCLUSIVE handling below had never once run. The
-  # symptom is a push that dies after the last "ok" line with no failure named, because the hook's own exit
-  # code becomes the check's.
-  signals_status=0
-  npm run --silent training:check-signals >/tmp/a11y-signals.$$ 2>&1 || signals_status=$?
-  case $signals_status in
-    0) echo "  ok      check-signals"
-       # A PASS THAT EXAMINED A FRACTION OF THE CORPUS MUST SAY SO. check-signals is honest — it reports
-       # "all N case(s) with usable evidence discriminate. M case(s) could not be checked here" — and this
-       # hook threw that away, printing a bare "ok" for 226 examined of 1,461. The comment fifteen lines
-       # above is about exactly this and covered only the extreme case: examining NOTHING is caught by the
-       # exit-2 floor, and examining 15% read as clean. That is the `examinedNothing` defect again, whose
-       # own guard "named the general rule and then covered only `compared === 0`, calling that the extreme
-       # case rather than a different one".
-       #
-       # Printed only when the summary says cases were missed, so a complete corpus stays a bare "ok".
-       grep -E "could not be checked here" /tmp/a11y-signals.$$ | sed 's/^/            /' || true ;;
-    # 2 is INCONCLUSIVE, never a pass: it is reported in the SKIPPED list, which the hook prints and which
-    # exists so "not examined" can never read as "examined and clean".
-    2) skipped+=("check-signals (INCONCLUSIVE — too little usable evidence in this copy of runs/; the authoritative answer is npm run lab:job -- -e job=check-signals)") ;;
-    *) echo "  FAILED  check-signals"
-       tail -20 /tmp/a11y-signals.$$ | sed 's/^/            /'
-       failed+=("check-signals") ;;
-  esac
-  rm -f /tmp/a11y-signals.$$
-elif [ "$BRANCH" != "main" ]; then
-  skipped+=("check-signals (fast gate — main-only; runs in the full suite at merge)")
-else
-  skipped+=("check-signals (no runs/screenreader-dataset/captures — needs a local corpus)")
-fi
+# A board-only diff still pays almost nothing: lint is scoped by changed path and a `.md`-only diff has
+# no lintable file in it, so lint reports SKIPPED with its reason and only typecheck and the leak scan run.
+run_gate "$BRANCH"
 
-# Exit 2 means INCONCLUSIVE here too, for the same reason it does above: a problem this copy of `runs/`
-# cannot ATTRIBUTE -- a stale export looks exactly like a broken exclusion from here. Reported as SKIPPED,
-# never as a pass. This was the last check that could fail on a stale corpus, and therefore the last reason
-# to reach for A11Y_SKIP_VERIFY=1, which turns off lint, typecheck and 953 tests as collateral.
+# WHAT THIS HOOK DOES NOT RUN, SAID UNCONDITIONALLY -- #911.
 #
-# main ONLY, same reasoning as check-signals above.
-if [ "$BRANCH" = "main" ] && [ -f runs/screenreader-dataset/screenreader-evidence.jsonl ] && [ -x .venv/bin/python ]; then
-  rules_status=0
-  npm run --silent rules:gate >/tmp/a11y-rules.$$ 2>&1 || rules_status=$?
-  case $rules_status in
-    0) echo "  ok      rules:gate" ;;
-    2) skipped+=("rules:gate (INCONCLUSIVE — this copy of runs/ cannot attribute the problem; the authoritative answer is npm run lab:job -- -e job=rules-gate)")
-       tail -3 /tmp/a11y-rules.$$ | sed 's/^/            /' ;;
-    *) echo "  FAILED  rules:gate"
-       tail -20 /tmp/a11y-rules.$$ | sed 's/^/            /'
-       failed+=("rules:gate") ;;
-  esac
-  rm -f /tmp/a11y-rules.$$
-elif [ "$BRANCH" != "main" ]; then
-  skipped+=("rules:gate (fast gate — main-only; runs in the full suite at merge)")
-else
-  skipped+=("rules:gate (needs the exported corpus and .venv)")
-fi
+# `training:check-signals` and `rules:gate` read the corpus in gitignored `runs/`, and the 2026-09-06
+# ruling is that a gate reading `runs/` gives a VERDICT only when the agent driving the fleet and the lab
+# runs it. Anyone else may run one as a PRE-CHECK, never as a reported result. In this hook it could only
+# ever have been a pre-check, so it is not run here at all.
+#
+# UNCONDITIONAL, where it used to depend on whether `runs/` happened to be present. That is the one
+# difference that matters: the conditional form was SILENT on the machine that HAS a copy of `runs/`, and
+# a stale copy is precisely the machine that most needs telling -- one measured here was 89 hours old and
+# carried neither of the two keys a sweep across it was written to find, so it reported cleanly having
+# examined a corpus that no longer exists.
+# BEGIN #911 NOT-RUN LINE -- extraction markers for pre-push-hook-scope.test.ts; keep both if edited.
+echo "  NOT RUN training:check-signals, rules:gate -- both read the corpus in runs/, and a copy here is"
+echo "          only as fresh as its last sync. The authoritative verdict comes from the lab:"
+echo "          npm run lab:job -- -e job=check-signals   |   npm run lab:job -- -e job=rules-gate"
+# END #911 NOT-RUN LINE
+
 
 for s in ${skipped+"${skipped[@]}"}; do echo "  SKIPPED $s"; done
 
@@ -767,7 +691,7 @@ if [ ${#failed[@]} -gt 0 ]; then
   # BEGIN #721 DIRTY-TREE NOTE -- extraction markers for pre-push-dirty-tree-note.test.ts; keep both if edited.
   # sed, not one of the three STATUS_TOOLS -- #375's piped-exit-status guard scopes its hazard check to
   # top-level code as ONE bucket, and this file's top level legitimately reads $? elsewhere
-  # (changeset_precise_status, signals_status, rules_status) for genuinely piped commands. This line never
+  # (#911 removed the three that did; the shape is kept because the guard reads this file as one bucket). This line never
   # reads $? at all -- the whole pipeline is captured into `dirty` -- but the guard cannot see that, so a
   # truncation pipeline ending in one of its three flagged tools reads as the same hazard those other
   # reads exist to avoid. Truncating with sed's own line-range form sidesteps the collision entirely.

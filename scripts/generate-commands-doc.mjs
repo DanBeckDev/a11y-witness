@@ -30,7 +30,6 @@ import { resolve, join } from "node:path";
 import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
-const SCRIPTS_DIR = resolve(REPO, "scripts");
 export const OUT = resolve(REPO, "docs/commands.md");
 
 /** How many leading lines a `// command:` header may appear within -- generous enough for a shebang plus
@@ -46,13 +45,16 @@ const ENTRY_POINT_GUARD = /import\.meta\.url\s*===/;
 /**
  * Every `scripts/*.mjs` file that is a real, directly-runnable command -- excludes `.test.mjs` (not a
  * command at all) and any file with no entry-point guard (a module, imported and never run). EXPORTED so
- * the test and a mutation check can drive the exact same population the generator uses.
+ * the test and a mutation check can drive the exact same population the generator uses -- and `root` so the
+ * nightly doc cross-reference report (#905) can run the same population against a fixture tree.
+ * @param {string} [root] the repository whose `scripts/` is read; this checkout by default
  * @returns {string[]}
  */
-export function commandScripts() {
-  return readdirSync(SCRIPTS_DIR)
+export function commandScripts(root = REPO) {
+  const dir = resolve(root, "scripts");
+  return readdirSync(dir)
     .filter((f) => f.endsWith(".mjs") && !f.endsWith(".test.mjs"))
-    .filter((f) => ENTRY_POINT_GUARD.test(readFileSync(join(SCRIPTS_DIR, f), "utf8")))
+    .filter((f) => ENTRY_POINT_GUARD.test(readFileSync(join(dir, f), "utf8")))
     .sort();
 }
 
@@ -87,9 +89,10 @@ export function commandHeader(text) {
  * own `TRACKED_EXEMPT` map with the reason, so the guard KNOWS this file is tracked deliberately rather
  * than not seeing it at all.
  * @param {string[]} scripts
+ * @param {string} [root] the repository those scripts live in; this checkout by default
  * @returns {string}
  */
-export function buildPage(scripts) {
+export function buildPage(scripts, root = REPO) {
   const lines = [
     "# Commands",
     "",
@@ -101,7 +104,7 @@ export function buildPage(scripts) {
     "",
   ];
   for (const file of scripts) {
-    const text = readFileSync(join(SCRIPTS_DIR, file), "utf8");
+    const text = readFileSync(resolve(root, "scripts", file), "utf8");
     const description = commandHeader(text);
     lines.push(`- \`node scripts/${file}\` — ${description ?? "**MISSING `// command:` HEADER**"}`);
   }
