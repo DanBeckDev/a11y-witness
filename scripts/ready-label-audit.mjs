@@ -1627,6 +1627,125 @@ function reportReleaseDrift() {
 const OUT_OF_RELEASE_MILESTONE_NAME = "Out of release";
 
 /**
+ * #1163: THE CLAIMS SENTENCE 2 IS MADE OF, MATCHED AGAINST BOTH COPIES rather than either spelled twice.
+ *
+ * `docs/row-filing.md` and the `Out of release` milestone's description both carry the rule that the label
+ * answers one question and says nothing about importance. **Two copies of one rule with nothing comparing
+ * them is the defect that produced five incidents in one day**, and a page stating that rule while being a
+ * second unpinned copy of it would be refuting itself.
+ *
+ * MATCHED BY LOAD-BEARING PART, NEVER AS A FROZEN SENTENCE. The two texts already differ in ways that mean
+ * nothing -- `ANSWERS ONE QUESTION ONLY` against `answers ONE question`, `'out of release, ready'` against
+ * `"out of release, ready"` -- so a whole-sentence comparison would fail on a comma and teach the next
+ * person to edit the check rather than the copy that drifted.
+ */
+/** @type {[string, RegExp][]} annotated for the reason the `CHECKS` annotation below states, one row down. */
+const GUIDANCE_CLAIMS = [
+  ["one question", /answers one question/i],
+  ["the question itself", /does this block the 20 september publish/i],
+  ["not unimportant", /does not mean unimportant/i],
+  ["the spelling", /out of release, ready/i],
+  ["where importance is said", /importance is said by the ready order/i],
+];
+
+/**
+ * WHICH CLAIMS EACH COPY IS MISSING -- pure, so the live fetch is the caller's problem and this is testable
+ * with the description injected.
+ *
+ * **THIS IS A DELETION DETECTOR, NOT A DRIFT DETECTOR, and the difference is not pedantic.** worker-capture
+ * measured both columns on review, by this repo's own way of testing a text guard -- keep the text, change
+ * the meaning -- and its mirror:
+ *
+ *   a rule DELETED from one copy      caught          <- the risk this exists for
+ *   a rule REWORDED in one copy       false RED       <- reported as deleted
+ *   a rule INVERTED in one copy       NOT caught      <- "it is false that ... does not mean unimportant"
+ *                                                       keeps every phrase and passes clean
+ *
+ * A substring test can only behave this way; tightening the patterns worsens the reworded column and
+ * loosening worsens the inverted one, and the only thing that fixes both is comparing meaning, which is not
+ * available. **So the fix is the name rather than the regexes.** Called a drift detector, a reader trusts it
+ * for the inversion case, which it cannot do at all.
+ *
+ * THE FALSE RED IS A REAL COST AND IT IS STATED RATHER THAN DISCOVERED: `findings > 0` sets
+ * `process.exitCode = 1`, so an editorial pass on either copy reddens the nightly audit until someone
+ * re-syncs the phrase. **A check that goes red for reasons nobody caused is how a check stops being read.**
+ * The remedy when that happens is to re-sync the two copies, never to loosen a pattern -- the two saying it
+ * the same way IS the property, since the row this came from is about two copies of one rule.
+ *
+ * `["the spelling", /out of release, ready/i]` IS THE LEAST FRAGILE OF THE FIVE AND ITS RED IS THE MOST
+ * ACTIONABLE -- the opposite of what this comment said until worker-capture corrected their own objection
+ * to it, and the reason is visible in the two copies:
+ *
+ *   docs/row-filing.md      ...is spelled "out of release, ready" -- importance is said by...
+ *   milestone description   ...is spelled 'out of release, ready' -- importance is said by...
+ *
+ * **Both copies QUOTE it, and this pattern matches inside the quotes.** The two already disagree about the
+ * quote character and the pattern is immune to that by construction. The other four match RUNNING PROSE,
+ * which is exactly what an editorial pass rewrites; **a quoted string is the one thing a copy-editor leaves
+ * alone, because the quotation marks say it is being exhibited rather than written.**
+ *
+ * So a red on this one is not expected wear: it means somebody edited the literal a filer is meant to type.
+ * Act on it before any of the other four.
+ *
+ * `description` is `null` when the milestone could not be read. That is UNKNOWN and it is reported as
+ * unreadable rather than as drift: a token without the scope, or a renamed milestone, must not read as "the
+ * description dropped the rule", which is a different fault with a different fix.
+ *
+ * @param {string} doc `docs/row-filing.md`'s text
+ * @param {string | null} description the `Out of release` milestone's description
+ * @returns {{ readable: boolean, missingFromDoc: string[], missingFromMilestone: string[] }}
+ */
+export function guidanceDrift(doc, description) {
+  // WHITESPACE COLLAPSED BEFORE MATCHING, and this check found that out by failing on its own doc. Markdown
+  // wraps at 110 characters, so `does not mean\nunimportant` is one claim split across two lines and every
+  // pattern spanning a wrap silently misses. The milestone description is a single unwrapped line, so the
+  // two copies disagree about line breaks by construction and about nothing else.
+  const flat = (/** @type {string} */ text) => text.replace(/\s+/g, " ");
+  const missing = (/** @type {string} */ text) =>
+    GUIDANCE_CLAIMS.filter(([, pattern]) => !pattern.test(flat(text))).map(([name]) => String(name));
+  // ONE TEST FOR PRESENT, USED TWICE. The first version asked `trim() !== ""` for `readable` and only
+  // `typeof === "string"` for the claims, so a description of `""` reported unreadable AND missing all five
+  // -- "the milestone dropped every part of the rule" for a milestone nobody managed to read. `gh` spells
+  // absent three ways and the empty string is the one `??` walks straight past.
+  const present = typeof description === "string" && description.trim() !== "";
+  return {
+    readable: present,
+    missingFromDoc: missing(doc),
+    missingFromMilestone: present ? missing(String(description)) : [],
+  };
+}
+
+const ROW_FILING_DOC = "docs/row-filing.md";
+
+/** The live half: read both copies, compare them through `guidanceDrift`, print what drifted. */
+function reportGuidanceDrift() {
+  const doc = readFileSync(new URL(`../${ROW_FILING_DOC}`, import.meta.url), "utf8");
+  let description = null;
+  try {
+    const milestones = JSON.parse(defaultRun("gh",
+      ["api", `repos/${REPO}/milestones?state=all`, "--jq", "[.[]|{title,description}]"]));
+    description = milestones.find((/** @type {{title: string}} */ m) => m.title === "Out of release")
+      ?.description ?? null;
+  } catch (cause) {
+    void cause;
+  }
+  const drift = guidanceDrift(doc, description);
+  if (!drift.readable) {
+    process.stdout.write(`  the \`Out of release\` milestone description could not be read, so whether it `
+      + `still carries ${ROW_FILING_DOC}'s rule is UNKNOWN -- not the same as agreeing with it\n`);
+    return 1;
+  }
+  for (const [where, gone] of [[ROW_FILING_DOC, drift.missingFromDoc],
+    ["the `Out of release` milestone description", drift.missingFromMilestone]]) {
+    for (const claim of gone) {
+      process.stdout.write(`  ${where} no longer states "${claim}" -- the other copy still does, so one of `
+        + `them has drifted and ${ROW_FILING_DOC} is the one a filer reads\n`);
+    }
+  }
+  return drift.missingFromDoc.length + drift.missingFromMilestone.length;
+}
+
+/**
  * @type {[string, () => number][]}  annotated rather than inferred: adding the twelfth entry
  * changed the inferred element type and the destructure at the call site stopped narrowing.
  */
@@ -1643,6 +1762,7 @@ export const CHECKS = [
   ["closing PR never merged", reportSoleUnmergedCloser],
   ["coverage vs tracker", reportCoverageTrackerDisagreement],
   ["release declaration", reportReleaseDrift],
+  ["filing guidance", reportGuidanceDrift],
 ];
 
 /**
