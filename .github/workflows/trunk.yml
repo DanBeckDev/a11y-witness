@@ -1,4 +1,13 @@
-name: trunk-guard
+name: trunk
+# UNTIL 2026-09-12 THIS FILE WAS `trunk.yml`, AND `trunk-sweep.yml` AND `close-rows.yml` STOOD BESIDE IT (#909,
+# The CI Reset step 4). Closing a merged PR's rows now rides THIS workflow's push (the `closeRows` job below),
+# because since #416 every merge is completed with the A11IGN_BOT_TOKEN PAT and DOES fire push -- the 2026-09-08
+# measurement that killed the first such job was made under GITHUB_TOKEN merges, which fire nothing. #417's
+# scheduled backstop (the gate sweep and the close-rows sweep) moved to `nightly.yml`'s hourly `:37` cron, NOT
+# here: a schedule on this file would expose the watchdogs and the revert to GitHub's 60-day schedule-disable,
+# which the header below explains is the one thing they must never be exposed to. `auto-arm.yml` was NOT
+# collapsed: drafts cannot be armed, so arming on ready_for_review stays an event this push cannot see, and it
+# hosts the update-branch train's three non-push triggers (#1094, #1100, #1103).
 
 # THE MERGE COMMIT THAT LANDS ON `main` HAS NEVER ITSELF BEEN TESTED -- pipeline unit 3, #316. Unit 1
 # (#298) made this real by turning branch protection's `strict` off: `ci.yml`'s `pull_request` trigger
@@ -47,26 +56,57 @@ name: trunk-guard
 on:
   push:
     branches: [main]
-  # #417: `workflow_dispatch`, so `trunk-sweep.yml` can trigger a real gate RUN against `main`'s current
+  # #417: `workflow_dispatch`, so nightly.yml's `gateSweep` job can trigger a real gate RUN against `main`'s current
   # tip when a bot merge (GITHUB_TOKEN-authored, so `push` never fires -- #394's overnight measurement)
   # left it with zero check runs. No `ref` input needed: `workflow_dispatch` with none given runs against
   # the repository's DEFAULT branch, which is `main`, so `github.sha` inside the run correctly resolves
   # to main's tip either way.
   workflow_dispatch:
+    inputs:
+      pr:
+        description: "#909: a merged PR number whose declared rows should be closed now (optional; a bare dispatch runs the gate)"
+        required: false
 
 jobs:
+  # #909: CLOSE THE ROWS THE MERGED PR DECLARED, riding this push. `close-rows-sweep.mjs` finds every PR merged
+  # into main inside the window and closes what each declared, idempotently (a row already closed is reported
+  # as `already`, never re-closed), so this needs no PR number from the push event and also covers a merge
+  # whose own push run was missed. A dispatch with `pr` closes that one PR's rows directly. Permissions are the
+  # ones `close-rows.yml` carried and no more: a job triggered by a merge must never be able to push, and
+  # `close-rows-on-merge.test.ts` goes red if `contents` is raised HERE, whatever `decideRevert` below holds.
+  closeRows:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Close the rows the merged PR declared, naming the merge sha on each
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          DISPATCH_PR: ${{ github.event.inputs.pr }}
+        run: |
+          if [ -n "$DISPATCH_PR" ]; then
+            node scripts/close-rows-for-merged-pr.mjs "$DISPATCH_PR"
+          else
+            node scripts/close-rows-sweep.mjs --window=60
+          fi
   # #394 UPDATE, 2026-09-08: A `closeRowsSweep` JOB USED TO STAND HERE, RIDING THIS WORKFLOW'S OWN
   # `push: branches: [main]` TRIGGER. IT WAS DEAD ON ARRIVAL AND HAS BEEN REMOVED.
   #
   # Measured: GitHub does not trigger workflows from events created with `GITHUB_TOKEN` -- a merge
   # completed by `github-actions[bot]` (every merge `auto-arm.yml` completes) produces a `pull_request:
   # closed` event AND a push to `main` that start NOTHING. 19 of 19 bot-merged PRs never ran `close-
-  # rows.yml`; 5 of 5 sampled bot-merge SHAs never ran `trunk-guard.yml` at all -- not "ran and passed",
+  # rows.yml`; 5 of 5 sampled bot-merge SHAs never ran `trunk.yml` at all -- not "ran and passed",
   # never ran. So a job riding THIS workflow's push trigger, built specifically to backstop bot merges,
   # could never fire for the one case it existed to catch: a guard that structurally cannot run for its
   # own target is worse than no guard, because it reads as coverage that was never real.
   #
-  # `close-rows.yml`'s own `workflow_dispatch` (added in the same PR as the now-removed sweep) stays --
+  # (#909, 2026-09-12: with PAT merges the push DOES fire, and the `closeRows` job above rides it.)
+  # `close-rows.yml`'s own `workflow_dispatch` (added in the same PR as the now-removed sweep) became the
+  # optional `pr` input above --
   # it is how the workflow can be exercised deliberately regardless of which identity merged. The
   # backstop this row needed is #417 (an interim scheduled sweep, gated on `main`'s tip carrying zero
   # check runs) and #416 (the permanent fix: arm with a real PAT so bot merges stop being invisible to

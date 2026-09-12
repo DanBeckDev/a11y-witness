@@ -115,6 +115,37 @@ function main() {
     return;
   }
   execFileSync("gh", ["pr", mode, ...rest], { stdio: "inherit" });
+  for (const args of armAfterCreate(mode, rest)) execFileSync("gh", args, { stdio: "inherit" });
+}
+
+/**
+ * #909: A PR THIS WRAPPER OPENS READY IS ARMED AT CREATION, BY THE WRAPPER. Pure: the extra `gh` argv to run
+ * after `gh pr create`, or none. `auto-arm.yml`'s `arm` job used to be the only thing that armed, firing on
+ * every PR event (685 runs on the day measured); it still arms the DRAFTS, on `ready_for_review`, because
+ * GitHub refuses auto-merge on a draft and a product PR opens as one (#912). A docs-and-tests PR opens ready,
+ * and this is the moment its flag needs setting -- the wrapper already runs at exactly that moment. Merge
+ * commits only, the org's rule. `--draft` anywhere in the args means "not now"; `edit` never arms.
+ * @param {string} mode
+ * @param {string[]} rest the args handed to `gh pr <mode>`
+ * @returns {string[][]}
+ */
+export function armAfterCreate(mode, rest) {
+  if (mode !== "create" || rest.includes("--draft")) return [];
+  const head = flagAfter(rest, "--head");
+  return [["pr", "merge", "--auto", "--merge", ...(head ? [head] : [])]];
+}
+
+/**
+ * The value after a `--flag` (or `--flag=value`), or null.
+ * @param {string[]} args
+ * @param {string} flag
+ * @returns {string | null}
+ */
+function flagAfter(args, flag) {
+  const eq = args.find((a) => a.startsWith(`${flag}=`));
+  if (eq) return eq.slice(flag.length + 1);
+  const i = args.indexOf(flag);
+  return i >= 0 && i + 1 < args.length ? args[i + 1] : null;
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {

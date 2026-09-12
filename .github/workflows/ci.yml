@@ -183,7 +183,7 @@ jobs:
         run: node scripts/ci-changed.mjs --event=${{ github.event_name }} --base=${{ steps.base.outputs.ref }}
 
   # A1 (#452): CALLS `reusable-build-test.yml` rather than carrying its own steps -- see that file's own
-  # header for why (its `trunkGate` sibling in trunk-guard.yml used to duplicate most of this job's steps
+  # header for why (its `trunkGate` sibling in trunk.yml used to duplicate most of this job's steps
   # independently, and chairman's own comment here used to note the two ran "the SAME suite" -- now true
   # by construction, not by two authors keeping two copies equal). The reusable file derives its own
   # checkout depth from `run-ts-tests`/`ts-test-scope` below rather than taking it as an input -- see that

@@ -38,7 +38,7 @@ RULES WORTH KNOWING BEFORE YOU WRITE ONE
 what you broke, and that the guard bit. `npm run mutate` makes it cheap.
 
 `Closes #N` still belongs on a PR that finishes a row. GitHub does not apply the reference when the bot
-performs the merge, so `close-rows.yml` does it explicitly (#298) -- but the keyword is what it reads.
+performs the merge, so `trunk.yml`'s `closeRows` job does it explicitly (#298, #909) -- but the keyword is what it reads.
 -->
 
 Closes #
