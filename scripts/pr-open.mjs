@@ -27,6 +27,7 @@ import { execFileSync, execSync } from "node:child_process";
 import { readFileSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { acceptanceReport, closesDeclarationReport } from "./acceptance-commands.mjs";
+import { leakRefusalReason } from "../packages/lab/src/packaging/leak-patterns.mjs";
 
 /**
  * Runs a command FOR REAL, exactly as `acceptance-commands.mjs`'s own (unexported) `runForReal` does --
@@ -55,6 +56,12 @@ function runForReal(command) {
  * @returns {{ ok: boolean, lines: string[] }}
  */
 export function checkBody(body, { run = runForReal } = {}) {
+  // #891: checked BEFORE anything else, and returned on its own -- `acceptanceReport` actually RUNS the
+  // body's Acceptance command for real, and a body worth refusing for a leak is not worth running
+  // anything from first. The same `allLeaksIn` predicate the tree-wide guards already drive, never
+  // restated.
+  const leak = leakRefusalReason(body);
+  if (leak) return { ok: false, lines: [leak] };
   const report = acceptanceReport(body, run);
   const closes = closesDeclarationReport(body);
   return { ok: report.ok && closes.ok, lines: [...report.lines, closes.line] };
