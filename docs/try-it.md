@@ -31,7 +31,7 @@ the words NVDA spoke.
   trained component only ever says *this is worth a person's look*. A referral on a page you believe is
   fine is expected behaviour, not a bug.
 - **It needs Windows**, because NVDA is Windows-only. That is the real cost of the two hours.
-- **Nothing is published to npm yet.** You install from the repository.
+- **Nothing is published to npm yet.** You install from the repository — [the commands are below](#the-other-route-run-it-from-the-repository), and `npx a11ign` will not work yet.
 
 ## The fastest route: a GitHub Actions run
 
@@ -70,12 +70,69 @@ page (`"Learn about web accessibility"`) is enough — no contact form, no risk 
 form exercises far more of this layer than a page of text alone — the form is where the announcements
 this tool exists to hear actually happen.
 
-**Expect five to eight minutes for a real page.** Measured on three dissimilar real pages (#311): 4 m 38 s,
-4 m 50 s and 7 m 54 s, none of which timed out — three different page shapes landing within a few percent
-of each other, which is the finding that matters more than any one number: this is a fixed floor per page,
-not something a simpler page makes faster. Most of it is the screen reader reading, and that time is not
-recoverable. The one thing that can make it far longer than that range is a consent banner the tool cannot
-get past — see below, before you judge how long your own run took.
+<!-- WHY THE MARKERS BELOW EXIST (#1060): this page promised a floor and then cited two figures under
+     it in the same sentence, calling them "within a few percent of each other" when the spread was
+     seventy per cent. The markers make the checked population explicit. Nothing explanatory goes
+     INSIDE them: a range named in a sentence about the old range is exactly what a text check cannot
+     tell from the claim itself. Figures quoted outside the block are deliberately not held to the
+     range, which is what lets the consent-banner failure be quoted as the failure it is. -->
+
+<!-- TIMING:BEGIN -->
+
+**Expect four to eight minutes for a real page.** Measured on five real-page runs that reached the page
+(#311, #915): 4 m 38 s, 4 m 50 s, 5 m 48 s, 7 m 52 s and 7 m 54 s. **There is a floor — the fastest run that
+reached the page was 4 m 38 s — and above it the spread is wide:** the slowest of the five is seventy per
+cent longer than the fastest, so a simpler page does not reliably mean a shorter run, and the range is a
+bound rather than a prediction for your page. Most of it is the screen reader reading, and
+that time is not parallelisable or recoverable.
+
+<!-- TIMING:END -->
+
+**A sixth run took 3 m 45 s and that is not a faster run, it is a failed one** — it opened on a consent
+overlay and read almost none of the page. **Under four minutes is a finding, not a success**; see the
+consent-banner section below before you judge how long your own run took.
+
+## The other route: run it from the repository
+
+**Use this if your app is not on GitHub, or you want to see the output before you commit a workflow file.**
+It is the same tool; the difference is where the Windows machine comes from. **`npx a11ign` does not work
+yet** — nothing is published — so the package comes from a clone.
+
+```bash
+git clone https://github.com/DanBeckDev/a11y-witness.git
+cd a11y-witness
+npm install
+npm run witness -- https://www.w3.org/WAI --task "Learn about web accessibility"
+```
+
+Node 20 or later. `npm install` builds the workspace, so there is no separate build step.
+
+**The last command needs a capture worker and will not invent one.** A screen reader is a Windows desktop
+application: there is no Docker image, and no flag substitutes for the machine. Run on a Mac or Linux box
+with nothing configured, this is exactly what you get — quoted rather than paraphrased, because it is the
+most likely first result and it is not a crash:
+
+```
+No capture worker answered at http://localhost:8765 (nothing was configured, so this address was a guess).
+A screen reader is a Windows application, so nothing runs here without one. Set A11Y_WORKER to point at a
+worker you have, or see docs/getting-started.md to set one up (~20 minutes with a Windows machine already,
+or use the GitHub Action if you have none).
+```
+
+**Three ways past it, cheapest first:**
+
+| you have | do this |
+|---|---|
+| a GitHub repo | **[the Action above](#the-fastest-route-a-github-actions-run)** — a GitHub-hosted Windows runner is the worker, and you configure nothing |
+| a Windows machine already | [`docs/getting-started.md`](./getting-started.md) — about twenty minutes, then `A11Y_WORKER=http://<that-machine>:8765` |
+| neither | a Windows VM, 1.5–2 hours from scratch. **Take the Action instead** unless you specifically want the local path |
+
+`npm run doctor` reports what this machine has and what each gap needs. It is read-only — it never starts
+or stops anything — so it is safe to run before you have decided anything.
+
+**`--probe-forms` is off here and on in the Action, and that is deliberate.** The CLI can be pointed at any
+URL, and pressing *Send* on somebody else's production site is not a review. A workflow runs against your
+own app, where submitting is intended.
 
 ## What a long marketing page will actually produce
 
@@ -127,9 +184,9 @@ point the run at the page with the form on it.
 
 ### How long a large page takes
 
-**Expect five to eight minutes**, per the measurement above (#311) — not because a bigger page is slower,
-but because the floor is fixed regardless of shape and the time is a screen reader reading: it is not
-parallelisable and not recoverable. A very large page can still exhaust our capture budget beyond that
+**Expect four to eight minutes**, per the measurement above (#311, #915) — the floor is fixed regardless
+of shape, because the time is a screen reader reading and that is not parallelisable or recoverable. The
+range above it is not: the slowest measured run is seventy per cent longer than the fastest. A very large page can still exhaust our capture budget beyond that
 range, and if it does you will get a partial result that **says** it is partial rather than a short one
 that looks complete.
 
