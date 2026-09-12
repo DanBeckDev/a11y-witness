@@ -30,6 +30,19 @@ import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { localImports } from "../local-import-closure.mjs";
+import { sandboxGitEnv } from "../git-env.mjs";
+
+/**
+ * Every git spawn here scrubs `GIT_*`. A hook or a parent process exports `GIT_DIR`/`GIT_INDEX_FILE`, and
+ * a `cwd` is NOT isolation for a git subprocess -- `rev-list` would then answer about the inherited
+ * repository while this function believes it asked about `repoRoot`, which is a verdict about the wrong
+ * tree wearing the right one's name.
+ * @param {string} repoRoot
+ * @returns {(args: string[]) => string}
+ */
+const gitIn = (repoRoot) => (args) =>
+  execFileSync("git", args,
+    { cwd: repoRoot, encoding: "utf8", env: sandboxGitEnv(), stdio: ["ignore", "pipe", "pipe"] });
 
 /** Where the rule modules live. A file outside this directory is the tool, not the verdict. */
 const RULE_DIR = "scripts/row-claim/";
@@ -101,8 +114,7 @@ export function rulePathspec(entry, repoRoot, deps) {
  * @returns {number | null}
  */
 export function commitsBehindOn({ repoRoot, files, run }) {
-  const git = run ?? ((/** @type {string[]} */ args) =>
-    execFileSync("git", args, { cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }));
+  const git = run ?? gitIn(repoRoot);
   try {
     const count = Number(git(["rev-list", "--count", "HEAD..origin/main", "--", ...files]).trim());
     // A NUMBER THIS DID NOT PARSE IS NOT A ZERO. `Number("")` is 0 and `Number("fatal: …")` is NaN, and a
@@ -154,10 +166,12 @@ export function staleRuleReason({ repoRoot, entry, run, files } = {}) {
  * @returns {string[]}
  */
 export function movedFiles({ repoRoot, files, run }) {
-  const git = run ?? ((/** @type {string[]} */ args) =>
-    execFileSync("git", args, { cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }));
+  const git = run ?? gitIn(repoRoot);
   try {
-    return git(["diff", "--name-only", "HEAD", "origin/main", "--", ...files]).split("\n").filter(Boolean);
+    // `--no-renames`, tree-wide rule: a rename reported as one path makes the OTHER path invisible, and a
+    // rule file that moved is exactly the case this refusal exists to name.
+    return git(["diff", "--no-renames", "--name-only", "HEAD", "origin/main", "--", ...files])
+      .split("\n").filter(Boolean);
   } catch (error) {
     void error; // the count above already decided; this only words the message
     return [];
