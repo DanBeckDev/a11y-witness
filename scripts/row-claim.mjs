@@ -70,7 +70,7 @@ import { REPO } from "./repo-identity.mjs";
 import { READY_LABEL, WAS_READY_LABEL } from "./ready-label-audit.mjs";
 import { gitCommonDir, appendJsonl } from "./merge-guard.mjs";
 import { withBoardSnapshot, PROJECT_OWNER, PROJECT_NUMBER } from "./board-snapshot.mjs";
-import { runnerReason } from "./row-claim/runner-rule.mjs";
+import { runnerReason, laneReason } from "./row-claim/runner-rule.mjs";
 import { inBuildReason, lookupHeldRows } from "./row-claim/own-pr-health-rule.mjs";
 import { resolveBlockedByOverride, blockedByExceptionNote } from "./row-claim/blocked-by-rule.mjs";
 import { fileOverlapReason, lookupMyRegionFiles, lookupOpenPrFiles } from "./row-claim/file-overlap-rule.mjs";
@@ -388,6 +388,12 @@ export function decideClaim(labelsBefore, mySession) {
   // and still reserved for a specific session, which is #324's own shape before anyone claims it.
   const reserved = runnerReason(labelsBefore, mySession);
   if (reserved) return { proceed: false, reason: reserved };
+
+  // #1039: BESIDE THE RESERVATION, AND BEFORE THE `claimed` CHECK for the same reason. A row can be
+  // `ready` and in somebody else's lane, which is exactly the state #965 was in when it was claimed --
+  // a check gated on `claimed` first would let anyone take an unclaimed row out of its owner's lane.
+  const lane = laneReason(labelsBefore, mySession);
+  if (lane) return { proceed: false, reason: lane };
 
   const status = claimStatus(labelsBefore);
   if (!status.claimed) return { proceed: true };
