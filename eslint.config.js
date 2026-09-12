@@ -40,12 +40,24 @@ if (!maxLinesPerFunction) throw new Error("eslint no longer exports max-lines-pe
  * tree passed the old predicate correctly -- and that is stated on #1144 rather than claimed otherwise.
  *
  * EXEMPT BY OPTION, not by a table in a test: `wideWindowIsHarmless` is the rule's own fixture per #908
- * clause 3. It is EMPTY today by measurement -- all four readers narrow -- and exists so a reader that
- * genuinely does not need the newest answer is CLASSIFIED rather than made to adopt a predicate it has
- * no use for. "Nothing needs this" and "somebody forgot" must not be the same state.
+ * clause 3. It is EMPTY today, and THE MEASUREMENT IS THE LINT RUN ITSELF -- an unwrapped read anywhere in
+ * the tree is an error, so "the option is empty and lint is green" is a continuously re-proved statement
+ * rather than a count that goes stale. (It said "all four readers narrow" until #1152; the number was
+ * ambiguous between the wrappers and the call sites, and it was already wrong for one of the two readings.)
+ * The option exists so a reader that genuinely does not need the newest answer is CLASSIFIED rather than
+ * made to adopt a predicate it has no use for. "Nothing needs this" and "somebody forgot" must not be the
+ * same state.
+ *
+ * A NAME ON THIS LIST IS A CLAIM ABOUT BEHAVIOUR, so each one is proved where it can be. `newestPerName`
+ * and `newestConclusionOf` are driven in `bounded-window-reads.test.ts`; `newestRun` and
+ * `newestRunCompletedAt` (#1152) in `update-branch-decision.test.ts`, which is where they can be driven
+ * at all -- importing `update-branch-sweep.mjs` into the guard file would give it a `token` requirement
+ * through its closure (`deriveClosureRequirements` -> token via update-branch-sweep.mjs -> gh) and
+ * disqualify it from the job that runs acceptance commands. Without a proof SOMEWHERE, extending this list
+ * is how a reader that does NOT narrow gets admitted by being called the right thing.
  */
 const NARROWS_THE_WINDOW = new Set(["newestPerName", "newestConclusion", "newestConclusionOf",
-  "headQuietSeconds"]);
+  "newestRun", "newestRunCompletedAt", "headQuietSeconds"]);
 
 /** @type {import("eslint").Rule.RuleModule} */
 const boundedWindowReads = {
@@ -127,9 +139,9 @@ export default tseslint.config(
       "local/max-physical-lines-per-function": [
         "error", { max: 90, skipBlankLines: false, skipComments: false, IIFEs: true },
       ],
-      // #1144: EMPTY OPTION BY MEASUREMENT. All four rollup readers narrow; the list exists so a reader
-      // that genuinely does not need the newest answer is CLASSIFIED rather than made to adopt a
-      // predicate it has no use for.
+      // #1144: EMPTY OPTION, AND THIS RULE PASSING IS THE MEASUREMENT -- every rollup read in the tree is
+      // wrapped, or lint would be red. The list exists so a reader that genuinely does not need the newest
+      // answer is CLASSIFIED rather than made to adopt a predicate it has no use for.
       "local/bounded-window-reads": ["error", { wideWindowIsHarmless: [] }],
       "complexity": ["error", 15], // "do one thing": decision points (stricter than ESLint's default 20)
       "max-depth": ["error", 3], // "indent level should not be greater than one or two"
