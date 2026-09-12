@@ -62,6 +62,49 @@ export function pathInProse() {
 }
 
 /**
+ * #1186: DIRECTORY ENTRIES IN A REGION, AND HOW MANY FILES EACH ONE RESERVES.
+ *
+ * A `/`-terminated entry is a DECLARATION OF EVERY FILE BENEATH IT -- `regionCovers` has a directory
+ * branch and B4 uses it (`file-overlap-rule.mjs:56`, per #941, deliberately). So `packages/` in a Region
+ * refuses any row whose PR touches anything under `packages/` for as long as that row is open.
+ *
+ * **That is not a no-op, it is a blanket reservation, and it reads as a small Region.** A one-line Region
+ * that reserves a thousand files looks exactly like one that reserves one -- which is why the COUNT is the
+ * message rather than the fact: the author's error is not knowing the scope they claimed, and telling them
+ * it is a directory tells them nothing they did not type.
+ *
+ * The row was filed with the cause inverted -- that a directory claims NOTHING -- because the instrument
+ * was `region.includes(f)`, plain string equality, standing in for `regionCovers`. Both readings produce
+ * the same `declaredRegionFiles` output, so nothing about that output could have separated them.
+ *
+ * THIS DOES NOT CHANGE B4. `file-overlap-rule.mjs` is correct and is out of this row's Region; the fix is
+ * at declaration time, where #1158 put the surfacing of a path the parser cannot place.
+ *
+ * @param {string} body a row body
+ * @param {(prefix: string) => number} [countUnder] how many tracked files sit under a prefix
+ * @returns {{entry: string, files: number}[]}
+ */
+export function directoryReservations(body, countUnder = trackedFilesUnder) {
+  return (declaredRegionFiles(body) ?? [])
+    .filter((entry) => entry.endsWith("/"))
+    .map((entry) => ({ entry, files: countUnder(entry) }));
+}
+
+/**
+ * How many tracked files sit under `prefix`. Injected in tests so the count is not a corpus read.
+ * @param {string} prefix @returns {number}
+ */
+function trackedFilesUnder(prefix) {
+  try {
+    const out = execFileSync("git", ["ls-files", "--", prefix],
+      { encoding: "utf8", env: sandboxGitEnv() });
+    return out.split("\n").filter(Boolean).length;
+  } catch {
+    return 0;
+  }
+}
+
+/**
  * Something in the Region that LOOKS like a repo path and that nothing declared.
  *
  * #1158 clause 3, and the clause that matters: **the failure mode is silence.** A Region that declares
