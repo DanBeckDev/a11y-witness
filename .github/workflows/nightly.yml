@@ -14,7 +14,7 @@
 # - The three liveness watchdogs (token, board editions, workflow-run) are NOT here. They must run on push,
 #   never on a cron, because GitHub disables scheduled workflows repository-wide after 60 days of
 #   inactivity and a scheduled watchdog dies with the thing it watches -- `board-liveness.test.ts` pins
-#   this. They are three continue-on-error steps in `trunk-guard.yml`'s `watchdogs` job, which already
+#   this. They are three continue-on-error steps in `trunk.yml`'s `watchdogs` job, which already
 #   runs on every push to main, so they cost no workflow runs of their own.
 # - `board-report.yml` and `board-summary-check.yml` stay separate: they are gated on London's clock and
 #   `board-schedule.test.ts` pins the hours.
@@ -183,6 +183,42 @@ jobs:
   # the queue and utilisation) and exits QUIET or ATTENTION; on ATTENTION its report is posted as one
   # comment on #928, the org's reading issue. Silent when clean, but never silent because it did not look:
   # a CANNOT ASK is an ATTENTION. Hourly at :37, on the second cron above; the nightly jobs skip that cron.
+  # #417's SURVIVING HALF, moved here from `trunk-sweep.yml` by #909 (2026-09-12). Two backstops, hourly on the
+  # `:37` cron rather than every 15 minutes: if main's tip carries zero check runs, trigger a real `trunk.yml`
+  # run against it; and close any row a merged PR declared that `trunk.yml`'s own `closeRows` missed. Since #416
+  # merges are made with a PAT and fire push, so both are backstops for the scheduler-and-token failures the
+  # org has measured, not the primary path. The 120-minute window against an hourly cron is deliberate overlap,
+  # pinned by `trunk-sweep.test.ts`: a single missed tick must not lose a row. Independent jobs: one failing
+  # must not block the other.
+  gateSweep:
+    if: github.event.schedule == '37 * * * *' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main }
+      - name: If main's tip has zero check runs, trigger a real gate run against it
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node scripts/trunk-sweep.mjs
+  closeRowsSweep:
+    if: github.event.schedule == '37 * * * *' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main }
+      - name: Close any row a merged PR declared that the push-time job missed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node scripts/close-rows-sweep.mjs --window=120
   watch:
     # Runs on the :37 cron AND on workflow_dispatch, so the one job whose failure mode is silence can be
     # asked to speak by hand (worker-judge's review of #1068).

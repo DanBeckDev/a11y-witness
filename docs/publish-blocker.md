@@ -118,7 +118,7 @@ npm run npm-token:check              # what it can tell today, from wherever you
 npm run npm-token:check -- --post    # and comment once on #73 if it is a real finding
 ```
 
-- **Runs on `push`, never on a schedule** — as a `continue-on-error` step in `.github/workflows/trunk-guard.yml`'s
+- **Runs on `push`, never on a schedule** — as a `continue-on-error` step in `.github/workflows/trunk.yml`'s
   `watchdogs` job since #901 (it was a workflow of its own, `npm-token-liveness.yml`, until 2026-09-10). The
   reason is the same one the board watchdog has: GitHub disables a scheduled workflow after 60 days without
   repository activity, silently, so a watchdog that is itself scheduled has the disease it watches for. A

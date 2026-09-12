@@ -285,7 +285,7 @@ jobs:
     #
     # `TRUNK_FOLLOWUP_ALLOWLIST` (`push-trigger-allowlist.test.ts`) -- ceo's ruling, 2026-09-08. This is
     # neither of the two shapes that file's chairman-derived rule already recognised: not a schedule
-    # watchdog (there is no cron here for GitHub to silently disable), and not `trunk-guard.yml`'s reactive
+    # watchdog (there is no cron here for GitHub to silently disable), and not `trunk.yml`'s reactive
     # check on main's OWN tip. It is a third, narrower shape: a push-to-main job that acts on OTHER open
     # PRs after a merge, never on main's own tip, and can never gate anything because the merge it reacts
     # to already happened. `continue-on-error: true` is REQUIRED by that category's own definition, not
