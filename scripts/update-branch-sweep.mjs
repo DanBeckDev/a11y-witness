@@ -117,6 +117,35 @@ export function headQuietSeconds(runs, now) {
  */
 export const HEAD_QUIET_SECONDS = 300;
 
+/** The one spelling of success, in the normalised vocabulary — lower case, like every other conclusion. */
+const SUCCESS = "success";
+
+/**
+ * #1100: ONE VOCABULARY, normalised at every edge that reads a conclusion.
+ *
+ * **The two predicates that read a `gate` conclusion read DIFFERENT APIs, and the two APIs spell the same
+ * verdict differently.** Measured on this repository, at the same moment:
+ *
+ *     gh pr list --json statusCheckRollup   (what THIS file reads)     COMPLETED / SUCCESS   FAILURE   ""
+ *     gh api .../check-runs                 (what checks-rule.mjs reads)   completed / success   null
+ *
+ * So importing `NO_VERDICT` made the comparison true in `checks-rule.mjs` and **false here** — the
+ * lowercase literal never matches an uppercase `CANCELLED`, the branch is dead, and the file reads as
+ * though it were closed. **Worse than two honest copies, because it looks like reconciliation.** My test
+ * passed because its fixture was written in the other API's vocabulary: a correct value read from the
+ * wrong place, which is this repository's most-recorded diagnostic shape.
+ *
+ * **The shared fact is the CONCEPT, not the STRING.** `NO_VERDICT` still names it; this is what makes both
+ * readers able to say it. `gh` spells absent three ways across its own sources — `null`, `""` and UPPER
+ * CASE — and a population read across them sums correctly and reports wrongly.
+ *
+ * @param {string | null | undefined} conclusion
+ * @returns {string | null} lower-cased, with every spelling of absence collapsed to `null`
+ */
+export function normaliseConclusion(conclusion) {
+  return conclusion ? conclusion.toLowerCase() : null;
+}
+
 /**
  * #1100: WHICH OF THE THREE ELIGIBLE STATES THE GATE IS IN, for the line somebody reads afterwards.
  *
@@ -128,7 +157,7 @@ export const HEAD_QUIET_SECONDS = 300;
  * @returns {string}
  */
 function gateState(gateConclusion) {
-  if (gateConclusion === "SUCCESS") return "gate green";
+  if (gateConclusion === SUCCESS) return "gate green";
   if (gateConclusion === NO_VERDICT) {
     return `gate ${NO_VERDICT}, so a replacement run is already going and this reached NO VERDICT (#1007)`;
   }
@@ -187,7 +216,11 @@ function gateState(gateConclusion) {
  *           quietSeconds?: number | null }} input
  * @returns {{ update: boolean, reason: string }}
  */
-export function updateBranchDecision({ armed, gateConclusion, behind, quietSeconds }) {
+export function updateBranchDecision({ armed, gateConclusion: rawConclusion, behind, quietSeconds }) {
+  // NORMALISED AT THIS BOUNDARY TOO, not only in `newestConclusion`. This function is exported and is
+  // reached by tests and by any future caller with a conclusion from either API -- and a predicate that is
+  // correct only for the spelling its usual caller happens to use is the defect this row just shipped once.
+  const gateConclusion = normaliseConclusion(rawConclusion);
   if (!armed) {
     return { update: false, reason: "not armed for auto-merge -- not this job's concern" };
   }
@@ -229,7 +262,7 @@ export function updateBranchDecision({ armed, gateConclusion, behind, quietSecon
   // and green" are different events and the log must not spell them the same -- a new path that is
   // quieter than the one it replaces is a regression even when the tests pass, which is the other half of
   // #498's lesson read forwards.
-  if (!noVerdictYet && gateConclusion !== "SUCCESS") {
+  if (!noVerdictYet && gateConclusion !== SUCCESS) {
     return { update: true,
       reason: `armed and behind, with gate = ${gateConclusion} -- UPDATED ANYWAY (#1100). A red has two `
         + "causes and this is the only thing that tells them apart: if it CLEARS, the red was the base's; "
@@ -298,7 +331,9 @@ export function newestConclusion(runs, name) {
   // as "not SUCCESS" and skip the PR as failing. `|| null` collapses both spellings of absence to the one
   // the caller already handles. Measured on the real API alongside the zero date above; the two arrive
   // together on every running check, so fixing one without the other just moves the wrong answer.
-  return newest.conclusion || null;
+  //
+  // #1100, after worker-judge's re-read: **CASE IS THE THIRD SPELLING AND BELONGS IN THAT SAME SENTENCE.**
+  return normaliseConclusion(newest.conclusion);
 }
 
 /**
