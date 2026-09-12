@@ -28,6 +28,10 @@
   // `src` is gone as of M8 — every source file now lives in a package.
   "include": [
     "packages/*/src/**/*.ts",
+    // #1135: the nightly-only test population lives beside `src/`, never inside it, because the PR suite's
+    // glob (`packages/*/src/**/*.test.ts`) has no exclusion syntax and a directory outside it is the only
+    // shape the resolver cannot pick up. Typechecked all the same.
+    "packages/*/nightly/**/*.ts",
     // THE GATE SCRIPTS, which were outside the typecheck entirely — so `tsc --noEmit` passed on
     // `audit-rule-coverage.ts` while it called a function whose import did not exist, and only
     // running it found out. `score-rules.ts`, `audit-rule-coverage.ts` and
