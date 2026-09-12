@@ -611,7 +611,15 @@ function main() {
     return;
   }
   process.stdout.write(`${lines.join("\n")}\n`);
-  process.exitCode = EXIT.ATTENTION;
+  // #1072: CANNOT_ASK WAS DECLARED AND NO PATH PRODUCED IT, so this contract promised three states and
+  // delivered two. `watchReport` has always distinguished them -- it opens with "CANNOT ASK: main's colour
+  // is unknown" when the read failed -- and the exit code collapsed that back into ATTENTION.
+  //
+  // **An unreachable exit code is a promise to the caller, not a dead branch.** A caller reading the status
+  // could never separate `could not ask` from `main is red`, and of the two, one is a fact about main and
+  // the other is a fact about this watch. #912's own rule is that a clock which cannot read its source says
+  // so; saying it in the report and not in the status says it only to whoever reads the prose.
+  process.exitCode = colour.readable ? EXIT.ATTENTION : EXIT.CANNOT_ASK;
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) main();
