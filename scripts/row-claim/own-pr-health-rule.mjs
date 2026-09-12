@@ -108,7 +108,18 @@ export function inBuildReason(rows) {
     + "Region declares files somebody still owes a commit for. Finish it, or `decline` it, before claiming "
     + "another (this is B2: one ROW in build per session -- an open PR no longer blocks a claim).\n"
     + `  If #${inBuild.number} is a PARENT whose sub-rows were filed without \`--parent\`, link one with \``
-    + `gh api repos/${REPO}/issues/${inBuild.number}/sub_issues -f sub_issue_id=<id>\` and this refusal lifts.`;
+    // #1161: `-F`, NOT `-f`. `gh api -f` sends every value as a STRING and the sub-issues endpoint requires
+    // an integer, so this line returned `Invalid property /sub_issue_id: "5434613075" is not of type
+    // integer. (HTTP 422)` every time it was followed exactly. `-F` sends it typed and it works.
+    //
+    // The rule this broke is the one that makes a named remedy worth printing at all: FOLLOW THE REFUSAL
+    // EXACTLY AND YOU MUST PASS. A refusal naming a remedy that fails is worse than one naming none, because
+    // the reader now debugs the remedy instead of doing the work -- and may conclude the sub-issue route
+    // does not exist and `decline` a row they should have linked.
+    //
+    // Found by worker-capture following it, which is the only way it could have been found: the message is
+    // correct, the diagnosis is correct, and THE ONE PART THAT IS EXECUTABLE IS THE PART NOBODY EXECUTED.
+    + `gh api repos/${REPO}/issues/${inBuild.number}/sub_issues -F sub_issue_id=<id>\` and this refusal lifts.`;
 }
 
 /**
