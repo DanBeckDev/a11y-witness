@@ -160,8 +160,17 @@ export function staleRuleReason({ repoRoot, entry, run, files } = {}) {
  * cannot be asked. Used only to word the refusal, never to decide it: `commitsBehindOn` owns the verdict,
  * and a second command deciding the same thing is how two answers come to disagree.
  *
- * Plain `HEAD origin/main`, deliberately not `HEAD...origin/main`: a three-dot diff against an ancestor is
- * `diff(B, B)` and empty by construction, which is a false clean this repository has already paid for.
+ * `HEAD...origin/main`, three-dot, and the reason is worth stating because this repository has a standing
+ * warning against it. Three-dot is `diff(merge-base(HEAD, origin/main), origin/main)` -- "what origin/main
+ * changed since we diverged" -- which EXCLUDES the author's own commits. Two-dot includes them, so on a
+ * branch that legitimately edits a rule file the refusal would name the author's own work under `Moved:`,
+ * and a message that accuses the reader of their own change is a message that gets argued with rather than
+ * followed. (worker-judge, reviewing #1044.)
+ *
+ * The standing warning is about `A...B` where B is an ANCESTOR of A: that collapses to `diff(B, B)` and is
+ * empty by construction, a false clean. It cannot mislead here, because this function does not decide
+ * anything -- `commitsBehindOn` has already returned a non-zero count before this is called, which is only
+ * possible when `origin/main` has commits HEAD does not.
  * @param {{ repoRoot: string, files: string[], run?: (args: string[]) => string }} options
  * @returns {string[]}
  */
@@ -170,7 +179,7 @@ export function movedFiles({ repoRoot, files, run }) {
   try {
     // `--no-renames`, tree-wide rule: a rename reported as one path makes the OTHER path invisible, and a
     // rule file that moved is exactly the case this refusal exists to name.
-    return git(["diff", "--no-renames", "--name-only", "HEAD", "origin/main", "--", ...files])
+    return git(["diff", "--no-renames", "--name-only", "HEAD...origin/main", "--", ...files])
       .split("\n").filter(Boolean);
   } catch (error) {
     void error; // the count above already decided; this only words the message
