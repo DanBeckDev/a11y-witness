@@ -81,6 +81,49 @@ export function sessionLabelsOf(rowLabels) {
  * @param {string[][]} rowLabelLists
  * @returns {string[]}
  */
+/**
+ * #1000/#913: THE FIVE SESSIONS THAT EXIST. Four `session:*` labels are RETIRED BY DESCRIPTION rather than
+ * deleted -- `dispatcher`, `worker-audit`, `worker-contracts`, `worker-config` -- because deleting one
+ * strips it from the merged PRs that carry it as attribution, and eleven of thirteen are read by
+ * `attributionFor` (`claim-provenance.mjs`) to return the `worker` verdict. A record of the past is never
+ * renamed, and GitHub has no deletion that spares history.
+ *
+ * **So four live labels carry a retired meaning, and the only thing keeping them retired is that nobody
+ * applies them.** That is a rule nobody enforces, which in this repository is a rule that has already
+ * drifted: `sessionLabelsOf` copies WHATEVER `session:*` label a row carries onto the closing PR, and a row
+ * hand-labelled `session:dispatcher` tomorrow would put a retired label on a merged PR with nothing saying
+ * so.
+ *
+ * A LITERAL HERE, DELIBERATELY, AND PINNED FROM THE TEST. `docs/roles/README.md`'s roster is not the source
+ * -- measured: it names eleven agents including every retired one, because it is a record of the roles this
+ * org has had. No file holds "who is live" today, so the list lives in ONE place with #913 named, and
+ * `arm-pr.test.ts` pins these two sets against the `session:*` labels that actually exist: disjoint, and
+ * together covering all nine. A sixth session added next month fails there rather than silently
+ * attributing to nothing.
+ */
+export const LIVE_SESSIONS = ["ceo", "product-manager", "orchestrator", "worker-capture", "worker-judge"];
+
+/** Retired 2026-09-10 by the Org Reset (#913), kept as labels because merged PRs carry them. */
+export const RETIRED_SESSIONS = ["dispatcher", "worker-audit", "worker-config", "worker-contracts"];
+
+/**
+ * Pure: which of these labels name a session that no longer exists. **Named, never dropped** -- a silent
+ * drop and a correct run produce identical output, which is the failure shape this repository has the
+ * longest record of.
+ * @param {string[]} sessionLabels @returns {string[]}
+ */
+export function retiredSessionLabels(sessionLabels) {
+  return sessionLabels.filter((l) => !LIVE_SESSIONS.includes(l.slice("session:".length)));
+}
+
+/**
+ * Pure: given the `session:*` labels of every row this PR closes (one label-array per row, in
+ * `closedRowNumbers` order), which labels should the PR carry? A row that carries none contributes
+ * nothing -- an absent claim on the row must not become an invented one on the PR (#725's own ruling:
+ * a row with no session label is unclaimed whoever filed it).
+ * @param {string[][]} rowLabelLists
+ * @returns {string[]}
+ */
 export function sessionLabelsForArm(rowLabelLists) {
   return [...new Set(rowLabelLists.flatMap(sessionLabelsOf))];
 }
@@ -96,10 +139,11 @@ export function sessionLabelsForArm(rowLabelLists) {
  * still carries nothing, because the arm path is the only place the information and the action
  * coincide.
  * @param {{ number: string, repo: string, prBody: string | null | undefined, run?: typeof defaultRun }} args
+ * @returns {{ refused: boolean }} `refused` when a RETIRED session label stopped the arm (#1000)
  */
 export function labelArmedPr({ number, repo, prBody, run = defaultRun }) {
   const rows = closedRowNumbers(prBody);
-  if (rows.length === 0) return;
+  if (rows.length === 0) return { refused: false };
   const rowLabelLists = rows.map((rowNumber) => {
     try {
       return JSON.parse(gh(["issue", "view", String(rowNumber), "--repo", repo, "--json", "labels"], run))
@@ -111,9 +155,27 @@ export function labelArmedPr({ number, repo, prBody, run = defaultRun }) {
     }
   });
   const sessionLabels = sessionLabelsForArm(rowLabelLists);
-  if (sessionLabels.length === 0) return;
+  if (sessionLabels.length === 0) return { refused: false };
+  // #1000: REFUSED, AND THE LABEL IS NAMED. Applying a retired label to a merged PR would put a claim on
+  // the attribution record that no live session can answer for, and a reader of `attributionFor` would get
+  // a verdict naming a session that does not exist. Nothing is applied -- not even the live labels beside
+  // it -- because a partial arm is the state nobody can tell from a complete one.
+  const retired = retiredSessionLabels(sessionLabels);
+  if (retired.length > 0) {
+    console.error(`arm-pr: REFUSING to label #${number} with ${retired.join(", ")} -- `
+      + `${retired.length === 1 ? "that session is" : "those sessions are"} RETIRED (#913, the Org Reset of `
+      + "2026-09-10). The label still exists because merged PRs carry it as attribution, but nothing new "
+      + `may be given it. The five live sessions are ${LIVE_SESSIONS.join(", ")}.\n`
+      + `  Fix the ROW's own label first: \`gh issue edit <row> --remove-label ${retired[0]} --add-label `
+      + "session:<a live session>`, then re-run this.");
+    // RETURNED, NEVER `process.exitCode` FROM IN HERE: setting the exit code inside a library function
+    // fails its CALLER's whole process -- caught by this row's own test file, where every named test
+    // passed and the FILE failed. `main` owns the exit code; this owns the verdict.
+    return { refused: true };
+  }
   gh(["pr", "edit", number, "--repo", repo, ...sessionLabels.flatMap((l) => ["--add-label", l])], run);
   console.log(`arm-pr: labelled #${number} with ${sessionLabels.join(", ")} from row #${rows.join(", #")}`);
+  return { refused: false };
 }
 
 function main() {
@@ -148,7 +210,9 @@ function main() {
     return;
   }
   gh(["pr", "merge", "--auto", "--merge", number, "--repo", repo]);
-  labelArmedPr({ number, repo, prBody });
+  // #1000: `main` owns the exit code. A retired session label refuses the arm, and the workflow step
+  // running this must go red rather than reporting a PR labelled with a session that does not exist.
+  if (labelArmedPr({ number, repo, prBody }).refused) process.exitCode = 1;
   console.log(`arm-pr: armed #${number} -- ${verdict.reason}`);
 }
 
