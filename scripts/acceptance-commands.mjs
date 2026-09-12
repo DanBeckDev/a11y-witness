@@ -651,7 +651,57 @@ export function closureRequirementMessage(hit) {
     const names = importedNamesFor(chain[i], chain[i + 1]);
     hops.push(names[0] ?? basename(chain[i + 1]));
   }
-  return `${entryLabel} requires ${requirement} via ${hops.join(" → ")} → ${fileLabel}:${line}${suffix}`;
+  return `${entryLabel} requires ${requirement} via ${hops.join(" → ")} → ${fileLabel}:${line}${suffix}`
+    + noTokenRemedy(hit, hops);
+}
+
+/**
+ * #1116: NAME THE REMEDY, NOT ONLY THE FAULT.
+ *
+ * The refusal named the chain and never named the way out, so an author learned `// no-token:` existed
+ * only by MISUSING it -- the `wrongDeclaration` branch above is the single place this file mentions it.
+ * Measured on #1009: the author (me) spent the fix moving assertions between files, and the declaration
+ * that would have answered it was four hundred lines from the message that refused them.
+ *
+ * **A guard message must be followable**, and this one told you what was wrong without telling you what
+ * to do about it.
+ *
+ * OFFERED ONLY WHEN IT WOULD ACTUALLY HOLD. The suggestion is checked with `noTokenDeclarationHolds`
+ * against the entry's own comment-stripped code before it is made, so a file that really does call the
+ * function is never told to declare that it does not. **Advice a reader cannot follow is worse than
+ * none** -- it is the shape #1059 was filed about, where `doctor`'s `next:` line sent a reader to a
+ * script that had just refused them.
+ *
+ * THE MECHANICAL PRECONDITION IS NOT THE DISCRIMINATING ONE -- worker-judge reviewing #1132, and #1009
+ * is the counter-example with an author attached. There every input WAS injected and `gh` never
+ * executed, so the first half of this sentence was satisfied and the declaration would still have been
+ * wrong: those assertions go through `mergeReadiness` **because that is what makes them consumer
+ * assertions**. Same mechanical facts as a pure-function test, opposite answer.
+ *
+ * So the message asks the question a checker cannot: **is reaching the tool part of what this file
+ * tests?** A remedy offered without its exception is how a verified-true flag gets taken by an author
+ * under a red CI -- the failure mode of advice rather than of checkers.
+ *
+ * TOKEN ONLY. `// writes:` is checked incrementally per file rather than once at the entry, so the same
+ * sentence would be wrong about where it goes; naming one remedy correctly beats naming two loosely.
+ *
+ * @param {{requirement: string, chain: string[], wrongDeclaration?: boolean}} hit
+ * @param {string[]} hops
+ * @returns {string}
+ */
+function noTokenRemedy(hit, hops) {
+  if (hit.requirement !== "token" || hit.wrongDeclaration) return "";
+  const fn = hops[hops.length - 1];
+  const entry = hit.chain[0];
+  if (!fn || !existsSync(entry)) return "";
+  const text = readFileSync(entry, "utf8");
+  if (declaredNoTokenFn(text) !== null) return "";
+  if (!noTokenDeclarationHolds(stripComments(text), fn)) return "";
+  return `. This file never calls \`${fn}\` itself, so if every input it passes is injected AND reaching `
+    + `\`${fn}\` is not part of what this file tests, it may declare \`// no-token: ${fn}\` on its first `
+    + "line -- #827's mechanism, verified against this file's own code rather than trusted. A CONSUMER "
+    + `assertion reaches \`${fn}\` ON PURPOSE, and declaring otherwise makes it a unit test wearing a `
+    + "consumer test's name";
 }
 
 /**

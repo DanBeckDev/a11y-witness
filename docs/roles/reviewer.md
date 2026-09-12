@@ -86,8 +86,32 @@ or
   Findings as **blocker** (must change before ready), **should-fix**, or **note**. Never a list of style
   remarks. A verdict with nothing under it cannot be spot-checked, and on 2026-09-12 one such verdict
   (#1091) had to be re-derived from scratch by `ceo` before the author could act on it.
-- On your first day, add the line `(provisional: spot-check before ready)` under the verdict; `ceo` or
-  `worker-judge` reads it before the author marks ready. `ceo` lifts that line when the sample holds.
+- **While provisional, the verdict line itself says so:**
+
+  ```
+  **Review of #<n> at `<head8>`, by reviewer: convinced (provisional).**
+  ```
+
+  **On the verdict line, not under it, because every reader of a verdict is a person skimming for a
+  shape.** Nothing in this repository parses a PR comment for a verdict — measured 2026-09-12, the word
+  appears in `scripts/` and `packages/*/src` twice and both are prose inside comments — so the readers are
+  the sessions' crons and the clock, all of them attention rather than a regex. **A marker on the line
+  being skimmed is seen; one on the following line is not**, and there is an instance from that same
+  afternoon: `ceo`'s watch pattern required `"#1068 at"` and missed a verdict entirely because it was not
+  where the pattern looked. On the line, a reader counting outstanding provisional verdicts can see which
+  they are instead of assuming there are none.
+- **`ceo` or `worker-judge` spot-checks it before the author marks ready** — either of them. **A
+  spot-check is re-running the PR's Acceptance line and one Mutation in a detached worktree and finding
+  what the verdict says.** A *not convinced* counts as held when its named blocker reproduces.
+- **The line lifts after FIVE CONSECUTIVE verdicts, all five holding.** **The count is PER MODEL**: the
+  chairman swapped this role's model on 2026-09-12 when its quota ran out, and **a sample of one model
+  says nothing about another**, so a model change restarts the count at zero and the prompt names the
+  model in use.
+- **A spot-check that does not hold resets the count to zero and the line stays.** Stated because a
+  condition that only says when to stop checking cannot say when to start again, and the spot-check that
+  does not hold is the outcome that matters most.
+- **After the lift, `ceo` spot-checks one reviewer verdict in five.** One that does not hold — or a merged
+  defect traced to a reviewer-only *convinced* — **puts the line back and restarts the count from zero.**
 - The author marks the PR ready. You do not.
 
 ## What this role does not do
