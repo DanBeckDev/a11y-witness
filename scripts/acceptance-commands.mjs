@@ -672,6 +672,16 @@ export function closureRequirementMessage(hit) {
  * none** -- it is the shape #1059 was filed about, where `doctor`'s `next:` line sent a reader to a
  * script that had just refused them.
  *
+ * THE MECHANICAL PRECONDITION IS NOT THE DISCRIMINATING ONE -- worker-judge reviewing #1132, and #1009
+ * is the counter-example with an author attached. There every input WAS injected and `gh` never
+ * executed, so the first half of this sentence was satisfied and the declaration would still have been
+ * wrong: those assertions go through `mergeReadiness` **because that is what makes them consumer
+ * assertions**. Same mechanical facts as a pure-function test, opposite answer.
+ *
+ * So the message asks the question a checker cannot: **is reaching the tool part of what this file
+ * tests?** A remedy offered without its exception is how a verified-true flag gets taken by an author
+ * under a red CI -- the failure mode of advice rather than of checkers.
+ *
  * TOKEN ONLY. `// writes:` is checked incrementally per file rather than once at the entry, so the same
  * sentence would be wrong about where it goes; naming one remedy correctly beats naming two loosely.
  *
@@ -687,9 +697,11 @@ function noTokenRemedy(hit, hops) {
   const text = readFileSync(entry, "utf8");
   if (declaredNoTokenFn(text) !== null) return "";
   if (!noTokenDeclarationHolds(stripComments(text), fn)) return "";
-  return `. This file never calls \`${fn}\` itself, so if every input it passes is injected it may `
-    + `declare \`// no-token: ${fn}\` on its first line -- #827's mechanism, verified against this `
-    + "file's own code rather than trusted";
+  return `. This file never calls \`${fn}\` itself, so if every input it passes is injected AND reaching `
+    + `\`${fn}\` is not part of what this file tests, it may declare \`// no-token: ${fn}\` on its first `
+    + "line -- #827's mechanism, verified against this file's own code rather than trusted. A CONSUMER "
+    + `assertion reaches \`${fn}\` ON PURPOSE, and declaring otherwise makes it a unit test wearing a `
+    + "consumer test's name";
 }
 
 /**
