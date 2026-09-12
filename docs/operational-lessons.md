@@ -803,6 +803,57 @@ this one has already written it down nearby.
 
 [#1027 carries the four amendments and the sweep.]
 
+## A VACUITY GUARD THAT ASKS WHETHER **ANY** POPULATION WAS EXAMINED CANNOT REPORT THE EMPTY ONE
+
+**2026-09-12, #1054.** A sibling of the entry above, and the sharper half of it: there the check read the
+wrong THING; here it read the right things and combined them with the wrong word.
+
+`row-reachability.mjs` answers two questions about a row — *is its subject on `main`* (symbols) and *is any
+unmerged branch in its region* (paths). It guards against answering either one vacuously:
+
+```js
+function examinedNothing(row, examined) {
+  if (examined.paths > 0 || examined.symbols > 0) return null;   // <- nothing to report
+```
+
+**That header says, in the file, *"reporting STARTABLE having examined nothing is the defect this repo
+records most."*** And it could not see its own case. #907 declares its Region as three entries — `CLAUDE.md`,
+`docs/` and `packages/lab/src/packaging/` — and named one backticked symbol. The path population came back
+**zero**; the symbol population came back **one**; the disjunction returned `null`; and the verdict printed:
+
+> `#907 is STARTABLE: every symbol it names is on main, and no unmerged branch is in its region (0 path(s),
+> 1 symbol(s), 291 unmerged ref(s) examined).`
+
+**The count that would have given it away is printed in the sentence that is wrong.** `0 path(s)` is right
+there, next to a positive claim about the set it counts. `row-claim claim` refused the same row for
+overlapping an open pull request in one of those three directories.
+
+**The rule: a guard over N populations needs N answers.** A disjunction turns *"I examined nothing here"*
+into *"I examined something somewhere"*, and the verdict then makes a claim per population from a guard
+that made one claim in total. Each population's own emptiness is stated beside the verdict it belongs to —
+`row-reachability` now says `its region was NOT examined` rather than `no unmerged branch is in its region`,
+and the region count travels in the same line.
+
+**The two constructions look alike and only one is the defect. Sweep for the right one.**
+
+| shape | what it asks | verdict |
+|---|---|---|
+| `if (a.length > 0 \|\| b.length > 0) return null` | *did ANY population get examined* | the defect — one non-empty population certifies the other |
+| `if (a.length === 0 && b.length === 0) return CLEAN` | *are both FINDINGS lists empty* | correct, and the commoner one |
+
+**Measured across 292 files** (`scripts/*.mjs` and `packages/lab/src/packaging/*.test.ts`), three spellings
+searched — the disjunction over examined counts, the conjunction over emptiness, and a summed total compared
+to zero. **One instance of the defect** (`row-reachability.mjs:104`, fixed by #1054) and **three of the
+correct construction** (`closes-mismatch-check.mjs`, `owned-path-signoff.mjs`, `ready-label-audit.mjs`),
+which are about findings rather than populations and are right as they stand. **The sweep cannot see a
+disjunction spelled across two separate `if`s**, which is the population it did not search rather than a
+population that is empty.
+
+**It is the guard version of [a check that observes something ADJACENT to the property](pipeline.md#a-check-that-observes-something-adjacent-to-the-property-is-the-failure-review-cannot-catch).** The number is real; the population it
+describes sits next to the one the verdict is about. The tell is the same one that finds the rest of that
+family: **read what the guard actually enumerated before believing what it concluded** — and when a verdict
+makes two claims, check that the guard in front of it made two.
+
 ## A GUARD THAT ALREADY EXISTED, and a weaker check substituted for it
 
 Three mistakes in one session on 2026-09-01/02, and only the first was a gap in this repo. The other two
