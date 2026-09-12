@@ -245,56 +245,11 @@ jobs:
         working-directory: packages/control/ansible
         run: python3 check-modules.py
 
-  docs:
-    needs: changed
-    if: needs.changed.outputs.docs == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci --ignore-scripts
-      - run: npm run build
-      # docs/coverage.md is GENERATED and DELIBERATELY UNTRACKED (issue #158) -- a fresh checkout has no
-      # copy on disk, so `doc-references.test.ts` below (which asserts every path the top-level docs cite
-      # actually exists) would report a real reference as broken. Regenerating it here keeps that citation
-      # honest without resurrecting the git conflict untracking it was meant to remove.
-      - run: npm run docs:coverage
-      # The doc/tracker/board guards -- `backlog.test.ts`, `backlog-ready.test.ts`, `known-gaps-file-
-      # facts.test.ts`, `board-liveness.test.ts` and their siblings, all of which read `docs/*.md` content
-      # and would otherwise only ever run when `packages/lab/src/packaging/**` itself changes, never when
-      # the DOCUMENT it pins does. Running the whole directory rather than hand-picking a subset: it is
-      # already the repo's own home for "guard, not capture/fleet" tests (leak sweeps, worktree lifecycle,
-      # lab-job catalogue checks alongside the doc guards), so a hand-picked list would need its own
-      # discovery test to stay honest -- simpler to run the directory a docs change could plausibly affect.
-      #
-      # GH_TOKEN: a handful of these (board-style.test.ts, the live issue-fetch tests) shell out to `gh`
-      # against this repo's own real Issues/labels -- read-only, and `github.token` already has that scope
-      # for the repo the workflow runs in. Found missing on this PR's own first real CI run: these tests
-      # had never reached this far before either (same earlier-failing-job shape as the Python split).
-      - run: npx tsx --test "packages/lab/src/packaging/*.test.ts"
-        env:
-          GH_TOKEN: ${{ github.token }}
+  # #1065: the `docs` job that used to stand here (the whole packaging glob on a shallow checkout) is
+  # DELETED. Since #902 it reported without deciding, it went red on an environment-only failure (#1064)
+  # and a PR merged through it unread. Its population runs unscoped in trunk-guard on a full-history
+  # checkout after every merge, which is the gate that acts; the kept guards run in `ts` on every PR.
 
-  # BOARD-ONLY, THE NARROWEST JOB IN THIS FILE -- chairman's direction, 2026-09-06, the product manager's
-  # single largest recurring cost that night: `docs/board/summaries/*.md` and `docs/board/reported.json`
-  # are edited far more often than anything else under `docs/`, and every such edit used to pay the full
-  # `docs` job above (a build, then the whole packaging directory) for a change no rule outside the board
-  # guards could react to. Fires only when `board` is true -- see `ci-changed.mjs`'s own header -- which is
-  # mutually exclusive with `docs`: a diff mixing a board file with any other doc file runs the wider
-  # `docs` job instead, never both.
-  #
-  # NO TYPECHECK, NO GH_TOKEN -- verified, not assumed: none of the six files this job runs shell out to
-  # `gh`. A BUILD IS STILL NEEDED, though the first version of this job shipped without one on the strength
-  # of a grep that checked only these test files' own top-level imports: `board-liveness.test.ts`,
-  # `board-markdown.test.ts`, `board-style.test.ts` and `board-summary-origin.test.ts` all drive a real
-  # `scripts/board-*.mjs` script, and those scripts import `@a11ign/worker-fleet/cli-flags` --
-  # exactly the stale-dist trap CLAUDE.md names for every other job in this file, reached one hop further
-  # than the grep looked. Caught by actually RUNNING the job's real command with no build present, not by
-  # reading the imports -- this repo's own rule, applied to itself. Still far cheaper than the `docs` job:
-  # six files instead of the whole packaging directory, no coverage, no rules-check.
-  # A1 (#452): CALLS `reusable-board.yml` -- see that file for the steps and why NO TYPECHECK, NO GH_TOKEN
-  # by hand any more (it carries its own, correct one).
   board:
     needs: changed
     if: needs.changed.outputs.board == 'true'
