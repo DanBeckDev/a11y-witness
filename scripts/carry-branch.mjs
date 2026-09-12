@@ -49,10 +49,13 @@ import { parseWorktreeList } from "./prune-worktrees.mjs";
 // RELATIVE, not the `@a11ign/worker-fleet/cli-flags` package specifier -- see `row-claim.mjs`'s own
 // header for why: this needs `node_modules` and a completed build, and this file has neither guarantee.
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
+import { assertNoLeakInArgv } from "../packages/lab/src/packaging/leak-patterns.mjs";
 
 /** @type {(cmd: string, args: string[], opts?: { cwd?: string }) => string} */
-const defaultRun = (cmd, args, opts = {}) =>
-  execFileSync(cmd, args, { ...opts, env: sandboxGitEnv(), encoding: "utf8" });
+const defaultRun = (cmd, args, opts = {}) => {
+  assertNoLeakInArgv(cmd, args); // #1053: guarded in the SPAWN HELPER, not per call site
+  return execFileSync(cmd, args, { ...opts, env: sandboxGitEnv(), encoding: "utf8" });
+};
 
 /** @param {unknown} error @returns {string} */
 function errMsg(error) {

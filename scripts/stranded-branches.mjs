@@ -48,12 +48,16 @@ import { realpathSync } from "node:fs";
 import { refuseUnknownFlags, flagValue } from "@a11ign/worker-fleet/cli-flags";
 import { REPO } from "./repo-identity.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
+import { assertNoLeakInArgv } from "../packages/lab/src/packaging/leak-patterns.mjs";
 
 const EXIT = { OK: 0, CANDIDATES: 1, CANNOT_ASK: 2 };
 
 /** @type {(cmd: string, args: string[]) => string} */
-const defaultRun = (cmd, args) => execFileSync(cmd, args,
-  { encoding: "utf8", env: sandboxGitEnv(), stdio: ["ignore", "pipe", "pipe"] });
+const defaultRun = (cmd, args) => {
+  assertNoLeakInArgv(cmd, args); // #1053: guarded in the SPAWN HELPER, so every call site here is covered
+  return execFileSync(cmd, args,
+    { encoding: "utf8", env: sandboxGitEnv(), stdio: ["ignore", "pipe", "pipe"] });
+};
 
 /**
  * Every branch pushed under `origin/agent/*` or `origin/lead/*` -- the two prefixes this repo's own
