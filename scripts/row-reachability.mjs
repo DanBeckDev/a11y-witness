@@ -301,7 +301,20 @@ export function refsCarryingSymbol(symbol, refs) {
     try {
       git(["grep", "-q", "-F", "-e", symbol, ref]);
       carrying.push(ref);
-    } catch { /* no match on this ref, or the ref itself is unreadable -- either way, it does not carry it */ }
+    } catch (error) {
+      // #772: "no match" AND "could not read this ref" ARE NOT THE SAME ANSWER, and the comment that used
+      // to sit here said "either way, it does not carry it" -- which is the conflation, written down.
+      //
+      // In a checkout with no remote branches fetched, every ref is unreadable and every symbol reads as
+      // carried by nothing, so `subjectsMissing` comes back empty and the row reports STARTABLE. That is
+      // the direction that looks like success: a clean answer from a question never asked.
+      //
+      // `symbolOnMain`, THIRTY LINES ABOVE, ALREADY DRAWS THIS LINE -- exit 1 is git grep's own "no match",
+      // a real no; anything else (128 for an unreadable revision) is a failure that must reach `main()`'s
+      // CANNOT_ASK path. The rule was stated once in this file and not followed by its neighbour.
+      if (/** @type {{ status?: number }} */ (error).status === 1) continue;
+      throw error;
+    }
   }
   return carrying;
 }
