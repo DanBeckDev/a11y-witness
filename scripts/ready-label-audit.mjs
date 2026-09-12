@@ -229,6 +229,27 @@ const MAX_ISSUE_FETCH = 8000;
 const FIRST_ASK = 500;
 
 /**
+ * How many asks it takes to double from `first` to the ceiling, inclusive -- DERIVED, so it cannot drift
+ * from the two constants it is about.
+ *
+ * #1098 (worker-capture): the loop terminated because TWO expressions agreed -- `Math.min(limit * 2,
+ * MAX_ISSUE_FETCH)` stopped growing and `limit >= MAX_ISSUE_FETCH` threw. Change that `>=` to `>` and it
+ * asks for 8000 for ever: measured, `exit 124`, no output at all.
+ *
+ * **A hang is not a refusal.** This whole walk exists so a partial count is never reported as a total,
+ * and a hang reports neither -- in the nightly it is a stuck job rather than a failing one, which is the
+ * quietest of the three. So the iteration count is bounded independently of the value comparison, and
+ * exhausting it throws and names itself. I had already met this shape and re-spelled the MUTATION around
+ * it, which made the measurement possible and left the code able to hang.
+ *
+ * @param {number} first
+ * @returns {number}
+ */
+function asksToCeiling(first) {
+  return Math.ceil(Math.log2(MAX_ISSUE_FETCH / Math.max(first, 1))) + 1;
+}
+
+/**
  * #1090: ASK FOR MORE UNTIL THE ANSWER IS SHORT -- the shared walk behind every list in this file.
  *
  * The two closed-list reads below had **no truncation guard at all**: a hand-set `--limit 1000` and no
@@ -241,7 +262,14 @@ const FIRST_ASK = 500;
  * @returns {unknown[]}
  */
 function listUntilShort({ run, argv, what, first = FIRST_ASK }) {
-  for (let limit = first; ; limit = Math.min(limit * 2, MAX_ISSUE_FETCH)) {
+  const maxAsks = asksToCeiling(first);
+  for (let limit = first, asks = 1; ; limit = Math.min(limit * 2, MAX_ISSUE_FETCH), asks++) {
+    if (asks > maxAsks) {
+      throw new Error(`ready-label-audit: asked gh for ${what} ${asks - 1} times without `
+        + `reaching either a short page or the ${MAX_ISSUE_FETCH} ceiling. That cannot happen `
+        + `while the doubling and the ceiling check agree, so one of them has been changed -- `
+        + `refusing to loop. A hang reports no count at all, which is worse than refusing.`);
+    }
     /** @type {string} */
     let raw;
     try {
