@@ -1350,7 +1350,7 @@ whatever eventually replaces `pr-hold`/`arm-pr`'s labeling for the new four-role
 
 ## A probe whose own health is invisible in its own output
 
-**Nine times on 2026-09-12, between two agents, an instrument that did not run rendered identically to one
+**Eleven times on 2026-09-12, between two agents, an instrument that did not run rendered identically to one
 that ran and passed.** This is not the vacuity shape (a guard that cannot fail — that is `#1123` and the
 `local/uncontrolled-emptiness` rule). It is one level earlier: **the failure mode and the success value are
 the same glyph**, so nothing about the output invites a second look.
@@ -1366,6 +1366,15 @@ the same glyph**, so nothing about the output invites a second look.
 | 7 | `node -e '…' "--field"` in a mutation matrix | `fail 0`, three times | zsh handed `--field` to *node* as an option; a **uniform answer across a varied set** was the tell |
 | 8 | `npx eslint <file> \| grep -c '<rule>'` | `0` | the edit left a syntax error; ESLint emitted a PARSE ERROR, and a count cannot hear one |
 | 9 | a row's Open-check, `git grep -c` | stated `0` | `git grep -c` prints NOTHING on a miss; `grep -c` on a file prints `0` |
+| 10 | a mutation table's three rows | a plausible table | each rewrite anchored on a literal the source no longer spelled |
+| 11 | `git diff <old>..HEAD` after a reconstructed sha | **empty** | `git checkout` REFUSED; the worktree never moved, so the diff was empty by construction |
+
+**Instance 11 is the one that has no downstream corrector, and that is what makes it different rather than
+eleventh.** Every other entry produces a WRONG answer, so something later disagrees with it — a test goes
+red, a reviewer re-derives, the next command contradicts it. Instance 11 produced a **right** answer:
+*"code unchanged from the convinced"* was true, and measured on a tree that had never moved. **Nothing
+downstream ever disagrees with a correct conclusion**, so the usual backstop is gone — the error survives
+because it is indistinguishable from the work.
 
 **Instance 8 is the one that changes the remedy.** The other eight are quiet: nothing was said. In 8 the tool
 said exactly what was wrong, in a message, and **the reading threw it away** — `grep -c` cannot hear a parse
@@ -1377,6 +1386,16 @@ error. It was one sentence from reporting that a working fix did not work.
 > did not bite print the same green.
 
 > **Assert the tool ANSWERED before you read its answer.** Covers the cases that are not mutations at all.
+
+**And the rule that catches 8 and 11 together:**
+
+> **When a tool both REFUSES and ANSWERS on the same stream, the refusal is above the answer and the answer is what you read.**
+ In 8 it was ESLint's parse error above a
+`grep -c`; in 11 it was `fatal: unable to read tree` above an empty diff. **Two instances rather than one,
+because a rule with a single instance reads as an anecdote about that instance.**
+
+The concrete half: **a sha comes from `gh pr view --json headRefOid`, never from a message.** Eight-character
+heads quoted in prose are an invitation to reconstruct the other thirty-two.
 
 **And the operational rule both reduce to: do not COUNT a tool's output when the tool can also refuse.**
 `grep -c` on a linter, `wc -l` on a test run, `| head` on a status list — each turns *"I could not answer"*
