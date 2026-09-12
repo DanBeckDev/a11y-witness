@@ -27,7 +27,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/ci-changed.mjs` — classify what a PR's diff touches, so CI's conditional jobs know whether to run
 - `node scripts/close-merged-rows.mjs` — close the tracker rows a merge landed, or refuse and say why
 - `node scripts/close-rows-for-merged-pr.mjs` — close the issues a merged PR declared, because a bot merge does not close them itself
-- `node scripts/close-rows-sweep.mjs` — a backstop sweep for close-rows.yml, which fires for some merges and silently not others
+- `node scripts/close-rows-sweep.mjs` — close the rows every PR merged in the window declared, riding trunk.yml's push and nightly's hourly cron
 - `node scripts/closes-mismatch-check.mjs` — refuse when a PR's declared Closes line disagrees with what GitHub will actually close
 - `node scripts/control-plane-hygiene.mjs` — print every control-plane hygiene number fresh, measured by command, never typed once
 - `node scripts/coverage-failure-classifier.mjs` — turn a nightly coverage.yml failure comment into an actual finding, not just 'it failed'
@@ -44,6 +44,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/merge-queue.mjs` — refuse any route onto main other than the open-PR merge queue
 - `node scripts/mutation-check.mjs` — prove a guard actually bites: mutate a file, confirm its test fails, restore, confirm it passes
 - `node scripts/npm-token-liveness.mjs` — say whether the first-publish npm token is still present after it should have been revoked
+- `node scripts/org-watch.mjs` — org-watch -- the org's clock. Hourly by default; `--weekly` renders the cost table.
 - `node scripts/owned-path-signoff.mjs` — check a PR touching a corpus-invalidating path named the facts its own body must state
 - `node scripts/parent-recheck-summary.mjs` — read a node:test TAP log and print its failing subtests by name -- #744, never a fixed tail
 - `node scripts/piped-exit-status-guard.mjs` — detect a piped command whose exit status was read from the wrong side of the pipe
