@@ -178,7 +178,7 @@ jobs:
           if [ -n "$A11IGN_BOT_TOKEN" ]; then
             export GH_TOKEN="$A11IGN_BOT_TOKEN"
           else
-            echo "::warning::A11IGN_BOT_TOKEN is not set -- arming with GITHUB_TOKEN instead. A merge completed with it fires no workflow events (trunk-guard, close-rows, the push watchdogs) -- see #416."
+            echo "::warning::A11IGN_BOT_TOKEN is not set -- arming with GITHUB_TOKEN instead. A merge completed with it fires no workflow events (trunk-guard, close-rows, the push watchdogs) -- see #416. And arming with it fires no auto_merge_enabled run, so update-branch does not sweep on arming and #1094 returns with no log line -- see #1094."
             export GH_TOKEN="$FALLBACK_TOKEN"
           fi
           node scripts/arm-pr.mjs --pr="${{ github.event.pull_request.number }}" --repo="${{ github.repository }}"
@@ -208,7 +208,7 @@ jobs:
           if [ -n "$A11IGN_BOT_TOKEN" ]; then
             export GH_TOKEN="$A11IGN_BOT_TOKEN"
           else
-            echo "::warning::A11IGN_BOT_TOKEN is not set -- arming with GITHUB_TOKEN instead. A merge completed with it fires no workflow events (trunk-guard, close-rows, the push watchdogs) -- see #416."
+            echo "::warning::A11IGN_BOT_TOKEN is not set -- arming with GITHUB_TOKEN instead. A merge completed with it fires no workflow events (trunk-guard, close-rows, the push watchdogs) -- see #416. And arming with it fires no auto_merge_enabled run, so update-branch does not sweep on arming and #1094 returns with no log line -- see #1094."
             export GH_TOKEN="$FALLBACK_TOKEN"
           fi
           node scripts/auto-arm-sweep.mjs
@@ -292,7 +292,15 @@ jobs:
         env:
           A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_PR: ${{ github.event.pull_request.number }}
         run: |
+          # #1094 item 3: the two causes of this sweep must not render the same sentence.
+          if [ "$EVENT_NAME" = "push" ]; then
+            echo "UPDATE-BRANCH: ran because main moved (push)"
+          else
+            echo "UPDATE-BRANCH: ran because #${EVENT_PR} armed (auto_merge_enabled)"
+          fi
           if [ -z "$A11IGN_BOT_TOKEN" ]; then
             echo "::warning::A11IGN_BOT_TOKEN is not set -- SKIPPING update-branch entirely, not falling back to GITHUB_TOKEN. A push made with GITHUB_TOKEN fires no pull_request: synchronize, so an updated PR would get a new head with no check run ever triggered for it -- worse than leaving it alone. See #416/C2."
             exit 0
