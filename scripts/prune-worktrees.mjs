@@ -380,6 +380,147 @@ function assessWorktree(repoRoot, entry, { run, now }) {
 }
 
 /**
+ * THE SESSION PREFIXES THAT NO LONGER RUN -- #933.
+ *
+ * A branch prefix names the session that cut it, and a worktree whose prefix names a RETIRED session is the
+ * case with nobody to ask: the work is stranded rather than in progress. Measured on this host 2026-09-12,
+ * three of the seven worktrees holding uncommitted tracked work were `dispatcher`'s.
+ *
+ * A CONSTANT AND NOT A DERIVATION, deliberately. The org's shape is a decision, not a fact in the tree --
+ * deriving it would mean asking GitHub which `session:` labels are in use, which makes a local report
+ * depend on the network and on a tracker state that lags the decision. The reason lives here instead:
+ * `dispatcher` and `lead` were retired when the org moved to five sessions (ceo, product-manager,
+ * orchestrator, worker-capture, worker-judge); `agent/` is the live prefix every one of them uses.
+ */
+const RETIRED_BRANCH_PREFIXES = ["dispatcher/", "lead/"];
+
+/**
+ * The uncommitted work in one worktree, counted over MODIFIED TRACKED FILES ONLY.
+ *
+ * **This is the whole value of the report and it is a narrowing, not a filter of convenience.** Measured
+ * on this host 2026-09-12: 58 worktrees, **38** with something uncommitted, **7** with modified tracked
+ * files, and the other 31 carry `.metadata_never_index` and nothing else -- macOS Spotlight, in every
+ * worktree, for ever. A report that names 38 is a report nobody reads, and the six entries that matter are
+ * invisible inside it.
+ *
+ * `??` lines are EXCLUDED, which is the narrowing, and that is a real loss: a brand-new file nobody has
+ * added is uncommitted work too. It is taken deliberately, because the noise is 100% untracked and the
+ * signal would be buried. `git add -N` promotes such a file into this report, which is the documented way
+ * to make it visible.
+ * @param {string} worktreePath
+ * @param {{ run?: typeof defaultRun }} [deps]
+ * @returns {{ files: number, insertions: number, deletions: number } | "unknown"}
+ */
+export function trackedChanges(worktreePath, { run = defaultRun } = {}) {
+  try {
+    const status = run("git", ["status", "--porcelain"], { cwd: worktreePath });
+    const files = status.split("\n").filter((l) => l.trim() !== "" && !l.startsWith("??")).length;
+    if (files === 0) return { files: 0, insertions: 0, deletions: 0 };
+    // `HEAD` covers staged AND unstaged together: a worktree with everything staged is exactly the case
+    // #933 found twice, and a bare `git diff` reports zero for it.
+    const shortstat = run("git", ["diff", "--shortstat", "HEAD"], { cwd: worktreePath });
+    const insertions = Number(/(\d+) insertion/.exec(shortstat)?.[1] ?? 0);
+    const deletions = Number(/(\d+) deletion/.exec(shortstat)?.[1] ?? 0);
+    return { files, insertions, deletions };
+  } catch {
+    return "unknown"; // never 0: "could not ask" and "nothing there" are different reports
+  }
+}
+
+/**
+ * How many commits `branch` has that `origin/main` does not. `"unknown"` when the question cannot be asked
+ * -- never 0, because "no commits ahead" and "could not compare" are the two answers this repository has
+ * most often conflated, and here they are the difference between "this is all the work there is" and
+ * "I have no idea what this is".
+ * @param {string} repoRoot
+ * @param {string} branch
+ * @param {{ run?: typeof defaultRun }} [deps]
+ * @returns {number | "unknown"}
+ */
+export function commitsNotOnMain(repoRoot, branch, { run = defaultRun } = {}) {
+  try {
+    const count = Number(run("git", ["rev-list", "--count", `origin/main..${branch}`], { cwd: repoRoot }).trim());
+    return Number.isInteger(count) ? count : "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+/**
+ * `mergeStatus`'s three answers, preserved as three. `=== "merged"` is the shape that destroyed it:
+ * `"unknown" === "merged"` is `false`, so a merge status nobody could read became "the answer is no".
+ * @param {string} status
+ * @returns {boolean | "unknown"}
+ */
+const mergedTristate = (status) => (status === "unknown" ? "unknown" : status === "merged");
+
+/**
+ * @typedef {{ path: string, branch: string | null, files: number, insertions: number, deletions: number,
+ *   onMain: boolean | "unknown", commitsAhead: number | "unknown", retiredSession: boolean
+ * }} StrandedWorktree
+ */
+
+/**
+ * Every worktree holding uncommitted tracked work, with what a reader needs to dispose of it.
+ *
+ * **It reports and never deletes.** `pruneWorktrees` already refuses a dirty worktree correctly; the gap
+ * #933 names is that nobody hears the refusal, so this is a separate read over the same list.
+ *
+ * AND IT DOES NOT TOUCH `isWorkingTreeClean`, which is the tempting change and the wrong one: that
+ * predicate decides REMOVAL, and narrowing it to tracked files would turn "refused, there are untracked
+ * files here" into "removed". A narrowing that is right for a report is a deletion when it is wired to a
+ * delete.
+ * @param {string} repoRoot
+ * @param {{ run?: typeof defaultRun }} [deps]
+ * @returns {{ examined: number, stranded: StrandedWorktree[], unreadable: string[] }}
+ */
+export function strandedWork(repoRoot, { run = defaultRun } = {}) {
+  const entries = parseWorktreeList(run("git", ["worktree", "list", "--porcelain"], { cwd: repoRoot }));
+  /** @type {StrandedWorktree[]} */
+  const stranded = [];
+  /** @type {string[]} */
+  const unreadable = [];
+  // EXAMINED COUNTS WHAT WAS EXAMINED. `entries.length` included the primary checkout, which the loop
+  // skips -- so the head line said 58 of a population of 57. worker-judge: the count was held as PRINTED
+  // and never as COUNTING, and `entries.length + 99` was 0 red across all 37 tests.
+  let examined = 0;
+  for (const entry of entries) {
+    if (isPrimaryWorktree(entry.path)) continue;
+    examined += 1;
+    const { branch } = entry;
+    const changes = trackedChanges(entry.path, { run });
+    // A WORKTREE WE COULD NOT READ IS NOT A CLEAN ONE. Dropping it silently would make the head line
+    // ("N examined, M carry changes") true of a population quietly smaller than N -- the exact defect this
+    // report exists to end, one level in. It is counted separately because it needs a different action:
+    // a stranded change needs a disposition, an unreadable worktree needs looking at.
+    if (changes === "unknown") { unreadable.push(entry.path); continue; }
+    if (changes.files === 0) continue;
+    stranded.push({
+      path: entry.path,
+      branch: entry.branch,
+      ...changes,
+      // COMMITS THE BRANCH HAS THAT `origin/main` LACKS, not merely "is it merged".
+      //
+      // The row asked for the boolean and the boolean is ambiguous in the commonest case, which I found by
+      // running this against the live host: a branch cut from `main` minutes ago with uncommitted work in
+      // it reads `merged`, identically to a branch whose commits landed a week ago. One is work in
+      // progress and the other is a leftover, and calling the first a leftover is the report telling a
+      // reader to discard a session's live working directory. The COUNT separates them and the boolean
+      // cannot. A detached worktree has no branch to ask about, so both are `"unknown"`.
+      // THE TRISTATE SURVIVES THE COMPARISON. `mergeStatus` returns "merged" | "not-merged" | "unknown",
+      // and `=== "merged"` collapsed the last two into one `false` -- so a merge status nobody could read
+      // rendered as "is not an ancestor of origin/main", a positive claim from an unanswerable question.
+      // worker-judge, reviewing #1058, and it is `trackedChanges`'s own rule turned on me: "could not
+      // ask" and "the answer is no" are different reports.
+      onMain: branch === null ? "unknown" : mergedTristate(mergeStatus(repoRoot, branch, { run })),
+      commitsAhead: entry.branch === null ? "unknown" : commitsNotOnMain(repoRoot, entry.branch, { run }),
+      retiredSession: branch !== null && RETIRED_BRANCH_PREFIXES.some((prefix) => branch.startsWith(prefix)),
+    });
+  }
+  return { examined, stranded, unreadable };
+}
+
+/**
  * Which `PruneReport` bucket a `classify` verdict other than `"remove"` lands in.
  * @type {Record<"dirty" | "cherry-picked" | "inconclusive" | "active",
  *   "dirty" | "cherryPicked" | "inconclusive" | "active">}
@@ -471,6 +612,35 @@ function formatReport(report, dryRun = false) {
   return lines.join("\n");
 }
 
+/**
+ * The stranded-work report, with its EXAMINED COUNT in the first line -- #933.
+ *
+ * "6 of 81 worktrees" and "6" are different claims, and only the first can be wrong in a way a reader
+ * notices: a sweep that walked nothing reports no stranded work, which is the cleanest possible output and
+ * indistinguishable from a clean host. The count is the part that makes the zero mean something.
+ * @param {ReturnType<typeof strandedWork>} read
+ * @returns {string}
+ */
+export function formatStranded({ examined, stranded, unreadable = [] }) {
+  const head = `${examined} worktree(s) examined, ${stranded.length} carry uncommitted TRACKED changes`
+    + (unreadable.length > 0 ? `, ${unreadable.length} COULD NOT BE READ (${unreadable.join(", ")})` : "")
+    + " (untracked-only trees are not listed: macOS writes `.metadata_never_index` into every one)";
+  if (stranded.length === 0) return `${head}.`;
+  const lines = [`${head} -- NOTHING HAS BEEN REMOVED, this section only reports:`];
+  for (const w of stranded) {
+    const where = w.commitsAhead === "unknown" ? "detached, no branch to place"
+      : w.commitsAhead === 0
+        ? `its branch adds no commit origin/main lacks${w.onMain ? "" : " (and is not an ancestor of it)"}`
+          + " -- the uncommitted change is ALL the work there is"
+        : `its branch has ${w.commitsAhead} commit(s) origin/main lacks`
+          + (w.onMain ? ", though its tip is an ancestor" : " -- an unfinished unit");
+    lines.push(`  ${w.path}`);
+    lines.push(`    ${w.branch ?? "detached"} -- ${w.files} tracked file(s), +${w.insertions} -${w.deletions}; ${where}`
+      + (w.retiredSession ? "; BRANCH PREFIX NAMES A RETIRED SESSION -- nobody to ask" : ""));
+  }
+  return lines.join("\n");
+}
+
 async function main() {
   // Guarded per #164: positional repo root; git flags go onward.
   refuseUnknownFlags(["--apply"],
@@ -486,8 +656,14 @@ async function main() {
   const dryRun = !process.argv.includes("--apply");
   const positional = process.argv.slice(2).find((a) => !a.startsWith("--"));
   const repoRoot = positional ?? process.cwd();
-  const report = pruneWorktrees(statSync(repoRoot).isDirectory() ? repoRoot : process.cwd(), { dryRun });
+  const root = statSync(repoRoot).isDirectory() ? repoRoot : process.cwd();
+  const report = pruneWorktrees(root, { dryRun });
   process.stdout.write(formatReport(report, dryRun) + "\n");
+  // #933: PRINTED ON EVERY RUN, INCLUDING `--apply`, and after the removals rather than instead of them.
+  // The prune already refuses a dirty worktree; the gap this closes is that nobody hears the refusal, so
+  // the report has to be in the output somebody already reads rather than behind a flag they would have to
+  // know about.
+  process.stdout.write(`\n${formatStranded(strandedWork(root))}\n`);
 }
 
 import { pathToFileURL } from "node:url";
