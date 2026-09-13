@@ -14,6 +14,8 @@
 // the ready-issue list, and the account's GraphQL budget ran out twice on 2026-09-13.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { REPO } from "./repo-identity.mjs";
+// #1425: the classifier the close path already uses. That module imports nothing, so this file stays free of `gh`.
+import { refusalCause, PROJECT_UNREADABLE } from "./settle-closed-status.mjs";
 
 export const PROJECT_OWNER = REPO.split("/")[0];
 export const PROJECT_NUMBER = 2;
@@ -232,6 +234,43 @@ export function persistSnapshot(path, snapshot, { writeFile, mkdir }) {
 const scopedSnapshots = new Map();
 
 /**
+ * #1425: THE ONE READ FAILURE THAT ANSWERS EVERY LATER READ IN THIS PROCESS, or `null`. A read refused because the
+ * token cannot read the Project (#546) is a fact about the token and the Project, not about the item or page asked
+ * for, so asking again for the next item spends a request to learn the same thing. Measured on main before this: 7
+ * rows settled against an unreadable Project made 7 requests on the scoped route, and 7 full-route mutations made 7.
+ * ONLY THAT REFUSAL IS RECORDED. Any other failure, a transient exit or a bad answer about one item, is read again,
+ * because it says nothing about the next read. Both routes share it: `board-snapshot.mjs` reads through
+ * `readUnlessProjectUnreadable` too.
+ * @type {Error | null}
+ */
+let projectUnreadable = null;
+
+/**
+ * #1425: RUN `read`, UNLESS THIS PROCESS HAS ALREADY BEEN REFUSED THE PROJECT. A recorded refusal throws without
+ * calling `read`, and quotes the first refusal, so `settle-closed-status.mjs`'s `refusalCause` still classifies it as
+ * project-unreadable -- the cause #546's DEGRADED bridge reads. The classification is that function's own anchor,
+ * imported, never a second copy of it.
+ * @template T
+ * @param {() => T} read @param {string} subject what the read was for, in the refusal's words
+ * @returns {T}
+ */
+export function readUnlessProjectUnreadable(read, subject) {
+  if (projectUnreadable !== null) {
+    throw new Error(`board-snapshot: not reading Project ${PROJECT_NUMBER} again for ${subject} -- an earlier read in `
+      + "this process was refused because this token cannot read the Project, so no request was made (#1425). "
+      + `The earlier refusal: ${projectUnreadable.message}`, { cause: projectUnreadable });
+  }
+  try {
+    return read();
+  } catch (error) {
+    if (refusalCause(/** @type {Error} */ (error).message) === PROJECT_UNREADABLE) {
+      projectUnreadable = /** @type {Error} */ (error);
+    }
+    throw error;
+  }
+}
+
+/**
  * #1275: the arguments for one touched issue's read. The caller adds `gh`: this file never names it, because the
  * closure walk charges a `token` to any file that spawns `gh`, and this file must not carry one.
  * @param {number} issueNumber
@@ -301,7 +340,8 @@ export function writeScopedSnapshot(issueNumbers, {
  * @returns {{ path: string, items: BoardItem[] }}
  */
 function snapshotTouched(issueNumbers, { request, maxAgeMs, writeFile, mkdir, now }) {
-  const { items, notOnBoard } = readTouchedItems(issueNumbers, { request });
+  const { items, notOnBoard } = readUnlessProjectUnreadable(() => readTouchedItems(issueNumbers, { request }),
+    `#${issueNumbers.join(", #")}`);
   const takenAt = now();
   const path = `${SNAPSHOT_DIR}/${snapshotStamp(takenAt)}-issue-${issueNumbers.join("-")}.json`;
   persistSnapshot(path, {
@@ -420,4 +460,5 @@ function defaultMkdir(path) { mkdirSync(path, { recursive: true }); }
  */
 export function forgetScopedSnapshots() {
   scopedSnapshots.clear();
+  projectUnreadable = null; // #1425: a refusal one case recorded must not refuse another case's readable board
 }
