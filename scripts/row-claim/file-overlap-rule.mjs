@@ -24,6 +24,14 @@
 // the same shape and just as worth a second look, so it is surfaced as a diagnostic note rather than
 // silently treated as clean -- never a hard refusal on its own, since a stale reading on someone ELSE's PR
 // must not block every other claim in the queue.
+//
+// #1419: A LIST IS COMPARED WITH ITS OWN TOTAL BEFORE IT IS COMPARED WITH THE REGION. `gh pr list --json files` caps
+// each PR's list at 100 and never says so. Measured on #1412 (113 changed files): the list returned its FIRST 100,
+// every one a `.changeset/*.md`, so the changeset filter emptied it and every claim printed "#1412 reports ZERO
+// changed files" -- while its 13 real files, `package.json` among them, sat at positions 101-113 and could never
+// overlap anything. So the lookup reads each PR's `changedFiles` in the same call and pages REST `pulls/<n>/files`
+// for any list shorter than it; and the rule REFUSES a PR whose list still does not match its count as NOT
+// COMPARABLE, naming both numbers, rather than reading "no overlap". A PR whose count really is 0 is still only a note.
 import { REPO } from "../repo-identity.mjs";
 import { gh, lookup } from "../merge-guard/lookups.mjs";
 import { declaredRegionFiles, regionCovers } from "../region-paths.mjs";
@@ -37,7 +45,8 @@ const isChangeset = (path) => path.startsWith(".changeset/");
  * @param {string[]} myFiles this row's own declared Region paths -- files, and (#941) directory prefixes
  *   ending in `/` (changeset entries already excluded by
  *   the caller is NOT required -- this function excludes them itself, so either side can pass a raw list)
- * @param {{ number: number, files: string[] }[]} otherPrFiles every OTHER open PR and its changed files
+ * @param {{ number: number, files: string[], changedFiles: number }[]} otherPrFiles every OTHER open PR, its changed
+ *   files, and the count GitHub reports for them -- #1419: the list is only comparable when it matches the count
  * @returns {{ reason: string | null, emptyOtherPrs: number[] }}
  */
 export function fileOverlapReason(myFiles, otherPrFiles) {
@@ -47,11 +56,17 @@ export function fileOverlapReason(myFiles, otherPrFiles) {
   if (mine.size === 0) return { reason: null, emptyOtherPrs };
 
   for (const other of otherPrFiles) {
-    const theirs = other.files.filter((p) => !isChangeset(p));
-    if (theirs.length === 0) {
+    if (!Number.isInteger(other.changedFiles) || other.files.length !== other.changedFiles) {
+      return { emptyOtherPrs, reason: notComparableReason(other) };
+    }
+    // #1419: the empty-list path, decided explicitly. A PR whose OWN count is 0 is #462's shape (a merged head read as
+    // an empty diff) and stays a note; a COMPLETE list that is all changesets simply cannot collide and is no note.
+    if (other.changedFiles === 0) {
       emptyOtherPrs.push(other.number);
       continue;
     }
+    const theirs = other.files.filter((p) => !isChangeset(p));
+    if (theirs.length === 0) continue;
     // #941: an entry ending in `/` is a directory the row declared, and it covers every file under it.
     const overlap = theirs.filter((p) => [...mine].some((entry) => regionCovers(entry, p)));
     if (overlap.length > 0) {
@@ -64,6 +79,18 @@ export function fileOverlapReason(myFiles, otherPrFiles) {
     }
   }
   return { reason: null, emptyOtherPrs };
+}
+
+/**
+ * #1419: WHY A PR CANNOT BE COMPARED, IN NUMBERS. A reader must be able to check both against GitHub.
+ * @param {{ number: number, files: string[], changedFiles: number }} other
+ * @returns {string}
+ */
+function notComparableReason(other) {
+  const count = Number.isInteger(other.changedFiles) ? `its ${other.changedFiles} changed files` : "no changed-file count";
+  return `cannot compare with #${other.number}: its file list came back with ${other.files.length} of ${count}, so B4 `
+    + "cannot say whether this row overlaps it and refuses rather than reading \"no overlap\" (#1419). Retry once that "
+    + "PR's list reads complete, or sequence with its author.";
 }
 
 /**
@@ -93,14 +120,40 @@ export function lookupMyRegionFiles(issueNumber, { run = gh } = {}) {
  * open PR's diff in a single round trip, so this never loops per PR the way a naive port of `gh pr view
  * <n> --json files` would. `null` on a failed lookup.
  *
- * @param {{ run?: (args: string[]) => string }} [deps]
- * @returns {{ number: number, files: string[] }[] | null}
+ * #1419: the same call also reads each PR's `changedFiles`, and a list shorter than it is paged through REST, which
+ * returns every file. Only a short PR costs that extra call.
+ *
+ * @param {{ run?: (args: string[]) => string, log?: (line: string) => void }} [deps]
+ * @returns {{ number: number, files: string[], changedFiles: number }[] | null}
  */
-export function lookupOpenPrFiles({ run = gh } = {}) {
+export function lookupOpenPrFiles({ run = gh, log = (line) => process.stderr.write(`${line}\n`) } = {}) {
   return lookup(() => {
-    const raw = run(["pr", "list", "--repo", REPO, "--state", "open", "--json", "number,files"]);
-    /** @type {{ number: number, files: { path: string }[] }[]} */
+    const raw = run(["pr", "list", "--repo", REPO, "--state", "open", "--json", "number,changedFiles,files"]);
+    /** @type {{ number: number, changedFiles: number, files: { path: string }[] }[]} */
     const parsed = JSON.parse(raw);
-    return parsed.map((pr) => ({ number: pr.number, files: pr.files.map((f) => f.path) }));
+    return parsed.map((pr) => {
+      const listed = pr.files.map((f) => f.path);
+      const files = listed.length < pr.changedFiles ? pagedPrFiles(pr.number, listed, { run, log }) : listed;
+      return { number: pr.number, files, changedFiles: pr.changedFiles };
+    });
   });
+}
+
+/**
+ * #1419: EVERY FILE OF ONE PR, THROUGH REST's PAGES. A failure here keeps the short list and says so: letting it throw
+ * would make `lookup` return null for the whole read, and a null read skips B4 entirely -- the defect this row fixes,
+ * arriving by a different door. The short list then reaches the rule, which refuses it as not comparable.
+ * @param {number} number @param {string[]} listed
+ * @param {{ run: (args: string[]) => string, log: (line: string) => void }} deps
+ * @returns {string[]}
+ */
+function pagedPrFiles(number, listed, { run, log }) {
+  try {
+    return run(["api", "--paginate", `repos/${REPO}/pulls/${number}/files?per_page=100`, "--jq", ".[].filename"])
+      .split("\n").filter(Boolean);
+  } catch (error) {
+    log(`row-claim: could not page #${number}'s files past ${listed.length} (${/** @type {Error} */ (error).message}) `
+      + "-- B4 will refuse it as not comparable (#1419).");
+    return listed;
+  }
 }
