@@ -12,6 +12,11 @@ name: Board report
 # so it cannot report one. The push-state line in the edition now records the rule rather than proving it,
 # and says so. The dispatcher's own branch count is what would contradict it. An absent check must not
 # read as a clean one.
+#
+# #1290: THE EDITION IS A DISCUSSION. It was a PDF on a draft release, which creates no tag, is visible only
+# to write-access accounts and does not travel with a repository transfer. The words are unchanged; the
+# carrier is one Discussion per date in the `board-editions` category, which must exist before the first run
+# (see docs/board/README.md -- no API can create it). The PDF is an optional flag this job does not use.
 on:
   schedule:
     # BOTH, and the job gates on London's actual hour -- see the first step. 07:00 UTC is 08:00 London
@@ -25,18 +30,22 @@ on:
     inputs:
       republish:
         description: >-
-          Re-render TODAY'S edition outside the 08:00 London hour. Only permitted when today's release
-          already exists -- this REPLACES a document the board has, and can never create one they should
-          not have yet.
+          Re-render TODAY'S edition outside the 08:00 London hour. Only permitted when today's edition
+          Discussion already exists -- this REPLACES a document the board has, and can never create one
+          they should not have yet.
         type: boolean
         default: false
 
 permissions:
-  contents: write        # the Release draft that carries the PDF
+  # READ, NOT WRITE (#1290). Write was for the release draft that carried the PDF. This job makes none, and a
+  # token that cannot create a release is what keeps "no release draft was created" true without anybody
+  # having to remember not to re-add the flag.
+  contents: read
   issues: write          # the daily edition, as a comment on the report issue
+  discussions: write     # the board edition, as a Discussion in the `board-editions` category
 
 concurrency:
-  # One edition per day. A re-run replaces the asset on the same draft rather than racing it.
+  # One edition per day. A re-run updates the same Discussion rather than racing it.
   group: board-report
   cancel-in-progress: false
 
@@ -65,37 +74,12 @@ jobs:
             echo "Doing nothing, successfully."
           fi
 
-      # REPUBLISH: THE ONE WAY PAST THE HOUR GATE, AND IT CANNOT CREATE AN EDITION.
-      #
-      # The hour gate treats two different acts identically: replacing today's already-published document,
-      # and publishing one at the wrong hour. Only the second needs preventing -- on 8 September three
-      # corrections the board itself asked for could not reach the document they were for, because the
-      # only path was gated on an hour that had passed.
-      #
-      # So this is permitted ONLY when today's release ALREADY EXISTS. That single precondition is what
-      # makes it safe rather than an override: with it, the worst this can do is replace a document the
-      # board already has; without it, it would be a way to publish at 03:00.
-      #
-      # UNREACHABLE FROM THE SCHEDULE by construction: `inputs.republish` is empty on a `schedule` event,
-      # so the condition is false there whatever the hour. It is not a flag the cron can trip.
-      - id: republish
-        if: github.event_name == 'workflow_dispatch' && inputs.republish
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          DAY=$(TZ=Europe/London date +%Y-%m-%d)
-          if gh release view "board/$DAY" --repo "${{ github.repository }}" >/dev/null 2>&1; then
-            echo "ok=true" >> "$GITHUB_OUTPUT"
-            echo "board/$DAY exists - republishing today's edition over it."
-          else
-            echo "ok=false" >> "$GITHUB_OUTPUT"
-            echo "REFUSING: board/$DAY does not exist, so this would CREATE an edition outside 08:00" >&2
-            echo "London rather than replace one. Wait for the schedule." >&2
-            exit 1
-          fi
-
+      # A REPUBLISH DISPATCH CHECKS OUT AND INSTALLS BEFORE IT IS PERMITTED, because its precondition is now
+      # asked by `board-discussion.mjs` -- the same lookup the publish step uses -- rather than by a second
+      # copy of that question typed here in shell. The cost is a checkout on a refused dispatch; nothing is
+      # published until the precondition below says yes.
       - name: Check out main
-        if: steps.hour.outputs.london == '08' || steps.republish.outputs.ok == 'true'
+        if: steps.hour.outputs.london == '08' || (github.event_name == 'workflow_dispatch' && inputs.republish)
         uses: actions/checkout@v4
         with:
           # THE MERGE COUNT NEEDS HISTORY. A shallow checkout makes `git log --merges --since` report
@@ -104,14 +88,43 @@ jobs:
           ref: main
 
       - name: Set up node
-        if: steps.hour.outputs.london == '08' || steps.republish.outputs.ok == 'true'
+        if: steps.hour.outputs.london == '08' || (github.event_name == 'workflow_dispatch' && inputs.republish)
         uses: actions/setup-node@v4
         with:
           node-version: 22
 
       - name: Install
-        if: steps.hour.outputs.london == '08' || steps.republish.outputs.ok == 'true'
+        if: steps.hour.outputs.london == '08' || (github.event_name == 'workflow_dispatch' && inputs.republish)
         run: npm ci
+
+      # REPUBLISH: THE ONE WAY PAST THE HOUR GATE, AND IT CANNOT CREATE AN EDITION.
+      #
+      # The hour gate treats two different acts identically: replacing today's already-published document,
+      # and publishing one at the wrong hour. Only the second needs preventing -- on 8 September three
+      # corrections the board itself asked for could not reach the document they were for, because the
+      # only path was gated on an hour that had passed.
+      #
+      # So this is permitted ONLY when today's edition ALREADY EXISTS. That single precondition is what
+      # makes it safe rather than an override: with it, the worst this can do is replace a document the
+      # board already has; without it, it would be a way to publish at 03:00. `--exists` exits 1 when the
+      # edition is absent and 2 when GitHub could not be asked; both refuse, and its own line says which.
+      #
+      # UNREACHABLE FROM THE SCHEDULE by construction: `inputs.republish` is empty on a `schedule` event,
+      # so the condition is false there whatever the hour. It is not a flag the cron can trip.
+      - id: republish
+        if: github.event_name == 'workflow_dispatch' && inputs.republish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if node scripts/board-discussion.mjs --exists; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+            echo "Today's edition exists - republishing over it."
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "REFUSING: today's edition could not be confirmed to exist, so this would CREATE an edition" >&2
+            echo "outside 08:00 London rather than replace one. Wait for the schedule." >&2
+            exit 1
+          fi
 
       # THE SUMMARY GATES THE EDITION, exactly as it did locally. A summary assembled from the sections is
       # what the board forbade, so there is no fallback: no committed summary for today, no edition.
@@ -121,4 +134,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           node scripts/board-report.mjs --post --issue=20
-          node scripts/board-document.mjs --pdf --release
+          node scripts/board-document.mjs --discussion
