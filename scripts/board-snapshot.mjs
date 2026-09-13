@@ -44,7 +44,7 @@ import { READY_LABEL } from "./claim-labels.mjs";
 // because a constant that file imported from here would carry this file's `token` into its closure.
 import { PROJECT_OWNER, PROJECT_NUMBER, SNAPSHOT_DIR, snapshotStamp, graphqlErrors, describeGraphqlErrors,
   graphqlErrorFromFailedRun, persistSnapshot, touchedIssues, snapshotRoute, withScopedSnapshot, forgetScopedSnapshots,
-  scopedStatusOf }
+  scopedStatusOf, readUnlessProjectUnreadable }
   from "./board-snapshot-scope.mjs";
 
 export { PROJECT_OWNER, PROJECT_NUMBER, SNAPSHOT_DIR, snapshotStamp } from "./board-snapshot-scope.mjs";
@@ -413,6 +413,9 @@ export function scopedStatus(issueNumber, deps = {}) {
  * request each -- unless a full snapshot this process already holds is still valid (#852's reuse). Absent, the
  * full sweep runs as before. An empty or non-integer `touches` refuses: a mutation cannot touch nothing.
  *
+ * #1425: a sweep refused because the token cannot read the Project is refused ONCE per process. Later mutations,
+ * on either route, refuse from that record without a request (`readUnlessProjectUnreadable`).
+ *
  * @param {() => T} mutate the actual board-mutating call
  * @param {{ run?: typeof defaultRun, fetchReady?: typeof fetchReadyIssueNumbers,
  *   writeFile?: (path: string, data: string) => void, mkdir?: (path: string) => void, now?: () => Date,
@@ -448,7 +451,7 @@ export function withBoardSnapshot(mutate, deps = {}) {
     return withScopedSnapshot(mutate, /** @type {number[]} */ (issues), { request: (args) => run("gh", args), log, at,
       now, maxAgeMs: SNAPSHOT_MAX_AGE_MS, stillValid, writeFile, mkdir });
   }
-  const path = writeBoardSnapshot({ ...snapshotDeps, now });
+  const path = readUnlessProjectUnreadable(() => writeBoardSnapshot({ ...snapshotDeps, now }), "the board");
   processSnapshot = { path, takenAt: at };
   log(`board-snapshot: wrote ${path} before mutating`);
   return mutate();

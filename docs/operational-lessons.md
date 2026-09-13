@@ -1424,3 +1424,7 @@ whose expected value was known in advance.** The instinct after nine of these is
 careful — and care is what caught the cheap ones. **Every instance that was about to travel to somebody
 else was caught by review or by a pre-declared expectation**, never by care. That ratio is the argument for
 review, and for tables with a column you can predict, rather than for vigilance.
+
+## A branch count read from `refs/remotes/origin` without pruning counts deleted branches
+
+Measured 2026-09-13T12:40Z: `npm run branches:inventory` read 208 remote-tracking refs where `git fetch --prune` left 202, because a remote-tracking ref is a local cache that a fetch without `--prune` never removes, so the report now prunes before every branch read and says so in its header (#1282).
