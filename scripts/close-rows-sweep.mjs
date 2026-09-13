@@ -49,6 +49,8 @@
 //   2  a lookup failed. INCONCLUSIVE, never "fine".
 //   3  every row closed, but one or more Statuses did not move (#1299). NAMED: the board still shows them live,
 //      and this is the prescribed repair for tracker-health axis 4, so a 0 here would report it done.
+//      EXCEPT when every refusal is `project-unreadable` (the token cannot read the Project, #546): that exits 0
+//      with a DEGRADED line naming the rows -- `closeRowsExit`'s bridge, shared with the immediate path.
 //
 //   node scripts/close-rows-sweep.mjs [--window=<minutes>]
 import { execFileSync } from "node:child_process";
@@ -62,6 +64,9 @@ import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-
 import { closurePlan, stripClaimLabels, closeRowsExit } from "./close-rows-for-merged-pr.mjs";
 import { settleClosedStatus } from "./settle-closed-status.mjs";
 import { moveProjectStatus } from "./row-claim.mjs";
+
+/** @typedef {import("./settle-closed-status.mjs").Refusal} Refusal */
+/** @typedef {import("./settle-closed-status.mjs").SettleOutcome} SettleOutcome */
 
 export const EXIT = { DONE: 0, COULD_NOT_CLOSE: 1, CANNOT_ASK: 2, STATUS_NOT_MOVED: 3 };
 export const DEFAULT_WINDOW_MINUTES = 45;
@@ -86,20 +91,20 @@ export function mergedPrsInWindow(repo, windowMinutes, gh_ = gh) {
 
 /**
  * #776/#791: a row GitHub closed natively, before either path ran, still carries its claim and a live Status.
- * Strips the one and settles the other, returning the rows whose Status did NOT move (#1299). Split out of
- * `closeOnePr` for its complexity budget: the loop is the same act as the just-closed loop below.
+ * Strips the one and settles the other, returning the refusal for each row whose Status did NOT move (#1299).
+ * Split out of `closeOnePr` for its complexity budget: the loop is the same act as the just-closed loop below.
  * @param {{ number: number, labels: string[] }[]} already
  * @param {string} repo
- * @param {{ strip: typeof stripClaimLabels, settle: (n: number) => boolean }} deps
- * @returns {number[]}
+ * @param {{ strip: typeof stripClaimLabels, settle: (n: number) => SettleOutcome }} deps
+ * @returns {Refusal[]}
  */
 function settleAlreadyClosed(already, repo, { strip, settle }) {
-  /** @type {number[]} */
+  /** @type {Refusal[]} */
   const unsettled = [];
   for (const { number: n, labels } of already) {
     console.log(`SWEEP: #${n} ALREADY CLOSED -- left alone.`);
     strip(n, labels, repo, "SWEEP");
-    if (!settle(n)) unsettled.push(n);
+    unsettled.push(...settle(n).refused);
   }
   return unsettled;
 }
@@ -110,9 +115,9 @@ function settleAlreadyClosed(already, repo, { strip, settle }) {
  * @param {number} number
  * @param {string} repo
  * @param {{ gh_?: (args: string[]) => string, strip?: typeof stripClaimLabels,
- *   settle?: (n: number) => boolean }} [deps]
- * @returns {{ failed: number[], unsettled: number[] }} rows that could not be closed, and closed rows whose
- *   Status did not move -- both empty on success
+ *   settle?: (n: number) => SettleOutcome }} [deps]
+ * @returns {{ failed: number[], unsettled: Refusal[] }} rows that could not be closed, and the refusal for each
+ *   closed row whose Status did not move -- both empty on success
  */
 export function closeOnePr(number, repo, { gh_ = gh, strip = stripClaimLabels,
   settle = (/** @type {number} */ n) => settleClosedStatus(n, { moveStatus: moveProjectStatus }) } = {}) {
@@ -166,7 +171,7 @@ export function closeOnePr(number, repo, { gh_ = gh, strip = stripClaimLabels,
     // file's own header). "SWEEP" as the log prefix, never "CLOSE-ROWS", for the same reason every other
     // line here is distinguished -- which path did the work is a fact about the pipeline's health.
     strip(n, labels, repo, "SWEEP");
-    if (!settle(n)) unsettled.push(n);
+    unsettled.push(...settle(n).refused);
   }
   return { failed, unsettled };
 }
@@ -174,7 +179,7 @@ export function closeOnePr(number, repo, { gh_ = gh, strip = stripClaimLabels,
 /**
  * The sweep's exit: the SAME decision the immediate path takes (`closeRowsExit`), with the sweep's log prefix.
  * Imported rather than restated, for the reason this file's header gives about `closurePlan` (#1299).
- * @param {{ failed: number[], unsettled: number[] }} outcome
+ * @param {{ failed: number[], unsettled: Refusal[] }} outcome
  * @returns {{ code: number, lines: string[] }}
  */
 export function sweepExit(outcome) {
