@@ -503,11 +503,18 @@ function topLevelCode(/** @type {string} */ codeOnly, /** @type {string} */ file
   return chars.join("");
 }
 
+/**
+ * The spawns the `token` charge below recognises by a string `gh` target. #1140's no-token check reads the same
+ * list plus the two spellings a DECLARATION must also answer for, so the charged set can never grow past it.
+ */
+const CHARGED_SPAWNS = ["execFileSync", "execSync", "spawnSync", "spawn", "run"];
+const DECLARED_SPAWNS = [...CHARGED_SPAWNS, "execFile", "npmCliInvocation"];
+
 const CLOSURE_REQUIREMENT_PATTERNS =
   /** @type {[RegExp, "token" | "corpus" | "history"][]} */ ([
     // A `gh` invocation (the same fingerprint gh-token-jobs.test.ts's own SPAWNS_GH uses) or a direct read
     // of the token itself -- either means the file's operation needs a real GH_TOKEN to behave honestly.
-    [/(?:execFileSync|execSync|spawnSync|spawn|run)\s*\(\s*(['"`])gh\1/, "token"],
+    [new RegExp(`(?:${CHARGED_SPAWNS.join("|")})\\s*\\(\\s*(['"\`])gh\\1`), "token"],
     [new RegExp(`\\b${fingerprint("GH_TO", "KEN")}\\b`), "token"],
     // `runsRoot()` (packages/lab/src/dataset-paths.mjs) is the ONE function this repo reads `runs/`
     // through; its two documented override env vars are the ONE other door. Reading `runs/` any other way
@@ -554,11 +561,19 @@ function declaredNoTokenFn(text) {
  * (`fnName(`), never a bare mention a comment or a string could contain just as easily. Shallow, exactly
  * as `writeDeclarationHolds` is shallow: this proves the declaring file's OWN text does not call it, not
  * that nothing it calls calls it in turn -- the same scope #731's own write-side check keeps.
+ *
+ * #1140: A DECLARED COMMAND IS USED BY BEING SPAWNED, NOT CALLED. `// no-token: gh` over
+ * `execFileSync("gh", [...])` held, because that text contains no `gh(` -- the declaration went false in
+ * substance while its check kept passing. So the name as the WHOLE quoted first argument of a spawn is a use
+ * too. It stays a SHAPE, never a mention: `gh` in prose, in an identifier, or as a later argument to a spawn
+ * of another command still holds.
  * @param {string} entryCodeOnly
  * @param {string} fnName
  */
 function noTokenDeclarationHolds(entryCodeOnly, fnName) {
-  return !new RegExp(`\\b${fnName}\\s*\\(`).test(entryCodeOnly);
+  const called = new RegExp(`\\b${fnName}\\s*\\(`).test(entryCodeOnly);
+  const spawned = new RegExp(`\\b(?:${DECLARED_SPAWNS.join("|")})\\s*\\(\\s*(['"\`])${fnName}\\1`).test(entryCodeOnly);
+  return !called && !spawned;
 }
 
 /**
@@ -688,7 +703,7 @@ export function closureRequirementMessage(hit) {
   const entryLabel = basename(chain[0]);
   const fileLabel = basename(file);
   const suffix = !wrongDeclaration ? "" : requirement === "token"
-    ? ` -- ${fileLabel} declares \`// no-token:\` a function its own code DOES call; refusing rather than `
+    ? ` -- ${fileLabel} declares \`// no-token:\` a function its own code DOES call or spawn; refusing rather than `
       + "trusting an unverified claim"
     : ` -- ${fileLabel} declares \`// writes:\` a path its own code does not bear out; refusing rather `
       + "than trusting an unverified claim";
