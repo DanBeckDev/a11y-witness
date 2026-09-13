@@ -62,6 +62,7 @@
 // only ever run under the fork's read-only token and the fork's own checked-out code. Nothing in this
 // file grants itself write access; it doesn't need to.
 import { execSync } from "node:child_process";
+import { extractLabeledSection } from "./region-paths.mjs";
 import { pathToFileURL } from "node:url";
 import { existsSync, globSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -90,6 +91,20 @@ const FLEET_LAB_PATTERNS = /** @type {[RegExp, string][]} */ ([
   [/\bevidence:check\b/, "compares live evidence against a real worker"],
   [/\bgate:stability\b/, "captures canaries against a real worker"],
   [/\bcapture:check\b/, "needs a real worker and NVDA"],
+  // #1241, added after review: THE CONTROL PLANE IS ALSO NOBODY ELSE'S. The first version of this
+  // deriver cited #1042 and #1234 as the cases it closed and caught NEITHER -- both are `orchestrator`'s
+  // because the control plane is theirs, and neither acceptance names a `fleet:` or `lab:` command.
+  // A lane deriver answering null for a row that is not `lane:any` looks exactly like one answering null
+  // for a row that is, and it becomes the thing a reader trusts INSTEAD of the body.
+  //
+  // NAMED, never a glob: a list somebody chose is what makes routing on it safe.
+  [/\bsystemctl\b/, "drives systemd on the control host, which only `orchestrator` reaches"],
+  [/\bsystemd\b/, "installs or reads a systemd unit on the control host"],
+  [/\bgh workflow run\b/, "dispatches a workflow from the control plane, not from a checkout"],
+  [/\bfleet:provision\b/, "provisions a real box"],
+  [/\bA11Y_PVE_KEY\b|\ba11y-pve\b/, "uses the Proxmox key, which lives on the control plane"],
+  [/\bcorpus-backup\b|\bA11Y_CORPUS_REMOTE\b/, "writes or verifies the corpus backup, which runs on the lab"],
+  [/\bon the lab\b/, "names work done ON the lab, which only `orchestrator` reaches"],
 ]);
 
 /**
@@ -110,14 +125,17 @@ const FLEET_LAB_PATTERNS = /** @type {[RegExp, string][]} */ ([
  * @returns {string | null} the reason the matched command needs the fleet or lab, or null
  */
 export function fleetOrLabAcceptance(body) {
-  const section = extractAcceptanceSection(body);
-  // STRUCTURED, not text: `extractAcceptanceSection` returns `{kind, commands}`. Testing the regexes
-  // against the object stringifies it and matches nothing -- my first version did, and returned null for
-  // `npm run fleet:provision`. The commands are the population; prose in the section is not a command.
-  const commands = section && section.kind === "commands" ? section.commands : [];
-  for (const [pattern, reason] of FLEET_LAB_PATTERNS) {
-    if (commands.some((/** @type {string} */ c) => pattern.test(c))) return reason;
-  }
+  // THE RAW SECTION, not `extractAcceptanceSection`'s commands -- and that is the correction review
+  // forced. That function returns the first COMMAND LINE; for #1042 and #1234 it returns one line of
+  // prose, so the numbered clauses naming systemd and `gh workflow run` were never looked at. The two
+  // rows this deriver was filed on both answered null, and a lane deriver answering null for a row that
+  // is NOT lane:any looks exactly like one answering null for a row that is.
+  //
+  // Running a command and CLASSIFYING a row are different questions over the same text: `pr-open` needs
+  // the runnable lines, this needs everything the section says it will take.
+  const section = extractLabeledSection(body, "Acceptance");
+  if (section === null) return null;
+  for (const [pattern, reason] of FLEET_LAB_PATTERNS) if (pattern.test(section)) return reason;
   return null;
 }
 
