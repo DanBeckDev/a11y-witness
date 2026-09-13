@@ -263,7 +263,13 @@ fi
 if [ "$push_is_all_deletions" = "1" ]; then
   skipped+=("stale-base-check (this push only deletes remote ref(s), which have no base to be stale against)")
 elif [ "$push_is_tags_only" = "1" ]; then
-  skipped+=("stale-base-check (this push only writes or deletes tag(s), which record an existing commit rather than advance a branch built on HEAD)")
+  # #1309: THE REASON NAMES WHAT THE PUSH DID. A deletion riding with a tag write may delete a BRANCH, so
+  # "only writes or deletes tag(s)" was false for that push; an operator reads this line to judge the skip.
+  if [ "$push_deletion_lines" -gt 0 ]; then
+    skipped+=("stale-base-check (this push only writes tag(s) and deletes ref(s): a tag records an existing commit and a deletion has no base, so neither advances a branch built on HEAD)")
+  else
+    skipped+=("stale-base-check (this push only writes tag(s), which record an existing commit rather than advance a branch built on HEAD)")
+  fi
 elif git rev-parse --verify -q origin/main >/dev/null; then
   if ! git merge-base --is-ancestor origin/main HEAD; then
     if [ -n "${A11Y_STALE_BASE_REASON:-}" ]; then
