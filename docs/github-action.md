@@ -3,17 +3,38 @@
 Drive a real screen reader over a page in CI and report what it announced.
 
 ```yaml
-runs-on: windows-2022          # NVDA is Windows-only; the action fails fast and says so otherwise
-permissions:
-  pull-requests: write        # for the PR comment below; omit it and the report still runs, only quieter
-steps:
-  - uses: actions/checkout@v4
-  - uses: DanBeckDev/a11y-witness@main
-    with:
-      url: https://example.com/contact
-      task: Send an enquiry
-      fail-on: never           # report first; gate when your team asks for it
+name: a11ign
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  a11ign:
+    runs-on: windows-2022        # NVDA is Windows-only; the action fails fast and says so otherwise
+    permissions:
+      contents: read
+      pull-requests: write       # for the PR comment below; omit it and the report still runs, only quieter
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DanBeckDev/a11y-witness@main
+        # Pin it: @main moves under you. Use the full commit SHA if your CI must not change.
+        id: a11ign
+        with:
+          url: https://example.com/contact
+          task: Send an enquiry
+          fail-on: never           # report first; gate when your team asks for it
+      # Keep the evidence: the full result, including the transcript behind every finding. Guarded on the
+      # output existing, so a run that failed does not also fail the upload.
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.a11ign.outputs.result-json != ''
+        with:
+          name: a11ign-result
+          path: ${{ steps.a11ign.outputs.result-json }}
+          if-no-files-found: warn
 ```
+
+Save it as `.github/workflows/a11ign.yml`. It runs on every pull request, and `workflow_dispatch` also lets you start it by hand from the repository's Actions tab (or `gh workflow run a11ign.yml`).
 
 > **Pin this deliberately.** There is no tagged release yet, so `@main` is the only ref that resolves —
 > and it moves. If your CI must not change under you, pin the full commit SHA
@@ -24,7 +45,7 @@ steps:
 No API key. The default judge is this project's **own trained scorer** — 27 KB of heads shipped in the
 repo, over an 87 MB encoder fetched at setup — so nothing leaves the runner and nothing is billed.
 
-A copy-pasteable workflow is in [`examples/workflow.yml`](../examples/workflow.yml).
+A longer, commented version of the same workflow is in [`examples/workflow.yml`](../examples/workflow.yml).
 
 ## Why it looks like this
 
@@ -39,7 +60,7 @@ that silently produces a permanently green check is the failure nobody notices, 
 what they expected.
 
 **No rented judge by default.** `judge-backend: local` uses the scorer trained on this project's own
-1,061-pair corpus. It scores **eight criteria** and is silent on everything else — narrower than an LLM.
+1,061-pair corpus. It covers a fixed set of criteria, and each run's own summary names how many and which layer decides each; it is silent on everything else, narrower than an LLM.
 
 <!-- CLAIM:BEGIN — every figure between these markers must be sourceable from a recorded gate result in
      docs/board/reported/. `public-claim.test.ts` enforces it across every file in CLAIM_FILES.
@@ -69,6 +90,8 @@ new ignore rule with a negation under it.
 **One PR comment, updated.** `gh pr comment --edit-last --create-if-none` plus an HTML marker in the body,
 so a busy PR gets one comment that changes rather than one per push. The comment step runs `always()`, so
 the report still arrives when the check is failing — which is precisely when someone wants to read it.
+
+**Not on a pull request, no comment.** A run started by hand or by a push has nothing to comment on: the log shows one line (`a11ign: N finding(s)`), the report is in the run's job summary, and the full result, transcript included, is the `a11ign-result` artifact the upload step saves.
 
 **"Not run" is never rendered as "clean".** If you set `axe: false`, the report says the visual criteria
 are *unchecked*, not that they passed. This is the one thing the tool must never get wrong, and it did:
@@ -102,9 +125,7 @@ called — one `4.1.2` blocker at 0.998 confidence with `button` quoted as the e
 written to the SDK spec and unexercised. It is no longer the default, which is the point: the untested
 path is now the opt-in one.
 
-**Not yet verified on a real runner:** the local backend's setup step installs CPU torch and fetches the
-encoder. That works locally and is expected to add 1-2 minutes; it has not run on a Windows runner. A
-lighter ONNX path would remove torch entirely and is the obvious next optimisation.
+**Verified on a real Windows runner (the V1 rehearsal, 2026-09-13):** the local backend's setup step installs `onnxruntime`, `transformers`, `safetensors` and `numpy`, pinned in `packages/scorer/requirements.txt`, and fetches the encoder. It installs no torch, which is a training-only dependency. On a cold runner that step took 40.8 s.
 
 ## Testing it without spending runner minutes
 
@@ -208,7 +229,7 @@ Less than its name suggests, and worth knowing before you agonise over the wordi
 |---|---|
 | `probe-forms: true` (**the default here**) | **Yes — it changes the capture.** A button whose announced name shares a meaningful word with the task is activated, and what the screen reader says next is recorded. The word match is the safety guard: "show only bags" activates a *Bags* button, never *Delete account*. Asserted in `probe-choice.test.ts`. |
 | `judge-backend: anthropic` / `openai` | **Yes — it changes the verdict.** The LLM reads it and answers "could a screen-reader user finish this?" |
-| `judge-backend: local` (default) | **Not for the verdict.** The scorer has no head for task completion and never sees the task — `docs/local-model.md` bars it as a model feature. The report deliberately does not claim your task was completable. |
+| `judge-backend: local` (default) | **Not for the verdict.** The scorer has no head for task completion and never sees the task — `docs/local-model.md` bars it as a model feature. It still reports `task-completable`, but on this backend that only means nothing scored as a blocker: a coarse proxy, not a judgement about your task (see above). |
 
 So on the defaults the task **does** shape what gets captured, because `probe-forms` is on: it selects
 which control is operated, and therefore whether 3.3.1 and 4.1.3 evidence exists at all. It does not
@@ -231,6 +252,7 @@ error handling most needs reviewing. On such a page 3.3.1, 3.3.3 and 4.1.3 are n
 
 ```yaml
 - uses: DanBeckDev/a11y-witness@main
+  # Pin it: @main moves under you. Use the full commit SHA if your CI must not change.
   with:
     url: https://staging.example.com/signup
     task: "Create an account"
@@ -284,5 +306,5 @@ pressing submit part-way through filling would attribute the evidence to a state
 | Output | Use |
 |---|---|
 | `findings` | Count of lived-experience findings. |
-| `task-completable` | Whether the judge thinks a screen-reader user could finish the stated task. |
+| `task-completable` | Whether the judge thinks a screen-reader user could finish the stated task. On the default `local` backend this only means nothing scored as a blocker, a coarse proxy. |
 | `result-json` | Path to the full result, including the transcript. Worth uploading as an artifact — the transcript is the evidence behind every finding. |
