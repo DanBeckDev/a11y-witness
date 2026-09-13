@@ -71,10 +71,12 @@
 //   0  every declared row is closed -- by this run or already
 //   1  one or more could not be closed. NAMED, never counted.
 //   2  a lookup failed. INCONCLUSIVE, never "fine".
+//   3  every row closed, but one or more Statuses did not move for a cause OTHER than an unreadable Project
+//      (#1299). A run whose every refusal is `project-unreadable` exits 0 with a DEGRADED line: see `closeRowsExit`.
 //
 //   node scripts/close-rows-for-merged-pr.mjs <pr-number>
 import { execFileSync } from "node:child_process";
-import { settleClosedStatus } from "./settle-closed-status.mjs";
+import { settleClosedStatus, unsettledVerdict } from "./settle-closed-status.mjs";
 // The token-carrying half, imported HERE (an entry point) and injected, so the pure module stays pure.
 import { moveProjectStatus } from "./row-claim.mjs";
 import { realpathSync } from "node:fs";
@@ -103,19 +105,30 @@ export const EXIT = { DONE: 0, COULD_NOT_CLOSE: 1, CANNOT_ASK: 2, STATUS_NOT_MOV
  * ONE DECISION FOR BOTH PATHS, and the dispatch path's `main()` calls it: `worker-capture`'s review of #1357
  * showed the dispatch path's exit 3 lived only in `main()`, where reverting it to `DONE` left the suite green.
  *
- * @param {{ failed: number[], unsettled: number[] }} outcome
+ * A BRIDGE UNTIL THE PROJECT IS READABLE (#546): CI's token cannot read the user-owned Project, so every move
+ * in CI is refused with the same `NOT_FOUND`, and trunk.yml read FAILURE on every merge while the code was
+ * green (run 34769927592, `02ae7420`). When EVERY refusal is `project-unreadable`, the run exits `DONE` with a
+ * DEGRADED line naming the rows; ANY other refusal still exits `STATUS_NOT_MOVED`. The cause is classified
+ * where the refusal is made (`refusalCause`), never matched in log text here.
+ *
+ * @param {{ failed: number[], unsettled: import("./settle-closed-status.mjs").Refusal[] }} outcome
  * @param {string} prefix the log prefix -- `CLOSE-ROWS` for the immediate path, `SWEEP` for the backstop
  * @returns {{ code: number, lines: string[] }}
  */
 export function closeRowsExit({ failed, unsettled }, prefix) {
   const lines = [];
   if (failed.length) lines.push(`${prefix}: could not close ${failed.length}: ${failed.join(" ")}`);
-  if (unsettled.length) {
-    lines.push(`${prefix}: closed, but Status NOT moved for ${unsettled.length}: `
-      + `${unsettled.map((n) => `#${n}`).join(" ")} -- the board still shows them at a live Status`);
+  const { degraded, other } = unsettledVerdict(unsettled);
+  const named = (/** @type {{ row: number }[]} */ refusals) => refusals.map((r) => `#${r.row}`).join(" ");
+  if (degraded) {
+    lines.push(`${prefix}: DEGRADED -- closed, but Status NOT moved for ${unsettled.length}: ${named(unsettled)} `
+      + "-- every refusal was project-unreadable (the token cannot read the Project, #546)");
+  } else if (unsettled.length) {
+    lines.push(`${prefix}: closed, but Status NOT moved for ${unsettled.length}: ${named(unsettled)} `
+      + `-- the board still shows them at a live Status (not project-unreadable: ${named(other)})`);
   }
   if (failed.length) return { code: EXIT.COULD_NOT_CLOSE, lines };
-  if (unsettled.length) return { code: EXIT.STATUS_NOT_MOVED, lines };
+  if (other.length) return { code: EXIT.STATUS_NOT_MOVED, lines };
   return { code: EXIT.DONE, lines };
 }
 
@@ -223,16 +236,17 @@ export function stripClaimLabels(n, labels, repo, logPrefix = "CLOSE-ROWS") {
  * @param {{ close: {number:number, labels:string[]}[], already: {number:number, labels:string[]}[] }} plan
  * @param {{ prNumber: string, sha: string, repo: string }} ctx
  * @param {{ closeOne?: typeof closeOneRow, strip?: typeof stripClaimLabels,
- *   settle?: (n: number) => boolean }} [deps]
- * @returns {{ failed: number[], unsettled: number[] }} rows that could not be closed, and closed rows whose
- *   Status did not move (#1299) -- both empty on success
+ *   settle?: (n: number) => import("./settle-closed-status.mjs").SettleOutcome }} [deps]
+ * @returns {{ failed: number[], unsettled: import("./settle-closed-status.mjs").Refusal[] }} rows that could not
+ *   be closed, and the refusal for each closed row whose Status did not move (#1299) -- both empty on success
  */
 export function applyClosurePlan({ close, already }, ctx,
   { closeOne = closeOneRow, strip = stripClaimLabels,
     settle = (/** @type {number} */ n) => settleClosedStatus(n, { moveStatus: moveProjectStatus }) } = {}) {
   // #1299: the settle answer is READ. A bare `settle(n)` let a run that moved no Status exit DONE.
-  /** @type {number[]} */
+  /** @type {import("./settle-closed-status.mjs").Refusal[]} */
   const unsettled = [];
+  const record = (/** @type {number} */ n) => { unsettled.push(...settle(n).refused); };
   // #776/#791: THE CLOSE is left alone -- re-closing an already-closed row is not this loop's job, and
   // never was. The CLAIM is not: a row that reaches this script already CLOSED is not necessarily one
   // somebody closed by hand days ago -- it may be THIS exact merge, one second earlier (GitHub's own
@@ -240,7 +254,7 @@ export function applyClosurePlan({ close, already }, ctx,
   for (const { number: n, labels } of already) {
     console.log(`CLOSE-ROWS: #${n} ALREADY CLOSED -- left alone.`);
     strip(n, labels, ctx.repo);
-    if (!settle(n)) unsettled.push(n);
+    record(n);
   }
 
   const failed = [];
@@ -248,7 +262,7 @@ export function applyClosurePlan({ close, already }, ctx,
     const closed = closeOne(n, ctx);
     if (!closed) { failed.push(n); continue; }
     strip(n, labels, ctx.repo);
-    if (!settle(n)) unsettled.push(n);
+    record(n);
   }
   return { failed, unsettled };
 }
