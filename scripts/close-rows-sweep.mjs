@@ -43,9 +43,12 @@
 // degraded, and it must stay visible rather than be absorbed into one undifferentiated log line.
 //
 // Exit codes are the contract:
-//   0  every merged PR in the window is accounted for -- closed here, already closed, or declared nothing
+//   0  every merged PR in the window is accounted for -- closed here, already closed, or declared nothing --
+//      and every closed row's Status settled
 //   1  one or more rows could not be closed. NAMED, never counted.
 //   2  a lookup failed. INCONCLUSIVE, never "fine".
+//   3  every row closed, but one or more Statuses did not move (#1299). NAMED: the board still shows them live,
+//      and this is the prescribed repair for tracker-health axis 4, so a 0 here would report it done.
 //
 //   node scripts/close-rows-sweep.mjs [--window=<minutes>]
 import { execFileSync } from "node:child_process";
@@ -56,11 +59,11 @@ import { pathToFileURL } from "node:url";
 import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-flags.mjs";
 // #1227: `settleClosedStatus` is imported rather than re-derived, for the reason this file's own header
 // gives about `stripClaimLabels`: a second copy of that decision is the "fact stated twice" shape.
-import { closurePlan, stripClaimLabels } from "./close-rows-for-merged-pr.mjs";
+import { closurePlan, stripClaimLabels, closeRowsExit } from "./close-rows-for-merged-pr.mjs";
 import { settleClosedStatus } from "./settle-closed-status.mjs";
 import { moveProjectStatus } from "./row-claim.mjs";
 
-export const EXIT = { DONE: 0, COULD_NOT_CLOSE: 1, CANNOT_ASK: 2 };
+export const EXIT = { DONE: 0, COULD_NOT_CLOSE: 1, CANNOT_ASK: 2, STATUS_NOT_MOVED: 3 };
 export const DEFAULT_WINDOW_MINUTES = 45;
 
 /** @param {string[]} args */
@@ -82,13 +85,37 @@ export function mergedPrsInWindow(repo, windowMinutes, gh_ = gh) {
 }
 
 /**
- * Resolve and act on ONE merged PR's closing plan -- split out of `main` purely to keep its complexity
- * within this repo's ESLint budget; the two are one algorithm, driven per PR by the loop below.
+ * #776/#791: a row GitHub closed natively, before either path ran, still carries its claim and a live Status.
+ * Strips the one and settles the other, returning the rows whose Status did NOT move (#1299). Split out of
+ * `closeOnePr` for its complexity budget: the loop is the same act as the just-closed loop below.
+ * @param {{ number: number, labels: string[] }[]} already
+ * @param {string} repo
+ * @param {{ strip: typeof stripClaimLabels, settle: (n: number) => boolean }} deps
+ * @returns {number[]}
+ */
+function settleAlreadyClosed(already, repo, { strip, settle }) {
+  /** @type {number[]} */
+  const unsettled = [];
+  for (const { number: n, labels } of already) {
+    console.log(`SWEEP: #${n} ALREADY CLOSED -- left alone.`);
+    strip(n, labels, repo, "SWEEP");
+    if (!settle(n)) unsettled.push(n);
+  }
+  return unsettled;
+}
+
+/**
+ * Resolve and act on ONE merged PR's closing plan -- split out of `main` to keep its complexity within this
+ * repo's ESLint budget, and EXPORTED with its effects injected so its Status half is driven by a test (#1299).
  * @param {number} number
  * @param {string} repo
- * @returns {number[]} row numbers that could not be closed (empty on success)
+ * @param {{ gh_?: (args: string[]) => string, strip?: typeof stripClaimLabels,
+ *   settle?: (n: number) => boolean }} [deps]
+ * @returns {{ failed: number[], unsettled: number[] }} rows that could not be closed, and closed rows whose
+ *   Status did not move -- both empty on success
  */
-function closeOnePr(number, repo) {
+export function closeOnePr(number, repo, { gh_ = gh, strip = stripClaimLabels,
+  settle = (/** @type {number} */ n) => settleClosedStatus(n, { moveStatus: moveProjectStatus }) } = {}) {
   const [owner, name] = repo.split("/");
   let issues, sha;
   try {
@@ -97,7 +124,7 @@ function closeOnePr(number, repo) {
     const query = `{repository(owner:"${owner}",name:"${name}"){pullRequest(number:${number}){`
       + `mergeCommit{oid} closingIssuesReferences(first:20){nodes{number state `
       + `labels(first:20){nodes{name}}}}}}}`;
-    const pr = JSON.parse(gh(["api", "graphql", "-f", `query=${query}`,
+    const pr = JSON.parse(gh_(["api", "graphql", "-f", `query=${query}`,
       "--jq", ".data.repository.pullRequest"]));
     /** @type {{ number: number, state: string, labels: { nodes: { name: string }[] } }[]} */
     const nodes = pr.closingIssuesReferences.nodes;
@@ -107,21 +134,19 @@ function closeOnePr(number, repo) {
     sha = pr.mergeCommit?.oid ?? "unknown";
   } catch (cause) {
     console.log(`SWEEP: #${number} CANNOT ASK -- ${cause instanceof Error ? cause.message : cause}`);
-    return [number];
+    return { failed: [number], unsettled: [] };
   }
 
   const { close, already, none } = closurePlan(issues);
   if (none) {
     console.log(`SWEEP: #${number} declared NO closing references.`);
-    return [];
+    return { failed: [], unsettled: [] };
   }
   // #776/#791: the identical fix as close-rows-for-merged-pr.mjs's own already loop -- GitHub can close a
   // row NATIVELY, before either path runs, and its claim is exactly as stale as one this script closes.
-  for (const { number: n, labels } of already) {
-    console.log(`SWEEP: #${n} ALREADY CLOSED -- left alone.`);
-    stripClaimLabels(n, labels, repo, "SWEEP");
-    settleClosedStatus(n, { moveStatus: moveProjectStatus });
-  }
+  // #1299: SETTLE'S ANSWER IS READ, on both paths. It was a bare statement, so a sweep that moved no Status
+  // still reached EXIT.DONE -- the prescribed repair for tracker-health axis 4, reported done while nothing moved.
+  const unsettled = settleAlreadyClosed(already, repo, { strip, settle });
 
   const failed = [];
   for (const { number: n, labels } of close) {
@@ -130,7 +155,7 @@ function closeOnePr(number, repo) {
       + `If the work did not land, reopen and say so on the row: \`git show ${sha}\` is what actually `
       + "merged.";
     try {
-      gh(["issue", "close", String(n), "--repo", repo, "--comment", sentence, "--reason", "completed"]);
+      gh_(["issue", "close", String(n), "--repo", repo, "--comment", sentence, "--reason", "completed"]);
       console.log(`SWEEP: #${n} CLOSED (PR #${number}, merge ${sha}) -- the immediate trigger missed this.`);
     } catch (cause) {
       console.log(`SWEEP: #${n} COULD NOT CLOSE -- ${cause instanceof Error ? cause.message : cause}`);
@@ -140,10 +165,20 @@ function closeOnePr(number, repo) {
     // #754: the identical decision the immediate path uses, imported rather than re-derived (see this
     // file's own header). "SWEEP" as the log prefix, never "CLOSE-ROWS", for the same reason every other
     // line here is distinguished -- which path did the work is a fact about the pipeline's health.
-    stripClaimLabels(n, labels, repo, "SWEEP");
-    settleClosedStatus(n, { moveStatus: moveProjectStatus });
+    strip(n, labels, repo, "SWEEP");
+    if (!settle(n)) unsettled.push(n);
   }
-  return failed;
+  return { failed, unsettled };
+}
+
+/**
+ * The sweep's exit: the SAME decision the immediate path takes (`closeRowsExit`), with the sweep's log prefix.
+ * Imported rather than restated, for the reason this file's header gives about `closurePlan` (#1299).
+ * @param {{ failed: number[], unsettled: number[] }} outcome
+ * @returns {{ code: number, lines: string[] }}
+ */
+export function sweepExit(outcome) {
+  return closeRowsExit(outcome, "SWEEP");
 }
 
 function main() {
@@ -171,13 +206,11 @@ function main() {
   console.log(`SWEEP: ${prs.length} PR(s) merged into main in the last ${windowMinutes}m: `
     + `${prs.map((p) => p.number).join(" ")}`);
 
-  const failed = prs.flatMap(({ number }) => closeOnePr(number, repo));
-
-  if (failed.length > 0) {
-    console.error(`SWEEP: could not close ${failed.length}: ${failed.join(" ")}`);
-    process.exit(EXIT.COULD_NOT_CLOSE);
-  }
-  process.exit(EXIT.DONE);
+  const outcomes = prs.map(({ number }) => closeOnePr(number, repo));
+  const { code, lines } = sweepExit({
+    failed: outcomes.flatMap((o) => o.failed), unsettled: outcomes.flatMap((o) => o.unsettled) });
+  for (const line of lines) console.error(line);
+  process.exit(code);
 }
 
 // The entry guard `merge-guard.mjs`/`close-rows-for-merged-pr.mjs` use.

@@ -93,7 +93,31 @@ import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 // worse than the cycle either duplicate was solving. See claim-labels.mjs's own header for the full story.
 import { READY_LABEL, CLAIM_LABEL, STARTED_LABEL } from "./claim-labels.mjs";
 
-export const EXIT = { DONE: 0, COULD_NOT_CLOSE: 1, CANNOT_ASK: 2 };
+export const EXIT = { DONE: 0, COULD_NOT_CLOSE: 1, CANNOT_ASK: 2, STATUS_NOT_MOVED: 3 };
+
+/**
+ * THE EXIT BOTH CLOSE-ROWS PATHS TAKE, PURE (#1299). A row that could not be closed outranks a closed row whose
+ * Status did not move, and BOTH are named, never counted. `STATUS_NOT_MOVED` is its own code because "closed,
+ * but the board still shows it live" is a different fact from "not closed", with a different repair.
+ *
+ * ONE DECISION FOR BOTH PATHS, and the dispatch path's `main()` calls it: `worker-capture`'s review of #1357
+ * showed the dispatch path's exit 3 lived only in `main()`, where reverting it to `DONE` left the suite green.
+ *
+ * @param {{ failed: number[], unsettled: number[] }} outcome
+ * @param {string} prefix the log prefix -- `CLOSE-ROWS` for the immediate path, `SWEEP` for the backstop
+ * @returns {{ code: number, lines: string[] }}
+ */
+export function closeRowsExit({ failed, unsettled }, prefix) {
+  const lines = [];
+  if (failed.length) lines.push(`${prefix}: could not close ${failed.length}: ${failed.join(" ")}`);
+  if (unsettled.length) {
+    lines.push(`${prefix}: closed, but Status NOT moved for ${unsettled.length}: `
+      + `${unsettled.map((n) => `#${n}`).join(" ")} -- the board still shows them at a live Status`);
+  }
+  if (failed.length) return { code: EXIT.COULD_NOT_CLOSE, lines };
+  if (unsettled.length) return { code: EXIT.STATUS_NOT_MOVED, lines };
+  return { code: EXIT.DONE, lines };
+}
 
 /**
  * WHAT TO DO WITH EACH ROW THE MERGED PR DECLARED -- the whole decision, as one pure function.
@@ -199,12 +223,16 @@ export function stripClaimLabels(n, labels, repo, logPrefix = "CLOSE-ROWS") {
  * @param {{ close: {number:number, labels:string[]}[], already: {number:number, labels:string[]}[] }} plan
  * @param {{ prNumber: string, sha: string, repo: string }} ctx
  * @param {{ closeOne?: typeof closeOneRow, strip?: typeof stripClaimLabels,
- *   settle?: (n: number) => void }} [deps]
- * @returns {number[]} row numbers that could not be closed (empty on success)
+ *   settle?: (n: number) => boolean }} [deps]
+ * @returns {{ failed: number[], unsettled: number[] }} rows that could not be closed, and closed rows whose
+ *   Status did not move (#1299) -- both empty on success
  */
 export function applyClosurePlan({ close, already }, ctx,
   { closeOne = closeOneRow, strip = stripClaimLabels,
     settle = (/** @type {number} */ n) => settleClosedStatus(n, { moveStatus: moveProjectStatus }) } = {}) {
+  // #1299: the settle answer is READ. A bare `settle(n)` let a run that moved no Status exit DONE.
+  /** @type {number[]} */
+  const unsettled = [];
   // #776/#791: THE CLOSE is left alone -- re-closing an already-closed row is not this loop's job, and
   // never was. The CLAIM is not: a row that reaches this script already CLOSED is not necessarily one
   // somebody closed by hand days ago -- it may be THIS exact merge, one second earlier (GitHub's own
@@ -212,7 +240,7 @@ export function applyClosurePlan({ close, already }, ctx,
   for (const { number: n, labels } of already) {
     console.log(`CLOSE-ROWS: #${n} ALREADY CLOSED -- left alone.`);
     strip(n, labels, ctx.repo);
-    settle(n);
+    if (!settle(n)) unsettled.push(n);
   }
 
   const failed = [];
@@ -220,9 +248,9 @@ export function applyClosurePlan({ close, already }, ctx,
     const closed = closeOne(n, ctx);
     if (!closed) { failed.push(n); continue; }
     strip(n, labels, ctx.repo);
-    settle(n);
+    if (!settle(n)) unsettled.push(n);
   }
-  return failed;
+  return { failed, unsettled };
 }
 
 function main() {
@@ -284,13 +312,9 @@ function main() {
     process.exit(EXIT.DONE);
   }
 
-  const failed = applyClosurePlan(plan, { prNumber: number, sha, repo });
-
-  if (failed.length > 0) {
-    console.error(`CLOSE-ROWS: could not close ${failed.length}: ${failed.join(" ")}`);
-    process.exit(EXIT.COULD_NOT_CLOSE);
-  }
-  process.exit(EXIT.DONE);
+  const { code, lines } = closeRowsExit(applyClosurePlan(plan, { prNumber: number, sha, repo }), "CLOSE-ROWS");
+  for (const line of lines) console.error(line);
+  process.exit(code);
 }
 
 // The entry guard `merge-guard.mjs` uses: a bare `file://` + argv[1] comparison misreads a path with a
