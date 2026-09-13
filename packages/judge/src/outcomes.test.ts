@@ -297,3 +297,74 @@ test("a PHANTOM sweep withdraws the pass too — it announced things the page do
   }).filter((o) => o.criterion === "2.4.4");
   assert.equal(outcome.outcome, "cantTell");
 });
+
+// --- #1255: AN UNCONFIRMED FOCUS LOG AND A GENUINE ABSENCE OF FOCUS EVENTS ARE DIFFERENT OUTCOMES ----
+//
+// #29 measured four of seven pages returning `{asked: true, checked: false, why: "focus-event log target
+// unconfirmed (targetMatch=fallback, candidates=1)", log: null}` and reported that nothing downstream
+// separates that from a genuine absence. `act-rules.ts`'s own applicability says it does. Both records
+// could not be right, and driving them showed WHERE each is:
+//
+//   at rules.ts        unconfirmed -> []        confirmed-and-empty -> []        BYTE-IDENTICAL
+//   at outcomes.ts     unconfirmed -> cantTell  confirmed-and-empty -> inapplicable
+//
+// So the distinction is real and it lives ENTIRELY HERE -- and this file had no 2.4.7 test at all. The
+// behaviour was correct and unguarded: mutating `notProbed` to `empty` was caught only by
+// `every criterion we assess has an entry in SWEEPS_FEEDING`, an unrelated invariant that happened to
+// notice, which is not a pin anyone should rely on.
+//
+// The shape verbatim from the recorded artefact, not retyped from the row:
+//   runs/n984-true/focus-removed-on-receipt-claim.good/capture-2.json
+
+const UNCONFIRMED = { asked: true, checked: false,
+  why: "focus-event log target unconfirmed (targetMatch=fallback, candidates=1)", log: null };
+type FocusEvents = { asked?: boolean; checked: boolean; why?: string; events?: number;
+  log?: { type: string; id: number; name: string; atMs: number }[] | null };
+// CaptureEvidence's own declaration (local-judge.ts:114) has neither `why` nor `log` and still carries
+// `scriptRemovedFocus`, retired by #14 — so this cast is deliberate and narrow: the tests below must pass
+// the shape the CAPTURE really writes, not the one the type still describes. Named on #1255 as a finding
+// for its own row rather than widened here; this row is about the reader.
+const focusCapture = (focusEvents: FocusEvents | undefined) =>
+  ({ ...RICH, interaction: { ...RICH.interaction, focusEvents } }) as unknown as Parameters<
+    typeof criterionOutcomes>[0]["capture"];
+
+test("#1255: an UNCONFIRMED focus log is cantTell -- undetermined, never a clean zero", () => {
+  const outcome = find(criterionOutcomes({ capture: focusCapture(UNCONFIRMED), findings: [] }), "2.4.7");
+  assert.equal(outcome.outcome, "cantTell");
+  assert.match(outcome.reason, /not collected/,
+    "and the reason must say the evidence is missing, not that the page exposed nothing");
+});
+
+// THE CONFIRMED SHAPE, AS `focusEventVerdict` WRITES IT -- not hand-built. worker-capture's finding on
+// #1270: my first control passed `{checked: true, events: 0, log: []}`, which is a shape assembled to
+// suit the assertion. `capture-pure.mjs`'s producer has exactly three returns, and the confirmed one is
+// always `{asked, checked, events: events.length, log, truncated}` -- the 11 confirmed captures in
+// `runs/` all carry exactly those five keys. A fixture that omits `truncated` and invents its own key
+// set asserts a distinction the real captures may not get.
+const confirmed = (log: { type: string; id: number; name: string; atMs: number }[]) =>
+  ({ asked: true, checked: true, events: log.length, log, truncated: false });
+
+test("#1255 POSITIVE CONTROL: a CONFIRMED empty log is inapplicable -- the oracle ran and found none", () => {
+  // Without this, the test above is satisfied by a reader that answers cantTell for every capture, which
+  // is the same defect one level up: a verdict that cannot move with its input.
+  const outcome = find(criterionOutcomes({
+    capture: focusCapture(confirmed([])), findings: [] }), "2.4.7");
+  assert.equal(outcome.outcome, "inapplicable");
+  assert.notEqual(outcome.reason,
+    find(criterionOutcomes({ capture: focusCapture(UNCONFIRMED), findings: [] }), "2.4.7").reason,
+    "THE PAIR IS THE POINT: the two absences must not arrive as the same sentence");
+});
+
+test("#1255: a CONFIRMED log with events is APPLICABLE, so the confirmed branch discriminates", () => {
+  // The other half of the control above: empty and non-empty must not both read `inapplicable`. Built
+  // from the producer's own shape, so `events` and `log.length` agree the way a real capture makes them.
+  const log = [{ type: "focusin", id: 1, name: "Book", atMs: 10 },
+    { type: "focusout", id: 1, name: "Book", atMs: 15 }];
+  assert.equal(find(criterionOutcomes({ capture: focusCapture(confirmed(log)), findings: [] }), "2.4.7")
+    .outcome, "passed", "the oracle ran, events occurred, and no F55 was found -- a real zero");
+});
+
+test("#1255: focusEvents missing entirely is cantTell too -- absent and unconfirmed are both 'cannot say'", () => {
+  assert.equal(find(criterionOutcomes({ capture: focusCapture(undefined), findings: [] }), "2.4.7").outcome,
+    "cantTell");
+});
