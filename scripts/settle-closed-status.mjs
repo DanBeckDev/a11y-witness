@@ -70,7 +70,18 @@ export function unsettledVerdict(unsettled) {
  *   that cannot see its cause fails every CI run on a token that cannot read the Project.
  */
 export function settleClosedStatus(n, { moveStatus, currentStatus = () => null, log = console.log }) {
-  if (currentStatus(n) === "Done") {
+  /** @type {string | null} */
+  let status;
+  try {
+    status = currentStatus(n);
+  } catch (error) {
+    // #1360, `ceo`'s ruling: a Status read that fails REFUSES with its cause, and the move never reads again. In CI
+    // the Project is unreadable until #546, so letting the move try would spend a second failed read per row.
+    const reason = `could not read #${n}'s Status before moving it to "Done" -- ${/** @type {Error} */ (error).message}`;
+    log(`CLOSE-ROWS: #${n} CLOSED but Status NOT moved -- ${reason}`);
+    return { settled: false, refused: [{ row: n, cause: refusalCause(reason), message: reason }] };
+  }
+  if (status === "Done") {
     log(`CLOSE-ROWS: #${n} Status is already Done -- no move.`);
     return { settled: true, refused: [] };
   }

@@ -79,6 +79,7 @@ import { execFileSync } from "node:child_process";
 import { settleClosedStatus, unsettledVerdict } from "./settle-closed-status.mjs";
 // The token-carrying half, imported HERE (an entry point) and injected, so the pure module stays pure.
 import { moveProjectStatus } from "./row-claim.mjs";
+import { scopedStatus } from "./board-snapshot.mjs";
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 // RELATIVE, never `@a11y-witness/worker-fleet/cli-flags`: this job runs with `actions/checkout` and
@@ -241,7 +242,7 @@ const CLOSURE_EFFECTS = /** @type {const} */ (["closeOne", "strip", "settle"]);
 export function liveClosureEffects() {
   return {
     closeOne: closeOneRow, strip: stripClaimLabels,
-    settle: (/** @type {number} */ n) => settleClosedStatus(n, { moveStatus: moveProjectStatus }),
+    settle: (/** @type {number} */ n) => settleClosedStatus(n, { moveStatus: moveProjectStatus, currentStatus: scopedStatus }),
   };
 }
 
