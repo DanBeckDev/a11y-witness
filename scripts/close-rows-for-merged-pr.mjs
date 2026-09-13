@@ -74,6 +74,8 @@
 //
 //   node scripts/close-rows-for-merged-pr.mjs <pr-number>
 import { execFileSync } from "node:child_process";
+// #1227: the Status write that closes the loop `row-claim`'s claim-side write opens.
+import { moveProjectStatus } from "./row-claim.mjs";
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 // RELATIVE, never `@a11y-witness/worker-fleet/cli-flags`: this job runs with `actions/checkout` and
@@ -161,6 +163,39 @@ function closeOneRow(n, { prNumber, sha, repo }) {
 }
 
 /**
+ * #1227: MOVES THE CLOSED ROW'S PROJECT STATUS TO `Done`, IN THE SAME ACT AS THE CLOSE.
+ *
+ * `row-claim` writes `In progress` when a row is claimed and nothing wrote the resting state, so the
+ * board refilled with closed rows at a live Status **at the rate the org closes rows** -- measured during
+ * #1223/#1224 as roughly one per twenty minutes. Two backfills cleared 316 of them; neither closed the
+ * loop that fills it, because **a guard that detects and a write that prevents are different things.**
+ *
+ * BESIDE `stripClaimLabels`, FOR ITS REASON, NOT MERELY ITS PLACE: that function's header says the strip
+ * happens in the same act as the close rather than in a second pass, "which is a second thing to remember
+ * and the whole reason `audit`'s DEBRIS finding kept coming back". A Status left behind is the same
+ * debris in a different field.
+ *
+ * NEVER THROWS, and does not affect the close's outcome -- the same trade `stripClaimLabels` makes: a row
+ * that closed with a stale Status is strictly better than one left open because a board write failed.
+ * `moveProjectStatus` already reports `notOnBoard` distinctly from a real failure, so a row that is not on
+ * the Project at all is not a defect here.
+ *
+ * @param {number} n @param {{ moveStatus?: typeof moveProjectStatus }} [deps]
+ */
+export function settleClosedStatus(n, { moveStatus = moveProjectStatus } = {}) {
+  const result = moveStatus(n, "Done");
+  if (result.moved) {
+    console.log(`CLOSE-ROWS: #${n} Status -> Done.`);
+  } else if (result.notOnBoard) {
+    console.log(`CLOSE-ROWS: #${n} is not on the Project -- no Status to move.`);
+  } else {
+    // Said, not swallowed: the label write landed and the view write did not, which is ceo's
+    // half-applied case. It must not look like an ordinary success.
+    console.log(`CLOSE-ROWS: #${n} CLOSED but Status NOT moved -- ${result.reason}`);
+  }
+}
+
+/**
  * #754: strips the row's claim labels IN THE SAME ACT as the close, right after it succeeds -- not a
  * second pass, which is a second thing to remember and the whole reason `audit`'s DEBRIS finding kept
  * coming back. A label-removal failure must NEVER prevent or roll back the close (the close is the point;
@@ -195,10 +230,12 @@ export function stripClaimLabels(n, labels, repo, logPrefix = "CLOSE-ROWS") {
  *
  * @param {{ close: {number:number, labels:string[]}[], already: {number:number, labels:string[]}[] }} plan
  * @param {{ prNumber: string, sha: string, repo: string }} ctx
- * @param {{ closeOne?: typeof closeOneRow, strip?: typeof stripClaimLabels }} [deps]
+ * @param {{ closeOne?: typeof closeOneRow, strip?: typeof stripClaimLabels,
+ *   settle?: typeof settleClosedStatus }} [deps]
  * @returns {number[]} row numbers that could not be closed (empty on success)
  */
-export function applyClosurePlan({ close, already }, ctx, { closeOne = closeOneRow, strip = stripClaimLabels } = {}) {
+export function applyClosurePlan({ close, already }, ctx,
+  { closeOne = closeOneRow, strip = stripClaimLabels, settle = settleClosedStatus } = {}) {
   // #776/#791: THE CLOSE is left alone -- re-closing an already-closed row is not this loop's job, and
   // never was. The CLAIM is not: a row that reaches this script already CLOSED is not necessarily one
   // somebody closed by hand days ago -- it may be THIS exact merge, one second earlier (GitHub's own
@@ -206,6 +243,7 @@ export function applyClosurePlan({ close, already }, ctx, { closeOne = closeOneR
   for (const { number: n, labels } of already) {
     console.log(`CLOSE-ROWS: #${n} ALREADY CLOSED -- left alone.`);
     strip(n, labels, ctx.repo);
+    settle(n);
   }
 
   const failed = [];
@@ -213,6 +251,7 @@ export function applyClosurePlan({ close, already }, ctx, { closeOne = closeOneR
     const closed = closeOne(n, ctx);
     if (!closed) { failed.push(n); continue; }
     strip(n, labels, ctx.repo);
+    settle(n);
   }
   return failed;
 }
