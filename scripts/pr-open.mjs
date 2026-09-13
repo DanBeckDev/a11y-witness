@@ -28,6 +28,7 @@ import { readFileSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { acceptanceReport, closesDeclarationReport } from "./acceptance-commands.mjs";
 import { leakRefusalReason } from "../packages/lab/src/packaging/leak-patterns.mjs";
+import { sandboxGitEnv } from "./git-env.mjs";
 
 /**
  * Runs a command FOR REAL, exactly as `acceptance-commands.mjs`'s own (unexported) `runForReal` does --
@@ -90,6 +91,89 @@ function usage() {
     + "  node scripts/pr-open.mjs edit <pr-number> <gh pr edit args...>   (same check, same refusal)\n";
 }
 
+/**
+ * #1277: A FAILED `gh pr create` SAYS WHERE IT STOPPED, IN ONE LINE, LIKE EVERY OTHER REFUSAL HERE.
+ *
+ * Measured 2026-09-13 11:32Z, filing #1254 while the account's GraphQL budget was exhausted: the
+ * acceptance ran and passed, `gh pr create` failed, and the failure arrived as a raw `execFileSync`
+ * throw -- 29 lines, 9 of them stack frames, ending in a dump whose `stdout: null, stderr: null` reads
+ * as "the command produced no output" when the output is four lines above it. The two useful lines were
+ * there; they were buried in twenty-seven that were not, in a file whose three deliberate refusals are
+ * each a single sentence naming the remedy.
+ *
+ * THE SPAWN'S OWN MESSAGE IS NOT SWALLOWED, and it is worth being exact about which message that is:
+ * `execFileSync` throws with "Command failed: <argv>", naming WHICH command died. The CAUSE -- the
+ * `GraphQL: API rate limit already exceeded` that tells an operator to wait rather than to edit -- is
+ * `gh`'s own, written to stderr, which `stdio: "inherit"` has already put on screen one line above. So
+ * the two together are the answer and neither alone is; dropping the argv would leave a run that spawns
+ * more than one `gh` unable to say which failed.
+ *
+ * The branch and head are here because the retry needs them, and reconstructing which head the
+ * acceptance passed against is the thing the stack does not say at all.
+ *
+ * @param {{ mode: string, branch: string, head: string, message: string }} at
+ */
+export function sendFailureLine({ mode, branch, head, message }) {
+  // ONE PHRASE, NOT A TEMPLATE WITH A HOLE. `Branch `detached at abc123` at `abc123`` prints the sha
+  // twice and reads as a branch literally named "detached at ..." -- the first fix for the detached
+  // case produced exactly that, which is why the whole clause is chosen rather than the field filled.
+  const where = branch.startsWith("detached at ") ? `Detached at \`${head}\``
+    : `Branch \`${branch}\` at \`${head}\``;
+  return `pr-open: the body passed and the acceptance ran, but \`gh pr ${mode}\` FAILED -- nothing was `
+    + `created. ${where}; retry the same command unchanged once the cause below is gone.`
+    + `\n  ${message.split("\n")[0]}`;
+}
+
+/**
+ * The branch, or `detached at <sha>` when there is none. `git rev-parse --abbrev-ref HEAD` returns the
+ * literal string `HEAD` on a detached checkout, so the line named a branch that does not exist and told
+ * the reader to retry from it. **`gh pr create` fails on a detached HEAD by construction**, so the one
+ * shape where this message is guaranteed to be read is the shape where that field was wrong.
+ * @param {(args: string[], fallback: string) => string} fact
+ */
+function branchName(fact) {
+  const name = fact(["rev-parse", "--abbrev-ref", "HEAD"], "(unknown)");
+  return name === "HEAD" ? `detached at ${fact(["rev-parse", "--short", "HEAD"], "(unknown)")}` : name;
+}
+
+/**
+ * The spawn, with its deps injected so the failure path has a test. `head` and `branch` are read only
+ * when something has already gone wrong, so the happy path pays nothing for them.
+ * @param {string} mode
+ * @param {string[]} rest
+ * @param {{ run?: (args: string[]) => void, git?: (args: string[]) => string,
+ *           err?: (line: string) => void }} [deps]
+ */
+export function sendToGitHub(mode, rest, { run = defaultGh, git = defaultGit, err = writeErr } = {}) {
+  try {
+    run(["pr", mode, ...rest]);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    // AN ERROR HANDLER THAT CAN ITSELF ERROR IS THE ONE PLACE A THROW COSTS THE MOST (worker-capture,
+    // #1283). Both reads sat here unguarded, so a failing `git` -- a GIT_DIR pointing elsewhere, a stale
+    // gitdir file, the CLI run from outside the checkout -- replaced this message with a raw throw that
+    // carries git's error and LOSES gh's cause entirely. Worse than the 24-line dump it replaced, which
+    // at least contained the answer.
+    /** @type {(args: string[], fallback: string) => string} */
+    const fact = (args, fallback) => { try { return git(args) || fallback; } catch { return fallback; } };
+    err(`${sendFailureLine({ mode, branch: branchName(fact), head: fact(["rev-parse", "--short", "HEAD"],
+      "(unknown)"), message })}\n`);
+    return false;
+  }
+  for (const args of armAfterCreate(mode, rest)) run(args.slice(1));
+  return true;
+}
+
+/** `err` returns nothing, so a caller collecting lines cannot accidentally satisfy it with a length.
+ * @param {string} line */
+const writeErr = (line) => { process.stderr.write(line); };
+
+/** @param {string[]} args */
+const defaultGh = (args) => { execFileSync("gh", args, { stdio: "inherit" }); };
+/** `sandboxGitEnv()` CALLED: git exports GIT_DIR into every hook environment. @param {string[]} args */
+const defaultGit = (args) =>
+  execFileSync("git", args, { encoding: "utf8", env: sandboxGitEnv() }).trim();
+
 function main() {
   const argv = process.argv.slice(2);
   const [mode, ...rest] = argv;
@@ -114,8 +198,7 @@ function main() {
     process.exitCode = 1;
     return;
   }
-  execFileSync("gh", ["pr", mode, ...rest], { stdio: "inherit" });
-  for (const args of armAfterCreate(mode, rest)) execFileSync("gh", args, { stdio: "inherit" });
+  if (!sendToGitHub(mode, rest)) process.exitCode = 1;
 }
 
 /**
