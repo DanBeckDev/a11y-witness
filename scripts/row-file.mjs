@@ -479,8 +479,7 @@ export const OUT_OF_RELEASE_MILESTONE = "Out of release";
  * @param {string[]} argv @returns {string[]}
  */
 export function outOfReleaseArgv(argv) {
-  const byLabel = argv.some((a, i) =>
-    ((a === "--label" || a === "-l") && argv[i + 1] === OUT_OF_RELEASE) || a === `--label=${OUT_OF_RELEASE}`);
+  const byLabel = labelsOutOfRelease(argv);
   if (!byLabel || milestoneFromArgv(argv) !== null) return argv;
   return [...argv, "--milestone", OUT_OF_RELEASE_MILESTONE];
 }
@@ -512,16 +511,26 @@ export function milestoneFromArgv(argv) {
   return null;
 }
 
+/**
+ * #1393: DOES THIS FILING SAY `out-of-release` BY LABEL, in any spelling `gh issue create` takes -- `--label X`,
+ * `--label=X`, `-l X`, `-l=X`, a comma list, any case (gh folds it). The ONE predicate `declaresRelease` and
+ * `outOfReleaseArgv` both ask: each carried its own exact-spelling copy, so `--label out-of-release,docs` was
+ * refused as declaring "no release", and fixing only the refusal would have filed the row with no milestone.
+ * @param {string[]} argv @returns {boolean}
+ */
+export function labelsOutOfRelease(argv) {
+  return labelValuesFromArgv(argv).some((label) => sameLabel(label, OUT_OF_RELEASE));
+}
+
 /** @param {string[]} argv @returns {boolean} */
 export function declaresRelease(argv) {
+  if (labelsOutOfRelease(argv)) return true;
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     // `--milestone=X`, `--milestone X`, `-m X`: a flag with no value declares nothing, which is why the
     // VALUE is checked rather than the flag's presence. An empty `--milestone=` is the same as none.
     if (arg.startsWith("--milestone=") && arg.slice("--milestone=".length).length > 0) return true;
     if ((arg === "--milestone" || arg === "-m") && (argv[i + 1] ?? "").length > 0) return true;
-    if ((arg === "--label" || arg === "-l") && argv[i + 1] === OUT_OF_RELEASE) return true;
-    if (arg === `--label=${OUT_OF_RELEASE}`) return true;
   }
   return false;
 }
