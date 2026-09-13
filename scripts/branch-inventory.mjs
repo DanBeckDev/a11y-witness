@@ -70,7 +70,7 @@ const RETIRED_PREFIXES = new Set(["lead", "dispatcher", "pm", "measure", "market
  * the row is a record somebody wrote, and a branch prefix is an inference from a naming habit. A list that
  * flattened them would read as 93 attributions when it holds two kinds of claim.
  *
- * @param {{ branch: string, row: { number: number, state: string, labels: string[], isPullRequest?: boolean } | null,
+ * @param {{ branch: string, row: { number: number, state: string, labels: string[], isPullRequest?: boolean } | null | undefined,
  *           timeline?: { event: string, label?: { name: string } }[] }} input
  * @returns {{ owner: string | null,
  *             source: "row-label" | "claim-history" | "retired-role" | "unknown" }}
@@ -78,7 +78,9 @@ const RETIRED_PREFIXES = new Set(["lead", "dispatcher", "pm", "measure", "market
 export function ownerOfBranch({ branch, row, timeline = [] }) {
   // A PULL REQUEST'S labels are not a row claim: `session:` never appears on one, and treating a PR as a
   // row is the defect the comment in `branchFacts` records.
-  const fromRow = row === null || row.isPullRequest ? null : sessionFromLabels(row.labels);
+  // #1278: `row == null` catches undefined too. `row === null` missed it, so a caller omitting the
+  // field got a TypeError out of the one function whose job is to answer "unknown" when it cannot tell.
+  const fromRow = row == null || row.isPullRequest ? null : sessionFromLabels(row.labels);
   if (fromRow !== null) return { owner: fromRow, source: "row-label" };
   const fromHistory = sessionFromTimeline(timeline);
   if (fromHistory !== null) return { owner: fromHistory, source: "claim-history" };
