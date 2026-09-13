@@ -8,6 +8,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/arm-pr.mjs` — arm-pr -- enable auto-merge on ONE pull request, unless it is held
 - `node scripts/assert-glob-not-empty.mjs` — refuse a test glob that resolves to zero files instead of passing silently
 - `node scripts/auto-arm-sweep.mjs` — arm auto-merge on open PRs that predate auto-arm.yml and were never armed
+- `node scripts/board-discussion.mjs` — say whether today's board edition exists as a Discussion (exit 0 yes, 1 no, 2 could not ask)
 - `node scripts/board-document.mjs` — render the board's PDF from the same data the daily GitHub report reads
 - `node scripts/board-only-check.mjs` — print true/false: is this branch's diff against origin/main board-only
 - `node scripts/board-record.mjs` — write an achievement record, refusing when it would displace one — #577
@@ -15,6 +16,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/board-schedule-liveness.mjs` — say whether the board report's cron is still arriving, and comment once if not
 - `node scripts/board-snapshot.mjs` — snapshot every Project item before any board-mutating call, so a bad mutation is recoverable
 - `node scripts/board-summary-check.mjs` — check on the morning of an edition whether that day's hand-written board summary exists
+- `node scripts/branch-inventory-report.mjs` — produce the #623 four-fact inventory of every branch on origin with no open PR and commits
 - `node scripts/build-packages.mjs` — run tsc --build across every package under packages/ in dependency order
 - `node scripts/carry-branch.mjs` — carry a stalled agent/* branch from a DETACHED checkout -- merge origin/main in and push,
 - `node scripts/changed-files.mjs` — list the paths a range changed, BOTH SIDES OF A RENAME
@@ -75,3 +77,4 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/update-primary.mjs` — the one sanctioned way to move the primary checkout: fetch, detach at origin/main, rebuild
 - `node scripts/workflow-lane-check.mjs` — check a PR changing a lane-owned path was opened from that lane's branch, or names its exception
 - `node scripts/workflow-run-liveness.mjs` — watchdog: did CI actually run before this commit reached main, checked automatically
+- `node scripts/worktree-owner.mjs` — print which session stamped a worktree, so a session can tell whose tree it is standing in

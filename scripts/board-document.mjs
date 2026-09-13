@@ -14,6 +14,7 @@
 //
 //   npm run board:document                 markdown to stdout
 //   npm run board:document -- --pdf        render a PDF and print its path
+//   npm run board:document -- --discussion post today's edition as a Discussion, or update it (#1290)
 import { writeFileSync, mkdirSync, mkdtempSync, readFileSync, existsSync, realpathSync }
   from "node:fs";
 import { tmpdir } from "node:os";
@@ -26,6 +27,7 @@ import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 import { collect, readSetIsNotMain, ROOT, REPO, MILESTONE, HOURS_MS, issues, outOfRelease, unclassified, achievementsWhoseWorldMoved,
   realPageCaptureAge, worstVerdict } from "./board-data.mjs";
 import { toHtml } from "./board-markdown.mjs";
+import { editionDay, publishEdition, todaysEditionExists } from "./board-discussion.mjs";
 import { productHome, PRODUCT_HOME_SOURCE } from "./product-home.mjs";
 
 // Module scope, not inside main(): `section5` reads it, and `document()` is exported for the renderer
@@ -849,7 +851,7 @@ const PAGE_CSS = `
 //
 // THE FAILURE MODE OF A LATE PATH IS THAT IT BECOMES THE NORMAL ONE. A document that is always late and
 // always says so is worse than the refusal it replaces, because the header stops being read. So the four
-// conditions are not ceremony: the noon cut-off stops it being an evening document, and "no release yet"
+// conditions are not ceremony: the noon cut-off stops it being an evening document, and "no edition yet"
 // keeps it disjoint from `republish` -- one creates, the other replaces, and neither can do the other's
 // job.
 export const LATE_EDITION_EARLIEST = 7 * 60 + 30;
@@ -874,10 +876,10 @@ export function minutesOfDay(hhmm) {
  * would have somebody widening a time window over a paragraph nobody wrote.
  *
  * @param {{ summary: { text: string } | null | undefined, stated: string | null,
- *           releaseExists: boolean, londonNow: string }} state
+ *           editionExists: boolean, londonNow: string }} state
  * @returns {string | null}
  */
-export function lateEditionRefusal({ summary, stated, releaseExists, londonNow }) {
+export function lateEditionRefusal({ summary, stated, editionExists, londonNow }) {
   if (!summary) {
     return "REFUSING a late edition: there is no summary for today.\n"
       + "A late edition is a late DOCUMENT, not a document without its one hand-written paragraph. "
@@ -894,8 +896,8 @@ export function lateEditionRefusal({ summary, stated, releaseExists, londonNow }
       + "normal window.\nThis path exists for a summary written AFTER 07:30 London. A document written on "
       + "time does not need a header saying it is late -- run the ordinary render.";
   }
-  if (releaseExists) {
-    return "REFUSING a late edition: today's release already exists.\n"
+  if (editionExists) {
+    return "REFUSING a late edition: today's edition already exists.\n"
       + "A late edition CREATES today's document; replacing one the board already has is `republish`'s "
       + "job, and the two are deliberately disjoint. Use `republish`.";
   }
@@ -1066,14 +1068,15 @@ export function resolveChromeBinary(deps = {}) {
 
 function main() {
   refuseUnknownFlags(["--pdf", "--since", "--out", "--allow-dirty-read-set", "--release",
-    "--late-edition"], { entry: import.meta.url, command: "npm run board:document" });
+    "--late-edition", "--discussion"], { entry: import.meta.url, command: "npm run board:document" });
 
   const argv = process.argv.slice(2);
   /** @type {(n: string) => string | undefined} */
   const flagOf = (n) => argv.find((a) => a.startsWith(`${n}=`))?.split("=").slice(1).join("=");
 
   const late = argv.includes("--late-edition");
-  const summary = requireSummary(argv.includes("--pdf") || argv.includes("--release") || late);
+  const discussion = argv.includes("--discussion");
+  const summary = requireSummary(argv.includes("--pdf") || argv.includes("--release") || discussion || late);
   const lateAt = late ? requireLateEditionPermitted(summary) : undefined;
   const d = collect(flagOf("--since") ?? new Date(Date.now() - 24 * HOURS_MS).toISOString());
   // THE WORLD-MOVED CHECK RUNS FIRST, before the markdown is built: a stale claim should not be
@@ -1086,53 +1089,89 @@ function main() {
   // agent who hit this had already reached the render-a-PDF step before the cap said anything).
   requireBodyWithinCap(d, md);
 
-  if (!argv.includes("--pdf")) {
+  if (!argv.includes("--pdf") && !discussion) {
     process.stdout.write(md + "\n");
-  } else {
-    // THE SAME REFUSAL AS THE GITHUB EDITION. A PDF that reaches the board is harder to retract than a
-    // comment, so the read set must be `main`'s or nothing is rendered.
-    const dirt = argv.includes("--allow-dirty-read-set") ? null : readSetIsNotMain();
-    if (dirt) {
-      console.error("REFUSING to render: the files this document reads out of the working tree are not "
-        + "`main`'s, so the PDF would carry something nobody has reviewed.\n\n" + dirt
-        + "\n\nNothing was written. Commit and merge the read set, or pass --allow-dirty-read-set, which "
-        + "renders and stamps the document with the fact.");
-      process.exit(3);
-    }
-    const stamped = argv.includes("--allow-dirty-read-set") && readSetIsNotMain()
-      ? md + "\n\n---\n\n*Rendered with `--allow-dirty-read-set`: the files this edition reads out of the "
-        + "working tree are not `main`'s, so the gate line and the fleet-hours line may quote something "
-        + "unreviewed. Stated here rather than left for a reader to discover.*"
-      : md;
-
-    // WHERE THE CHAIRMAN LOOKS, which is the only requirement this path has.
-    //
-    // It was `~/Library/Logs/a11y-witness`, beside the scheduled job's log, on the reasoning that a
-    // LaunchAgent's output belongs there on macOS. That reasoning was about the LOG. A board document is
-    // not a log -- it is a deliverable a person opens, and a deliverable filed where its reader does not
-    // look has not been delivered. So: `~/Documents/a11y-witness-board-reports/`, one file per date. The
-    // log stays in `~/Library/Logs/a11y-witness/`, where the original reasoning does still hold.
-    //
-    // NOT in the repository, and deliberately: `runs/` is shared -- often a symlink to the corpus tree --
-    // and a guard is landing that makes every `runs/` writer askable, so a PDF written every morning
-    // would be a writer nobody remembered when that guard was designed.
-    const outDir = flagOf("--out")
-      ?? path.join(process.env.HOME ?? ROOT, "Documents", "a11y-witness-board-reports");
-    mkdirSync(outDir, { recursive: true });
-    const stem = `a11ign-board-${new Date().toISOString().slice(0, 10)}`;
-    // THE INTERMEDIATE HTML DOES NOT GO WHERE THE CHAIRMAN LOOKS. It is Chrome's input, not a
-    // deliverable, and "one file per date" means one file: a folder holding two files per day, one of
-    // which opens as unstyled markup, is a folder somebody has to learn to read past.
-    const html = path.join(mkdtempSync(path.join(tmpdir(), "board-")), `${stem}.html`);
-    const pdf = path.join(outDir, `${stem}.pdf`);
-    writeFileSync(html, `<!doctype html><meta charset="utf-8"><title>${stem}</title>`
-      + `<style>${PAGE_CSS}</style>${toHtml(stamped)}`);
-
-    renderPdfWithChrome(html, pdf);
-    process.stdout.write(`${pdf}\n`);
-
-    if (argv.includes("--release")) publishToDraftRelease(pdf);
+    return;
   }
+  const stamped = stampedForPublishing(md, { allowDirty: argv.includes("--allow-dirty-read-set") });
+  // THE DISCUSSION IS THE EDITION (#1290) and the PDF an optional copy, so the Discussion goes first: a PDF
+  // render failing afterwards cannot cost the board the edition itself.
+  if (discussion) publishDiscussion(stamped);
+  if (argv.includes("--pdf")) {
+    renderPdfEdition(stamped, { outFlag: flagOf("--out"), release: argv.includes("--release") });
+  }
+}
+
+/**
+ * THE SAME REFUSAL AS THE GITHUB EDITION, for every copy that reaches the board. A published document is
+ * harder to retract than a comment, so the read set must be `main`'s or nothing is published.
+ * @param {string} md @param {{ allowDirty: boolean }} opts
+ * @returns {string} the document, stamped with the fact when a read set that is not `main`'s was allowed
+ */
+function stampedForPublishing(md, { allowDirty }) {
+  const dirt = readSetIsNotMain();
+  if (dirt && !allowDirty) {
+    console.error("REFUSING to render: the files this document reads out of the working tree are not "
+      + "`main`'s, so the edition would carry something nobody has reviewed.\n\n" + dirt
+      + "\n\nNothing was written. Commit and merge the read set, or pass --allow-dirty-read-set, which "
+      + "renders and stamps the document with the fact.");
+    process.exit(3);
+  }
+  return dirt
+    ? md + "\n\n---\n\n*Rendered with `--allow-dirty-read-set`: the files this edition reads out of the "
+      + "working tree are not `main`'s, so the gate line and the fleet-hours line may quote something "
+      + "unreviewed. Stated here rather than left for a reader to discover.*"
+    : md;
+}
+
+/**
+ * THE EDITION ITSELF (#1290). A refusal exits 6, a code of its own, so a failed run's status says which step
+ * refused before anyone opens the log.
+ * @param {string} md
+ */
+function publishDiscussion(md) {
+  try {
+    const { url, action } = publishEdition({ day: editionDay(), body: md });
+    process.stdout.write(`${url} (${action})\n`);
+  } catch (error) {
+    console.error(String(/** @type {Error} */ (error)?.message ?? error));
+    process.exit(6);
+  }
+}
+
+/**
+ * THE PDF, OPTIONAL SINCE #1290: kept for a day a file is wanted, and `--release` still means something only
+ * beside it. The scheduled edition renders none and creates no release draft.
+ * @param {string} stamped @param {{ outFlag: string | undefined, release: boolean }} opts
+ */
+function renderPdfEdition(stamped, { outFlag, release }) {
+  // WHERE THE CHAIRMAN LOOKS, which is the only requirement this path has.
+  //
+  // It was `~/Library/Logs/a11y-witness`, beside the scheduled job's log, on the reasoning that a
+  // LaunchAgent's output belongs there on macOS. That reasoning was about the LOG. A board document is
+  // not a log -- it is a deliverable a person opens, and a deliverable filed where its reader does not
+  // look has not been delivered. So: `~/Documents/a11y-witness-board-reports/`, one file per date. The
+  // log stays in `~/Library/Logs/a11y-witness/`, where the original reasoning does still hold.
+  //
+  // NOT in the repository, and deliberately: `runs/` is shared -- often a symlink to the corpus tree --
+  // and a guard is landing that makes every `runs/` writer askable, so a PDF written every morning
+  // would be a writer nobody remembered when that guard was designed.
+  const outDir = outFlag
+    ?? path.join(process.env.HOME ?? ROOT, "Documents", "a11y-witness-board-reports");
+  mkdirSync(outDir, { recursive: true });
+  const stem = `a11ign-board-${new Date().toISOString().slice(0, 10)}`;
+  // THE INTERMEDIATE HTML DOES NOT GO WHERE THE CHAIRMAN LOOKS. It is Chrome's input, not a
+  // deliverable, and "one file per date" means one file: a folder holding two files per day, one of
+  // which opens as unstyled markup, is a folder somebody has to learn to read past.
+  const html = path.join(mkdtempSync(path.join(tmpdir(), "board-")), `${stem}.html`);
+  const pdf = path.join(outDir, `${stem}.pdf`);
+  writeFileSync(html, `<!doctype html><meta charset="utf-8"><title>${stem}</title>`
+    + `<style>${PAGE_CSS}</style>${toHtml(stamped)}`);
+
+  renderPdfWithChrome(html, pdf);
+  process.stdout.write(`${pdf}\n`);
+
+  if (release) publishToDraftRelease(pdf);
 }
 
 /**
@@ -1178,7 +1217,7 @@ function requireLateEditionPermitted(summary) {
   const lateAt = londonNowHHMM();
   const refusal = lateEditionRefusal({ summary,
     stated: summary ? (statedWritingTime(summary.text, lateAt)?.stated ?? null) : null,
-    releaseExists: todaysReleaseExists(), londonNow: lateAt });
+    editionExists: todaysEditionExists({ day: editionDay() }), londonNow: lateAt });
   if (refusal) {
     console.error(`${refusal}\n\nNothing was written.`);
     process.exit(5);
@@ -1190,27 +1229,6 @@ function requireLateEditionPermitted(summary) {
 export function londonNowHHMM() {
   return new Intl.DateTimeFormat("en-GB",
     { timeZone: "Europe/London", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date());
-}
-
-/**
- * Does today's board release already exist? A FAILED LOOKUP READS AS "YES", deliberately and against this
- * file's other conventions: the condition guards against a late edition CREATING a document beside one the
- * board already has, so the safe answer when `gh` cannot be asked is the one that refuses. Reading a
- * failure as "no release" would let the one state this path must never reach through on an outage.
- * @param {{ run?: (args: string[]) => string }} [deps]
- */
-export function todaysReleaseExists({ run } = {}) {
-  const tag = `board/${new Date().toISOString().slice(0, 10)}`;
-  const exec = run ?? ((args) => execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }));
-  try {
-    exec(["release", "view", tag, "--repo", REPO, "--json", "isDraft"]);
-    return true;
-  } catch (error) {
-    const message = String(/** @type {Error} */ (error)?.message ?? "");
-    // `gh` says "release not found" for a tag that does not exist; anything else is an outage or a
-    // permission problem, and those must not read as "no release".
-    return !/not found/i.test(message);
-  }
 }
 
 /** @param {string} pdf */
