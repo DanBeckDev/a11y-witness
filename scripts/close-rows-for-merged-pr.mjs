@@ -226,23 +226,52 @@ export function stripClaimLabels(n, labels, repo, logPrefix = "CLOSE-ROWS") {
 }
 
 /**
+ * @typedef {{ closeOne: typeof closeOneRow, strip: typeof stripClaimLabels,
+ *   settle: (n: number) => import("./settle-closed-status.mjs").SettleOutcome }} ClosureEffects
+ */
+
+/** The effects `applyClosurePlan` performs, each of which reaches GitHub when live. */
+const CLOSURE_EFFECTS = /** @type {const} */ (["closeOne", "strip", "settle"]);
+
+/**
+ * THE LIVE EFFECTS, NAMED IN ONE PLACE (#1400). `main()` passes these; a test passes its own. `closeOneRow` is
+ * `gh issue close`, `stripClaimLabels` is `gh issue edit`, and `settle` moves a Project 2 Status.
+ * @returns {ClosureEffects}
+ */
+export function liveClosureEffects() {
+  return {
+    closeOne: closeOneRow, strip: stripClaimLabels,
+    settle: (/** @type {number} */ n) => settleClosedStatus(n, { moveStatus: moveProjectStatus }),
+  };
+}
+
+/**
  * Applies a resolved `closurePlan`: strips every already-closed row's claim labels (#776/#791 -- GitHub
  * can close a row NATIVELY, before this script ever runs, so `already` needs the identical strip `close`
  * gets), then closes each still-open row and strips its labels too. Split out of `main` so the WIRING --
  * which rows get closed, which get stripped, and that `already` is never silently skipped -- is
  * unit-testable without a live `gh` call, the same reason `close-rows-sweep.mjs`'s own `closeOnePr` is
- * split out of ITS `main`. Injectable `closeOne`/`strip` so a test can prove call order and arguments.
+ * split out of ITS `main`. The effects are injected so a test can prove call order and arguments.
+ *
+ * #1400: THE THREE EFFECTS ARE REQUIRED, AND NONE HAS A LIVE DEFAULT. Each used to default to the real one, so a
+ * test that injected two reached the third: two tests in `close-rows-on-merge.test.ts` called the LIVE Project 2
+ * mover for #677 and #344 on every local run. Measured behind a `gh` shim: 2 board queries and 2 "could not move"
+ * lines, with the file still 28 / 0, because `settleClosedStatus` never throws -- so pass/fail could not show it.
+ * A missing effect is now refused by name before any effect runs, and `main()` passes `liveClosureEffects()`.
  *
  * @param {{ close: {number:number, labels:string[]}[], already: {number:number, labels:string[]}[] }} plan
  * @param {{ prNumber: string, sha: string, repo: string }} ctx
- * @param {{ closeOne?: typeof closeOneRow, strip?: typeof stripClaimLabels,
- *   settle?: (n: number) => import("./settle-closed-status.mjs").SettleOutcome }} [deps]
+ * @param {ClosureEffects} effects
  * @returns {{ failed: number[], unsettled: import("./settle-closed-status.mjs").Refusal[] }} rows that could not
  *   be closed, and the refusal for each closed row whose Status did not move (#1299) -- both empty on success
  */
-export function applyClosurePlan({ close, already }, ctx,
-  { closeOne = closeOneRow, strip = stripClaimLabels,
-    settle = (/** @type {number} */ n) => settleClosedStatus(n, { moveStatus: moveProjectStatus }) } = {}) {
+export function applyClosurePlan({ close, already }, ctx, effects) {
+  const missing = CLOSURE_EFFECTS.filter((name) => typeof effects?.[name] !== "function");
+  if (missing.length > 0) {
+    throw new Error(`applyClosurePlan: no ${missing.join(", ")} given -- every effect is required, because a `
+      + "defaulted one is a live GitHub call (#1400: tests reached the real Project 2 mover through the one they omitted).");
+  }
+  const { closeOne, strip, settle } = effects;
   // #1299: the settle answer is READ. A bare `settle(n)` let a run that moved no Status exit DONE.
   /** @type {import("./settle-closed-status.mjs").Refusal[]} */
   const unsettled = [];
@@ -326,7 +355,8 @@ function main() {
     process.exit(EXIT.DONE);
   }
 
-  const { code, lines } = closeRowsExit(applyClosurePlan(plan, { prNumber: number, sha, repo }), "CLOSE-ROWS");
+  const { code, lines } = closeRowsExit(applyClosurePlan(plan, { prNumber: number, sha, repo }, liveClosureEffects()),
+    "CLOSE-ROWS");
   for (const line of lines) console.error(line);
   process.exit(code);
 }
