@@ -507,14 +507,22 @@ function topLevelCode(/** @type {string} */ codeOnly, /** @type {string} */ file
  * The spawns the `token` charge below recognises by a string `gh` target. #1140's no-token check reads the same
  * list plus the two spellings a DECLARATION must also answer for, so the charged set can never grow past it.
  */
-const CHARGED_SPAWNS = ["execFileSync", "execSync", "spawnSync", "spawn", "run"];
-const DECLARED_SPAWNS = [...CHARGED_SPAWNS, "execFile", "npmCliInvocation"];
+const CHARGED_SPAWNS = ["execFileSync", "execSync", "execFile", "spawnSync", "spawn", "run"];
+const DECLARED_SPAWNS = [...CHARGED_SPAWNS, "npmCliInvocation"];
+
+/**
+ * #1449: A `gh` SPAWN, NOT THE TWO LETTERS -- one of `CHARGED_SPAWNS` with `gh` as its whole quoted first argument.
+ * The ONE copy: the token charge below uses it, and `gh-token-jobs.test.ts` imports it, so the spawns that make a
+ * test need a token and the spawns that make a CI job need GH_TOKEN cannot drift apart. `execFile` joined it on #1449;
+ * `npmCliInvocation` did not, because it runs only `npx` or `npm` (`npm-cli-executable.mjs`), never `gh`.
+ */
+export const SPAWNS_GH = new RegExp(`(?:${CHARGED_SPAWNS.join("|")})\\s*\\(\\s*(['"\`])gh\\1`);
 
 const CLOSURE_REQUIREMENT_PATTERNS =
   /** @type {[RegExp, "token" | "corpus" | "history"][]} */ ([
-    // A `gh` invocation (the same fingerprint gh-token-jobs.test.ts's own SPAWNS_GH uses) or a direct read
+    // A `gh` invocation (`SPAWNS_GH` above, the one copy gh-token-jobs.test.ts imports) or a direct read
     // of the token itself -- either means the file's operation needs a real GH_TOKEN to behave honestly.
-    [new RegExp(`(?:${CHARGED_SPAWNS.join("|")})\\s*\\(\\s*(['"\`])gh\\1`), "token"],
+    [SPAWNS_GH, "token"],
     [new RegExp(`\\b${fingerprint("GH_TO", "KEN")}\\b`), "token"],
     // `runsRoot()` (packages/lab/src/dataset-paths.mjs) is the ONE function this repo reads `runs/`
     // through; its two documented override env vars are the ONE other door. Reading `runs/` any other way
