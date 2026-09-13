@@ -4,7 +4,7 @@
 
 | workflow | when | what it does |
 |---|---|---|
-| `board-report.yml` | 07:00 UTC daily | posts the engineering edition to the report issue and the PDF to a draft Release |
+| `board-report.yml` | 08:13 London daily | posts the engineering edition to the report issue and the board edition as a Discussion in **Board editions** |
 | `board-summary-check.yml` | 20:00 UTC daily | comments once if tomorrow's executive summary is not committed. It writes no summary text |
 
 **The stated hour is true year round, and it costs two crons to be so.** GitHub schedules in UTC only, so
@@ -19,13 +19,30 @@ else. `board-schedule.test.ts` pins the pair and the gate together, because they
 agree: move the publish time and it is the second one you forget, and the failure is silent — the job
 simply never runs.
 
-```bash
-bash scripts/fetch-board-report.sh            # today's PDF into ~/Documents/a11y-witness-board-reports/
-bash scripts/fetch-board-report.sh 2026-09-06 # a given date
-```
+## The edition is a Discussion, and its category is a MANUAL prerequisite
 
-That fetch is a **convenience, not a dependency**. The Release draft is the delivery; the folder is
-somewhere a person can double-click. A day nobody runs it is a day the document still exists.
+**Since #1290 the board edition is a Discussion in the `Board editions` category (slug `board-editions`),
+one per date, titled `Board report — <date>`.** A republish updates that post in place and never adds a
+second one. Until 2026-09-13 it was a PDF on a draft release — and a draft release creates no tag, is
+visible only to write-access accounts, and does not travel with a repository transfer. The words did not
+change; `board-document.mjs` still produces them.
+
+**The category is created by hand, and nothing can create it for you.** GitHub has no API mutation for a
+Discussion category — it is a click in the repository's Discussions settings, by an admin — and categories
+do not travel with a transfer either. **On any new repository, create "Board editions" before the first
+08:00 run.** Without it the publish step refuses and posts nothing. It never falls back to General, because
+an edition published into the wrong category looks exactly like success.
+
+The category is resolved **by slug on every run**, never by id: an id is per-repository and changes when
+the category is created again.
+
+**The PDF is an optional flag, for a day a file is wanted** — `npm run board:document -- --pdf`, with
+`--release` beside it still attaching it to a draft release. The scheduled job uses neither, and its token
+has `contents: read`, so it cannot create a release draft even if somebody re-adds the flag.
+
+```bash
+bash scripts/fetch-board-report.sh 2026-09-06 # an edition's PDF from the days it was a draft release
+```
 
 ## THE LAUNCHD JOB IS RETIRED, and the reason it existed is worth keeping
 
@@ -45,10 +62,10 @@ says so in the edition itself. The dispatcher's own branch count is what would c
 branch found unpushed appears in the report as an exception. **An absent check must not read as a clean
 one.**
 
-## Where the document goes, and why not beside the log
+## Where a rendered PDF goes, and why not beside the log
 
-**`~/Documents/a11y-witness-board-reports/<date>.pdf`, one file per date.** The GitHub Release draft is
-the second copy.
+**`~/Documents/a11y-witness-board-reports/<date>.pdf`, one file per date**, on a day one is rendered. The
+Discussion is the edition; the PDF is a copy.
 
 It was written beside the scheduled job's log for a while, on the reasoning that a LaunchAgent's output
 belongs in `~/Library/Logs` on macOS. **That reasoning was about the log.** A board document is not a log:
