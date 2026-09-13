@@ -79,7 +79,7 @@ make — it is **can activating this control navigate away or leave the page und
 | button | yes, if submit-like or task-named | activation is its whole purpose, so the NAME has to carry the consent |
 | **checkbox, radio button** | **yes, under `probeForms`** | toggling a form control is the archetypal act of using a page, and it cannot navigate |
 | `<select>` / combo box | **already was, and this does not widen it** | see below — it announces as *collapsed*, so the disclosure rule has always caught it |
-| link | no | activating one navigates away. `probeNavigation` is separately opt-in for exactly this |
+| link | **yes: the first link on the page, by default** | `probeNavigation` follows it, because on almost every real page the first link is the skip link 2.4.1 tests. It has been on by default in the CLI and the Action since 2026-09-02 (`69dc7157`); the CLI's `--no-probe-navigation` turns it off, and the Action has no input for it. Until 2026-09-13 this row said links were not operated (#915, rehearsal 3) |
 
 **A combo box has been operated all along, and writing this section is what found that.** The first draft
 of this table said selects were not activated, citing the jump-menu idiom. Running `probeKindFor` on a real
