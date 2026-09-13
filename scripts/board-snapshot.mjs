@@ -20,6 +20,16 @@
 // `runs/board-snapshots/<stamp>.json` -- printing the path, since an unprinted backup is one nobody can
 // find under pressure -- and REFUSES to call `mutate` at all if the snapshot did not write. `runs/` is
 // gitignored on purpose: a snapshot is a recovery artefact, not history: the tracker itself is the record.
+//
+// #1275: A MUTATION THAT NAMES THE ITEM IT TOUCHES SNAPSHOTS THAT ITEM, NOT THE BOARD. Every board mutation in
+// `scripts/` is one item's Status (`row-claim.mjs`'s `moveProjectStatus`); #399's accident was a FIELD rewrite
+// that no script sends. A full sweep before each one-item edit cost 6 GraphQL pages at 555 items plus the
+// ready-issue list, and the account's GraphQL budget ran out twice on 2026-09-13. The full sweep stays for an
+// unscoped call, for this file's CLI and for `ready-label-audit.mjs` -- which is where #1219/#1228's census
+// still prints.
+//
+// The scoped half lives in `board-snapshot-scope.mjs`, pure of `gh`, so the row's acceptance can run in a job with no
+// token. The one `gh` call it needs is made here, in `withBoardSnapshot`.
 import { execFileSync } from "node:child_process";
 // #1219: PURE, and deliberately in its own module -- see that file's header. Importing it here costs
 // nothing; importing THIS file from a test costs a `token` requirement the acceptance job cannot meet.
@@ -30,10 +40,13 @@ import { pathToFileURL } from "node:url";
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { REPO } from "./repo-identity.mjs";
 import { READY_LABEL } from "./claim-labels.mjs";
+// #1275: the scoped half, PURE OF `gh` -- see that file's header. The constants live there and are re-exported above,
+// because a constant that file imported from here would carry this file's `token` into its closure.
+import { PROJECT_OWNER, PROJECT_NUMBER, SNAPSHOT_DIR, snapshotStamp, graphqlErrors, describeGraphqlErrors,
+  graphqlErrorFromFailedRun, persistSnapshot, touchedIssues, snapshotRoute, withScopedSnapshot, forgetScopedSnapshots }
+  from "./board-snapshot-scope.mjs";
 
-export const PROJECT_OWNER = REPO.split("/")[0];
-export const PROJECT_NUMBER = 2;
-export const SNAPSHOT_DIR = "runs/board-snapshots";
+export { PROJECT_OWNER, PROJECT_NUMBER, SNAPSHOT_DIR, snapshotStamp } from "./board-snapshot-scope.mjs";
 
 /**
  * #852: ONE SWEEP PER PROCESS, AND THE BOUND IS WHAT MAKES THAT SAYABLE.
@@ -89,46 +102,7 @@ const ITEMS_QUERY = `
   }
 `;
 
-/**
- * @typedef {{ itemId: string, number: number | null, title: string | null, status: string | null,
- *   state: string | null }} BoardItem
- *
- * #1219: `state` was NOT fetched until this row, and that is why the health check could never have
- * asked whether a CLOSED row advertises live work. It is not that the check was one-directional --
- * the field that would answer the other direction was never requested, so the question could not be
- * asked at all. A filter on a field nobody fetched, in the instrument watching for exactly this.
- */
-
-/**
- * @typedef {{ type: string, message: string, path: string | null }} GraphqlError
- */
-
-/**
- * Extracts GraphQL's own `errors` array from a parsed response, if present -- #555. `type`/`message`/
- * `path` are the three fields that distinguish FOUR different causes (no permission, wrong project id,
- * user-vs-org shape, a query the schema rejects) which otherwise all read as the identical, unactionable
- * "could not read Project N items" -- #546 sat three hours on exactly that sentence.
- *
- * Returns `null` for an absent, non-array, or empty `errors` field -- so a caller can `if (errors)` rather
- * than checking `.length` itself at every call site.
- *
- * @param {unknown} parsed
- * @returns {GraphqlError[] | null}
- */
-function graphqlErrors(parsed) {
-  const errors = /** @type {any} */ (parsed)?.errors;
-  if (!Array.isArray(errors) || errors.length === 0) return null;
-  return errors.map((/** @type {any} */ e) => ({
-    type: typeof e?.type === "string" ? e.type : "UNKNOWN",
-    message: typeof e?.message === "string" ? e.message : JSON.stringify(e).slice(0, 200),
-    path: Array.isArray(e?.path) ? e.path.join(".") : null,
-  }));
-}
-
-/** One `type: message (path)` line per error, joined -- the string every refusal below actually prints. */
-function describeGraphqlErrors(/** @type {GraphqlError[]} */ errors) {
-  return errors.map((e) => `${e.type}${e.path ? ` (${e.path})` : ""}: ${e.message}`).join("; ");
-}
+/** @typedef {import("./board-snapshot-scope.mjs").BoardItem} BoardItem */
 
 /**
  * One page of `gh api graphql`'s response, parsed into `BoardItem[]` plus pagination state. THROWS on any
@@ -193,31 +167,6 @@ function parsePage(raw) {
     hasNextPage: itemsNode.pageInfo.hasNextPage === true,
     endCursor: typeof itemsNode.pageInfo.endCursor === "string" ? itemsNode.pageInfo.endCursor : null,
   };
-}
-
-/**
- * `execFileSync` throws on a non-zero exit, but `gh api graphql` still writes the full response body --
- * `errors` included -- to stdout first, and Node's thrown error carries it verbatim on `.stdout` (a plain
- * string, since `defaultRun` passes `encoding: "utf8"`). Measured directly: a request naming a repository
- * that does not resolve exits 1 with `{"data":{...},"bad":null},"errors":[{"type":"NOT_FOUND",...}]}` on
- * `.stdout`. So a non-zero exit does not mean the API's own answer is lost -- only that nobody had read it
- * yet. Returns `null` (never throws) for anything that is not a parseable GraphQL error body, so the
- * caller can fall back to the plain exit failure honestly rather than inventing a cause.
- * @param {unknown} failure the thrown value from a failed `run()` call
- * @returns {string | null}
- */
-function graphqlErrorFromFailedRun(failure) {
-  const stdout = /** @type {any} */ (failure)?.stdout;
-  if (typeof stdout !== "string" || stdout.length === 0) return null;
-  /** @type {unknown} */
-  let parsed;
-  try {
-    parsed = JSON.parse(stdout);
-  } catch {
-    return null;
-  }
-  const errors = graphqlErrors(parsed);
-  return errors ? describeGraphqlErrors(errors) : null;
 }
 
 /**
@@ -383,16 +332,6 @@ export function fetchBoardItems({ run = defaultRun, fetchReady = fetchReadyIssue
 }
 
 /**
- * A filesystem-safe stamp for a snapshot filename, derived from a real timestamp so two snapshots taken
- * seconds apart never collide and a reader can sort them by name.
- * @param {Date} date
- * @returns {string}
- */
-export function snapshotStamp(date) {
-  return date.toISOString().replace(/[:.]/g, "-");
-}
-
-/**
  * Fetches every board item and writes it to `runs/board-snapshots/<stamp>.json`, PRINTING the path --
  * whether via the returned value (callers) or `console.log` (the CLI below) -- because an unprinted backup
  * is one nobody can find under pressure. THROWS, rather than swallowing, if the fetch or the write fails:
@@ -425,13 +364,7 @@ export function writeBoardSnapshot({
     project: { owner: PROJECT_OWNER, number: PROJECT_NUMBER },
     items,
   };
-  try {
-    mkdir(SNAPSHOT_DIR);
-    writeFile(path, JSON.stringify(snapshot, null, 2));
-  } catch (cause) {
-    throw new Error(`board-snapshot: could not write the snapshot to ${path} -- refusing to proceed with `
-      + `an unsnapshotted board mutation. ${/** @type {Error} */ (cause).message}`, { cause });
-  }
+  persistSnapshot(path, snapshot, { writeFile, mkdir });
   return path;
 }
 
@@ -447,17 +380,25 @@ export function writeBoardSnapshot({
  * opinion on it, it is `moveProjectStatus`'s to set when `mutate` is specifically fixing that one issue's
  * own Status.
  *
+ * #1275: `touches` names the issue(s) `mutate` changes. Given, the snapshot is SCOPED to those items -- one
+ * request each -- unless a full snapshot this process already holds is still valid (#852's reuse). Absent, the
+ * full sweep runs as before. An empty or non-integer `touches` refuses: a mutation cannot touch nothing.
+ *
  * @param {() => T} mutate the actual board-mutating call
  * @param {{ run?: typeof defaultRun, fetchReady?: typeof fetchReadyIssueNumbers,
  *   writeFile?: (path: string, data: string) => void, mkdir?: (path: string) => void, now?: () => Date,
  *   log?: (line: string) => void, exists?: (path: string) => boolean,
- *   excludeIssueNumber?: number | null }} [deps]
+ *   excludeIssueNumber?: number | null, touches?: number | number[] }} [deps]
  * @returns {T}
  */
 export function withBoardSnapshot(mutate, deps = {}) {
-  const { log = (line) => process.stdout.write(`${line}\n`), exists = existsSync, ...snapshotDeps } = deps;
+  const { log = (line) => process.stdout.write(`${line}\n`), exists = existsSync, touches, ...snapshotDeps } = deps;
+  const issues = touchedIssues(touches);
   const now = snapshotDeps.now ?? (() => new Date());
   const at = now();
+  /** @param {{ path: string, takenAt: Date } | null | undefined} snapshot */
+  const stillValid = (snapshot) => snapshot != null && exists(snapshot.path)
+    && at.getTime() - snapshot.takenAt.getTime() < SNAPSHOT_MAX_AGE_MS;
   const held = processSnapshot;
   // #852 REUSE RE-READS THE DISK RATHER THAN TRUSTING A REMEMBERED PATH.
   //
@@ -466,11 +407,19 @@ export function withBoardSnapshot(mutate, deps = {}) {
   // it too, and `rm -rf runs/` appears three times in this repo's own comments as a scenario worth
   // defending a corpus from. WITHOUT THIS CHECK THE GUARANTEE MOVES FROM MUTATION TIME TO SWEEP TIME --
   // true of a process's first mutation and false of every reused one, which is not what #399 promises.
-  if (held !== null && exists(held.path)
-    && at.getTime() - held.takenAt.getTime() < SNAPSHOT_MAX_AGE_MS) {
-    log(`board-snapshot: reusing ${held.path}, taken ${describeAge(at, held.takenAt)} before this `
+  const route = snapshotRoute({ touchedIssues: issues, fullSnapshotValid: held !== null && stillValid(held) });
+  if (route === "reuse-full") {
+    const reused = /** @type {{ path: string, takenAt: Date }} */ (held);
+    log(`board-snapshot: reusing ${reused.path}, taken ${describeAge(at, reused.takenAt)} before this `
       + "mutation -- one sweep per process (#852)");
     return mutate();
+  }
+  if (route === "scoped") {
+    const { run = defaultRun, writeFile, mkdir } = snapshotDeps;
+    // #1275: THE ONE `gh` CALL THE SCOPED HALF NEEDS, made here so `board-snapshot-scope.mjs` never names `gh` and
+    // its test can run in a job with no token.
+    return withScopedSnapshot(mutate, /** @type {number[]} */ (issues), { request: (args) => run("gh", args), log, at,
+      now, maxAgeMs: SNAPSHOT_MAX_AGE_MS, stillValid, writeFile, mkdir });
   }
   const path = writeBoardSnapshot({ ...snapshotDeps, now });
   processSnapshot = { path, takenAt: at };
@@ -496,6 +445,7 @@ function describeAge(at, takenAt) {
  */
 export function forgetProcessSnapshot() {
   processSnapshot = null;
+  forgetScopedSnapshots();
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
