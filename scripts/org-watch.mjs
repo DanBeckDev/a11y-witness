@@ -313,7 +313,7 @@ export function mainColour({ repo, workflow = "trunk", now = new Date(), run = d
   let runs;
   try {
     runs = JSON.parse(run(["api",
-      `repos/${repo}/actions/workflows/${workflow}.yml/runs?branch=main&per_page=20`])).workflow_runs ?? [];
+      `repos/${repo}/actions/workflows/${workflow}.yml/runs?branch=main&per_page=${RUNS_PAGE_SIZE}`])).workflow_runs ?? [];
   } catch (cause) {
     // #912: AN UNREADABLE MAIN IS NOT A GREEN ONE, AND MUST NOT RETURN THE SAME OBJECT.
     //
@@ -556,6 +556,38 @@ export function redHoursFigure({ windows, examined, pageBeginsMidRed = false }) 
 }
 
 /**
+ * How many of a workflow's runs on main `mainColour` reads: one page. Named because the weekly figure's window
+ * states it, and a window naming a different count from the query would be a second copy of one fact.
+ */
+export const RUNS_PAGE_SIZE = 20;
+
+/**
+ * #1267: THE WEEKLY RED-HOURS FIGURE, the one `main()` prints -- and the only place it is built.
+ *
+ * The inline expression it replaces had two defects. It never read `colour.readable`, so a main that could not be
+ * read printed `0` against a target of `0`, on the one row of the table where every other unmeasured figure says
+ * NOT MEASURED: #912's "an unreadable main is NOT a green one", arriving through the weekly path. And it printed
+ * `colour.hours`, the CURRENT streak, which #1047 had already ruled out for this figure. `redHoursFigure` sums
+ * every red window in the page because a single current window "reports 0 for a night with three breaks all fixed
+ * before the weekly read"; #1047 built and tested that sum and never wired it into `main()`.
+ *
+ * `examined` is the settled runs the windows were read from, and the window names the page, because a sum over
+ * the newest RUNS_PAGE_SIZE runs is not "since the last trunk success".
+ * @param {ReturnType<typeof mainColour>} colour
+ * @returns {ReturnType<typeof figure>}
+ */
+export function weeklyRedHoursFigure(colour) {
+  if (!colour.readable) {
+    return figure({ value: null, examined: 0, window: `the newest ${RUNS_PAGE_SIZE} trunk runs on main`,
+      note: `NOT READ: ${colour.why ?? "main's colour could not be read"}` });
+  }
+  const summed = redHoursFigure(colour);
+  return figure({ value: summed.value, examined: colour.examined,
+    window: `red windows in the newest ${RUNS_PAGE_SIZE} trunk runs on main`,
+    note: `${summed.note}; raw red-hours; attendance is not measured and is no longer implied by the label (#912)` });
+}
+
+/**
  * READ 2 -- THE QUEUE. Every open PR's checks, counted by conclusion, and the ones that need a person.
  *
  * A PR is NAMED when it carries a failing check; the count alone is the summary and the names are the
@@ -673,12 +705,7 @@ function main() {
   const colour = mainColour({ repo });
   if (weekly) {
     process.stdout.write(`${renderTable({
-      redHours: figure({
-        value: colour.red && colour.hours !== null ? String(colour.hours) : "0",
-        examined: colour.red ? 1 : 0,
-        window: "since the last trunk success",
-        note: "raw red-hours; attendance is not measured and is no longer implied by the label (#912)",
-      }),
+      redHours: weeklyRedHoursFigure(colour),
     })}\n`);
     process.exitCode = EXIT.QUIET;
     return;
