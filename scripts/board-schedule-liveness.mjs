@@ -52,6 +52,7 @@ import { pathToFileURL } from "node:url";
 import path from "node:path";
 import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 import { REPO, ROOT, gh } from "./board-data.mjs";
+import { editionDay } from "./board-discussion.mjs";
 
 const ISSUE = "20";
 const REPORT_WORKFLOW = "board-report.yml";
@@ -98,16 +99,8 @@ export function missedTodaysWindow({ runDays, today, londonHour, afterHour }) {
 }
 
 /**
- * A Date as its London calendar day. The board's day is London's, not UTC's.
- * @param {Date} now @returns {string}
- */
-export function londonDayOf(now) {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London", year: "numeric", month: "2-digit",
-    day: "2-digit" }).format(now);
-}
-
-/**
- * The London dates of a workflow's SCHEDULED runs -- `null` if the lookup failed.
+ * The London dates of a workflow's SCHEDULED runs -- `null` if the lookup failed. Each is `editionDay`'s (#1355),
+ * so a run and the edition it belongs to can never be filed under different days.
  * @param {string} workflowFile @returns {string[] | null}
  */
 export function scheduledRunDays(workflowFile) {
@@ -115,9 +108,7 @@ export function scheduledRunDays(workflowFile) {
     return JSON.parse(gh(["run", "list", "--repo", REPO, "--workflow", workflowFile,
       "--json", "event,createdAt", "--limit", "100"]))
       .filter((/** @type {{event: string}} */ r) => r.event === "schedule")
-      .map((/** @type {{createdAt: string}} */ r) => new Intl.DateTimeFormat("en-CA",
-        { timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit" })
-        .format(new Date(r.createdAt)));
+      .map((/** @type {{createdAt: string}} */ r) => editionDay(new Date(r.createdAt)));
   } catch {
     return null;
   }
@@ -495,7 +486,7 @@ function main() {
   const londonNow = new Date();
   const missed = missedTodaysWindow({
     runDays: scheduledRunDays(SUMMARY_WORKFLOW),
-    today: londonDayOf(londonNow),
+    today: editionDay(londonNow),
     londonHour: Number(new Intl.DateTimeFormat("en-GB",
       { timeZone: "Europe/London", hour: "2-digit", hour12: false }).format(londonNow)),
     afterHour: SUMMARY_DEADLINE_HOUR,
