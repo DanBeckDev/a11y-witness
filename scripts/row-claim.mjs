@@ -77,6 +77,7 @@ import { fileOverlapReason, lookupMyRegionFiles, lookupOpenPrFiles } from "./row
 import { templateFieldsReason, lookupIssueBody } from "./row-claim/template-fields-rule.mjs";
 import { staleRuleReason } from "./row-claim/stale-rule-guard.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
+import { primaryWorktreeOf, unverifiedRecords } from "./prune-worktrees.mjs";
 import { CLAIM_LABEL, STARTED_LABEL } from "./claim-labels.mjs";
 import { assertNoLeakInArgv } from "../packages/lab/src/packaging/leak-patterns.mjs";
 
@@ -848,11 +849,17 @@ export function worktreeStatus(worktreePath, { run = defaultRun } = {}) {
  * `--force`. A dirty worktree is exactly the state this function exists to protect; forcing past it would
  * be the destructive shortcut CLAUDE.md already warns against for `git checkout --` one door over. A path
  * that no longer exists is treated as already-removed success, not a failure to report.
+ *
+ * #1373: CLEAN IS A FACT ABOUT WHAT GIT TRACKS. `runs/` is gitignored, so a worktree holding the only copies
+ * of board snapshots reads clean and `git worktree remove` deletes them. It refuses, naming the count, unless
+ * every `runs/` file is in the primary checkout with a matching non-empty sha256 -- `prune-worktrees.mjs`'s
+ * `unverifiedRecords`, the one predicate both removers share. `hash` is injectable so a test can drive the
+ * row's incident: two failed reads that compare equal.
  * @param {string} worktreePath
- * @param {{ run?: typeof defaultRun }} [deps]
+ * @param {{ run?: typeof defaultRun, hash?: (file: string) => string }} [deps]
  * @returns {{ removed: true } | { removed: false, reason: string, files?: string[] }}
  */
-export function removeClaimedWorktree(worktreePath, { run = defaultRun } = {}) {
+export function removeClaimedWorktree(worktreePath, { run = defaultRun, hash } = {}) {
   if (!existsSync(worktreePath)) return { removed: true };
   const status = worktreeStatus(worktreePath, { run });
   if (!status.clean) {
@@ -860,6 +867,8 @@ export function removeClaimedWorktree(worktreePath, { run = defaultRun } = {}) {
       reason: `${worktreePath} has uncommitted change(s) -- refusing to remove it: ${status.files.join(", ")}`,
       files: status.files };
   }
+  const held = unverifiedRecords(worktreePath, primaryWorktreeOf(worktreePath, { run }), { hash });
+  if (held.refused) return { removed: false, reason: held.reason };
   try {
     run("git", ["worktree", "remove", worktreePath]);
     return { removed: true };

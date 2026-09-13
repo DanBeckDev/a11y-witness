@@ -71,6 +71,24 @@ For each PR, in order:
    obviously finds files". For a locally derived population `local/uncontrolled-emptiness` answers this
    for you, so the question is really about the **64 call-derived** ones (`f().filter(…)`), which no rule
    can trace — there, you are the check.
+7. **Before believing any probe's answer, confirm the probe looked at the thing you changed.** A probe's
+   number is about whatever it actually examined, and three kinds of wrong subject each print a well-formed
+   answer that nothing contradicts:
+   - **A fabricated error**: a stub, or an `assert.throws` with no matcher, accepts an error the real code
+     never produces, and reads as *"the handler works"*. `assert.throws(() => parseYaml(malformed))` with no
+     matcher still passed 3/0 with the parser replaced by `throw new Error("x")` (#1280), and a stub whose
+     message WAS the cause asserted a line the real `execFileSync` failure never prints (#1283). **Build the
+     failure from the real producer, and match its message.**
+   - **A stale tree**: a worktree built from a ref that predates the change reads as *"the fix does not
+     work"*. On #1283 a detached worktree from `HEAD` printed the unfixed output while the fix sat
+     uncommitted (#1284). **Probe the committed object, at the sha you are reviewing.**
+   - **An unapplied patch**: a mutation whose anchor matched nothing reads as *"the guard is missing"*. On
+     #1283 a missed anchor printed 19/0, the unmutated count. **Assert the patch landed before reading
+     its result**, which is step 4's line applied to every probe rather than only to mutations.
+
+   The middle two point in opposite directions, one understating the work and one overstating a gap, which
+   is why neither announces itself. No mechanical check covers all three: an assertion that the anchor
+   matched reaches only the third.
 
 ## The verdict, verbatim
 
