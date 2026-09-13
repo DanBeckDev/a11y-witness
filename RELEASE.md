@@ -145,13 +145,8 @@ person about to type `publish-for-real` is the one whose judgement the release i
 5. **Everything the reading surfaces is filed, not fixed in place.** Fixing as you go destroys the record
    of what a first reader actually met, which is the one thing no internal test can produce a second time.
 
-**Most recent rehearsal:** 2026-09-13, runs
-[34774183433](https://github.com/DanBeckDev/a11ign-v1-rehearsal/actions/runs/34774183433) and
-[34774692947](https://github.com/DanBeckDev/a11ign-v1-rehearsal/actions/runs/34774692947), against
-`a11y-witness@bc1ebb51` (the commit `DanBeckDev/a11y-witness@main` resolved to for the second run; the first
-resolved to `b6653743`, its ancestor, and the two transcripts are byte-identical). Reading and ruling:
-[#915](https://github.com/DanBeckDev/a11y-witness/issues/915#issuecomment-5655298464).
-<!-- REHEARSAL:COMMIT bc1ebb5189bd5fc92a4e750cf40894d9cc60c152 -->
+**Most recent rehearsal:** 2026-09-13, runs [34781484432](https://github.com/DanBeckDev/a11ign-v1-rehearsal/actions/runs/34781484432) and [34782000257](https://github.com/DanBeckDev/a11ign-v1-rehearsal/actions/runs/34782000257), against `3bb1fddf` — the release candidate (main `4bf7492f` plus the version fix, #1396). Two runs on the documents' recommended page and task; transcripts byte-identical to each other and to rehearsal 3's (141 announcements); 0 lived-experience findings, 3 axe violations inside the YouTube embed; jobs 6 m 42 s and 5 m 56 s. Account and ruling: #915, comments 5656134412 and the ruling after it. Nine documentation differences are filed as rows and fixed before the `latest` dist-tag; the first publish is `next`.
+<!-- REHEARSAL:COMMIT 3bb1fddf88f231cc4ee485c32e12160b2852952b -->
 <!-- The marker above is what `npm run release:rehearsal-check` reads -- checked by
      `rehearsal-currency-gate.test.ts` against `check-rehearsal-currency.mjs`'s own regex, so a rewording
      of the prose above can never silently stop the gate from finding the commit it names. Update BOTH the
