@@ -79,6 +79,7 @@ import { execFileSync } from "node:child_process";
 import { settleClosedStatus, unsettledVerdict } from "./settle-closed-status.mjs";
 // The token-carrying half, imported HERE (an entry point) and injected, so the pure module stays pure.
 import { moveProjectStatus } from "./row-claim.mjs";
+import { scopedStatus } from "./board-snapshot.mjs";
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 // RELATIVE, never `@a11y-witness/worker-fleet/cli-flags`: this job runs with `actions/checkout` and
@@ -234,6 +235,14 @@ export function stripClaimLabels(n, labels, repo, logPrefix = "CLOSE-ROWS") {
 const CLOSURE_EFFECTS = /** @type {const} */ (["closeOne", "strip", "settle"]);
 
 /**
+ * #1360: THE LIVE SETTLE DEPENDENCIES, DEFINED ONCE. The per-merge path (`liveClosureEffects` below) and the sweep
+ * (`close-rows-sweep.mjs`'s `closeOnePr`) both settle with these. Measured before this existed: each built its own
+ * inline, and dropping `currentStatus` from the sweep's copy left close-rows-sweep, trunk-sweep and close-rows-on-merge
+ * at 49 / 0 -- a caller could lose the whole saving silently. `close-rows-on-merge.test.ts` holds both uses.
+ */
+export const LIVE_SETTLE_DEPS = Object.freeze({ moveStatus: moveProjectStatus, currentStatus: scopedStatus });
+
+/**
  * THE LIVE EFFECTS, NAMED IN ONE PLACE (#1400). `main()` passes these; a test passes its own. `closeOneRow` is
  * `gh issue close`, `stripClaimLabels` is `gh issue edit`, and `settle` moves a Project 2 Status.
  * @returns {ClosureEffects}
@@ -241,7 +250,7 @@ const CLOSURE_EFFECTS = /** @type {const} */ (["closeOne", "strip", "settle"]);
 export function liveClosureEffects() {
   return {
     closeOne: closeOneRow, strip: stripClaimLabels,
-    settle: (/** @type {number} */ n) => settleClosedStatus(n, { moveStatus: moveProjectStatus }),
+    settle: (/** @type {number} */ n) => settleClosedStatus(n, LIVE_SETTLE_DEPS),
   };
 }
 

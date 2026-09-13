@@ -225,7 +225,9 @@ export function persistSnapshot(path, snapshot, { writeFile, mkdir }) {
 /**
  * #1275: the SCOPED snapshots this process has taken, by the issue each one covers. Kept apart from
  * `processSnapshot` because a scoped file describes its own items and must never license a mutation of another.
- * @type {Map<number, { path: string, takenAt: Date }>}
+ * #1360: each entry also carries the item's `status` as that read saw it, so a caller deciding whether a move is
+ * needed reads the same snapshot the move then reuses.
+ * @type {Map<number, { path: string, takenAt: Date, status: string | null }>}
  */
 const scopedSnapshots = new Map();
 
@@ -287,6 +289,18 @@ export function writeScopedSnapshot(issueNumbers, {
   mkdir = (path) => mkdirSync(path, { recursive: true }),
   now = () => new Date(),
 }) {
+  return snapshotTouched(issueNumbers, { request, maxAgeMs, writeFile, mkdir, now }).path;
+}
+
+/**
+ * #1360: WRITE A SCOPED SNAPSHOT AND RETURN WHAT IT READ, so a caller that needs an item's Status takes it from the same
+ * read the file records instead of reading the file back. `writeScopedSnapshot` is this, returning the path only.
+ * @param {number[]} issueNumbers
+ * @param {{ request: GhRequest, maxAgeMs: number, writeFile: (path: string, data: string) => void,
+ *   mkdir: (path: string) => void, now: () => Date }} deps
+ * @returns {{ path: string, items: BoardItem[] }}
+ */
+function snapshotTouched(issueNumbers, { request, maxAgeMs, writeFile, mkdir, now }) {
   const { items, notOnBoard } = readTouchedItems(issueNumbers, { request });
   const takenAt = now();
   const path = `${SNAPSHOT_DIR}/${snapshotStamp(takenAt)}-issue-${issueNumbers.join("-")}.json`;
@@ -301,7 +315,12 @@ export function writeScopedSnapshot(issueNumbers, {
     items,
     notOnBoard,
   }, { writeFile, mkdir });
-  return path;
+  return { path, items };
+}
+
+/** @param {BoardItem[]} items @param {number} issue @returns {string | null} */
+function statusIn(items, issue) {
+  return items.find((item) => item.number === issue)?.status ?? null;
 }
 
 /**
@@ -353,12 +372,47 @@ export function withScopedSnapshot(mutate, issues, { request, log, at, now, maxA
       + "mutation of the same item(s) in this process (#1275)");
     return mutate();
   }
-  const path = writeScopedSnapshot(touched, { request, maxAgeMs, writeFile, mkdir, now });
-  for (const issue of touched) scopedSnapshots.set(issue, { path, takenAt: at });
+  const { path, items } = snapshotTouched(touched, { request, maxAgeMs, writeFile: writeFile ?? defaultWriteFile,
+    mkdir: mkdir ?? defaultMkdir, now });
+  for (const issue of touched) scopedSnapshots.set(issue, { path, takenAt: at, status: statusIn(items, issue) });
   log(`board-snapshot: wrote ${path} before mutating #${touched.join(", #")} -- scoped to the item(s) this `
     + "mutation touches, not the whole board (#1275)");
   return mutate();
 }
+
+/**
+ * #1360: THE STATUS A MOVE'S OWN SCOPED READ WOULD SEE, TAKEN ONE STEP EARLY -- `ceo`'s ruling on #1360.
+ *
+ * Since #1275 every Status move reads the one item it edits before it mutates (`withScopedSnapshot` above), so the
+ * Status a caller needs to decide whether a move is needed is already being read. This takes that read first and
+ * records it in the per-issue cache, and the move that follows reuses it inside the same bound. So a row already at
+ * its target costs one request and no mutation, and a row that is not costs one request and one mutation: the same
+ * as a move alone. A held entry is answered without a request.
+ *
+ * A failed read THROWS, exactly as the move's own read would, quoting GraphQL's error (#555), so the caller refuses
+ * with that cause instead of letting the move read again.
+ * @param {number} issue
+ * @param {{ request: GhRequest, log: (line: string) => void, at: Date, now: () => Date, maxAgeMs: number,
+ *   stillValid: (snapshot: { path: string, takenAt: Date } | undefined) => boolean,
+ *   writeFile?: (path: string, data: string) => void, mkdir?: (path: string) => void }} context
+ * @returns {string | null} the item's Status, or null when it is not on the board or has none set
+ */
+export function scopedStatusOf(issue, { request, log, at, now, maxAgeMs, stillValid, writeFile, mkdir }) {
+  const held = scopedSnapshots.get(issue);
+  if (held !== undefined && stillValid(held)) return held.status;
+  const { path, items } = snapshotTouched([issue], { request, maxAgeMs, writeFile: writeFile ?? defaultWriteFile,
+    mkdir: mkdir ?? defaultMkdir, now });
+  const status = statusIn(items, issue);
+  scopedSnapshots.set(issue, { path, takenAt: at, status });
+  log(`board-snapshot: wrote ${path} to read #${issue}'s Status before moving it -- the move reuses it (#1360)`);
+  return status;
+}
+
+/** @param {string} path @param {string} data */
+function defaultWriteFile(path, data) { writeFileSync(path, data, "utf8"); }
+
+/** @param {string} path */
+function defaultMkdir(path) { mkdirSync(path, { recursive: true }); }
 
 /**
  * FORGET THE SCOPED SNAPSHOTS. For tests, and `board-snapshot.mjs`'s `forgetProcessSnapshot` calls it: a scoped file
