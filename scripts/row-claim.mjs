@@ -630,6 +630,60 @@ function postReleaseRecord(issueNumber, { session, recorded }, runFn) {
 }
 
 /**
+ * #1399: THE EXIT CODE FOR A COMMAND THAT WROTE, THEN FAILED. Distinct from 0 (clean), 1 (refused, nothing
+ * written), 2 (`COULD NOT DETERMINE`: nothing known to be written) and 3 (claimed, but the Status view could
+ * not follow). Measured on #1399 at `326c9b71`: `claim` wrote four label definitions, added its labels and
+ * removed `ready`, then its verify read failed on an exhausted GraphQL pool -- and printed `COULD NOT
+ * DETERMINE`, exit 2, with nothing on stdout, so the caller read a claimed row as untouched. `decline` did the
+ * same after removing the worktree and the labels, when its release record failed.
+ */
+export const LANDED_WRITE_EXIT = 4;
+
+/**
+ * #1399: runs `act`, which pushes a description onto `landed` after each write it KNOWS succeeded. A failure
+ * after at least one is re-thrown carrying that list, so the CLI reports what the row now holds rather than
+ * `COULD NOT DETERMINE`. A failure before any write propagates unchanged -- that is still "nothing written".
+ * @template T
+ * @param {number} issueNumber
+ * @param {string[]} landed
+ * @param {() => T} act
+ * @returns {T}
+ */
+export function withLandedWrites(issueNumber, landed, act) {
+  try {
+    return act();
+  } catch (cause) {
+    if (landed.length === 0) throw cause;
+    throw Object.assign(new Error(`row-claim: #${issueNumber} WAS WRITTEN before a later step failed -- `
+      + `landed: ${landed.join("; ")}. The step that failed: ${/** @type {Error} */ (cause).message}`, { cause }),
+    { landed: [...landed] });
+  }
+}
+
+/**
+ * The writes a `withLandedWrites` failure carries, or `null` for an error that landed nothing.
+ * @param {unknown} error
+ * @returns {string[] | null}
+ */
+export function landedWritesOf(error) {
+  const landed = /** @type {{ landed?: unknown } | null} */ (error)?.landed;
+  return Array.isArray(landed) ? landed : null;
+}
+
+/**
+ * What a `claim`/`dispatch`/`decline` CLI prints, and exits with, for a thrown error -- one function so the
+ * three catches cannot drift apart. Pure.
+ * @param {unknown} error
+ * @returns {{ exitCode: number, text: string }}
+ */
+export function failureReport(error) {
+  const message = /** @type {Error} */ (error).message;
+  if (landedWritesOf(error) === null) return { exitCode: 2, text: `COULD NOT DETERMINE: ${message}` };
+  return { exitCode: LANDED_WRITE_EXIT, text: `PARTIALLY WRITTEN (exit ${LANDED_WRITE_EXIT}, NOT "could not determine" `
+    + `-- the row has changed): ${message}. Read the row by REST before retrying or editing it by hand.` };
+}
+
+/**
  * #749: writes the claim's labels, split from `writeRowLabels` for the same reason
  * `postBlockedByNoteIfAny` above is (a called function's own lines are not the caller's).
  *
@@ -647,15 +701,18 @@ function postReleaseRecord(issueNumber, { session, recorded }, runFn) {
  * for any path outside `/private/tmp`). The two facts are written as a claim COMMENT instead, by
  * `writeRowLabels` after it knows it won the race.
  * @param {number} issueNumber
- * @param {{ run: typeof defaultRun, sessionLabel: string, extraLabels: string[], wasReady: boolean }} args
+ * @param {{ run: typeof defaultRun, sessionLabel: string, extraLabels: string[], wasReady: boolean,
+ *   landed: string[] }} args `landed` gains each write once it has succeeded (#1399)
  */
-function applyClaimLabels(issueNumber, { run, sessionLabel, extraLabels, wasReady }) {
+function applyClaimLabels(issueNumber, { run, sessionLabel, extraLabels, wasReady, landed }) {
   const labelsToAdd = [CLAIM_LABEL, sessionLabel, ...extraLabels,
     ...(wasReady ? [WAS_READY_LABEL] : [])];
   ensureLabelsExist(labelsToAdd, { run });
   run("gh", ["issue", "edit", String(issueNumber), "--repo", REPO,
     ...labelsToAdd.flatMap((l) => ["--add-label", l])]);
+  landed.push(`added labels ${labelsToAdd.join(", ")}`);
   run("gh", ["issue", "edit", String(issueNumber), "--repo", REPO, "--remove-label", READY_LABEL]);
+  landed.push(`removed label ${READY_LABEL}`);
 }
 
 /**
@@ -709,8 +766,28 @@ function writeRowLabels(issueNumber, mySession, extraLabels,
   // here and adds nothing, harmlessly -- the marker this row's own earlier dispatch already wrote stays
   // exactly where it is.
   const wasReady = before.labels.includes(READY_LABEL);
-  applyClaimLabels(issueNumber, { run, sessionLabel, extraLabels, wasReady });
+  /** @type {string[]} */
+  const landed = [];
+  // #1399: FROM THE FIRST WRITE ON, A FAILURE IS A PARTIAL WRITE, never `COULD NOT DETERMINE` -- see
+  // `LANDED_WRITE_EXIT`. The checks above wrote nothing, so a throw from them still propagates as it did.
+  return withLandedWrites(issueNumber, landed, () => {
+    applyClaimLabels(issueNumber, { run, sessionLabel, extraLabels, wasReady, landed });
+    return completeClaim(issueNumber,
+      { run, moveStatus, mySession, sessionLabel, extraLabels, blockedByNote, branch, worktree, landed });
+  });
+}
 
+/**
+ * #1399: the claim after its labels landed -- the verify, the race back-off, the records and the Status move --
+ * split from `writeRowLabels` so every write here is recorded in `landed` as it succeeds.
+ * @param {number} issueNumber
+ * @param {{ run: typeof defaultRun, moveStatus: typeof moveProjectStatus, mySession: string, sessionLabel: string,
+ *   extraLabels: string[], blockedByNote: Parameters<typeof postBlockedByNoteIfAny>[1], branch?: string,
+ *   worktree?: string, landed: string[] }} state
+ * @returns {{ claimed: true, statusMoved: true } | { claimed: true, statusMoved: false, notOnBoard: boolean, statusReason: string } | { claimed: false, reason: string }}
+ */
+function completeClaim(issueNumber,
+  { run, moveStatus, mySession, sessionLabel, extraLabels, blockedByNote, branch, worktree, landed }) {
   const after = fetchLabels(issueNumber, { run });
   const afterStatus = claimStatus(after.labels);
   const otherSessions = afterStatus.sessions.filter((s) => s !== mySession);
@@ -724,17 +801,20 @@ function writeRowLabels(issueNumber, mySession, extraLabels,
     // wrote one. That ordering is the same reason #741's exception note sits where it does.
     run("gh", ["issue", "edit", String(issueNumber), "--repo", REPO,
       ...[sessionLabel, ...extraLabels].flatMap((l) => ["--remove-label", l])]);
+    landed.push(`backed off: removed labels ${[sessionLabel, ...extraLabels].join(", ")}`);
     return { claimed: false, reason: `lost a race to ${otherSessions.join(", ")} -- backed off` };
   }
   // #741: THE EXCEPTION GOES ON THE RECORD, in the same act that wins the claim -- never on a race we
   // then lost (the block above already returned), so a losing session's attempted override leaves no
   // comment behind naming an exception it never actually exercised.
   postBlockedByNoteIfAny(issueNumber, blockedByNote, run);
+  if (blockedByNote) landed.push("posted the --blocked-by exception note");
   // #987: THE BRANCH AND WORKTREE GO ON THE RECORD HERE, for the identical reason #741's note above does
   // -- after the race is known to be won, so a losing session never leaves a record naming a worktree it
   // did not get to keep. `branch`/`worktree` are the values this claim was GIVEN, not values read back:
   // there is nothing to read back yet, and the comment IS the record.
   postClaimRecord(issueNumber, { session: mySession, branch, worktree }, run);
+  if (branch || worktree) landed.push(`posted the claim record (branch ${branch ?? "none"}, worktree ${worktree ?? "none"})`);
   // #400: THE LABEL IS THE RECORD; THIS MOVES THE VIEW TO MATCH IT, IN THE SAME ACT. A view corrected only
   // by a later sweep is wrong between sweeps, and "between sweeps" is where a worker reads it -- measured
   // live, a row read `unlabeled ready / labeled in-progress` for the three minutes between a real claim and
@@ -992,12 +1072,31 @@ export function declineRow(issueNumber, mySession,
   // the count and the command that says when the fallback can go. Read AFTER the ownership check, so a
   // decline this session was never entitled to make costs no extra `gh` call.
   const recorded = claimedObjects({ labels: before.labels, comments: fetchComments(issueNumber, { run }) });
+  /** @type {string[]} */
+  const landed = [];
+  // #1399: as `writeRowLabels` -- from the worktree removal on, a failure reports what it already changed.
+  return withLandedWrites(issueNumber, landed, () => releaseRow(issueNumber,
+    { run, moveStatus, blockedReason, removeWorktree, mySession, before, status, recorded, landed }));
+}
+
+/**
+ * #1399: `declineRow` from the worktree removal on -- every write recorded in `landed` as it succeeds.
+ * @param {number} issueNumber
+ * @param {{ run: typeof defaultRun, moveStatus: typeof moveProjectStatus, blockedReason?: string,
+ *   removeWorktree: typeof removeClaimedWorktree, mySession: string, before: IssueClaim,
+ *   status: ReturnType<typeof claimStatus>, recorded: { branch: string | null, worktree: string | null },
+ *   landed: string[] }} state
+ * @returns {ReturnType<typeof declineRow>}
+ */
+function releaseRow(issueNumber,
+  { run, moveStatus, blockedReason, removeWorktree, mySession, before, status, recorded, landed }) {
   // #665: THE WORKTREE COMES OFF FIRST, before any label is touched -- a dirty one refuses the WHOLE
   // decline (see this function's own header for why), so the claim record stays intact until an operator
   // has dealt with the uncommitted work by hand.
   if (recorded.worktree) {
     const removal = removeWorktree(recorded.worktree, { run });
     if (!removal.removed) return { declined: false, reason: removal.reason };
+    landed.push(`removed the recorded worktree ${recorded.worktree}`);
   }
 
   const isClosed = before.state === "CLOSED";
@@ -1007,10 +1106,12 @@ export function declineRow(issueNumber, mySession,
   run("gh", ["issue", "edit", String(issueNumber), "--repo", REPO,
     ...removeLabels.flatMap((l) => ["--remove-label", l]),
     ...addLabels.flatMap((l) => ["--add-label", l])]);
+  landed.push(`removed labels ${removeLabels.join(", ")}${addLabels.length > 0 ? `; added ${addLabels.join(", ")}` : ""}`);
 
   // #987: AND THE RELEASE GOES ON THE RECORD, so the newest claim-record comment stops naming a worktree
   // this call has just removed.
   postReleaseRecord(issueNumber, { session: mySession, recorded }, run);
+  if (recorded.branch || recorded.worktree) landed.push("posted the release record");
 
   if (blockedReason && !isClosed) {
     // A LABEL CARRIES NO FREE TEXT -- the reason has to live somewhere a future reader can see it, and an
@@ -1018,6 +1119,7 @@ export function declineRow(issueNumber, mySession,
     // (board-report.mjs, npm-token-liveness.mjs).
     run("gh", ["issue", "comment", String(issueNumber), "--repo", REPO, "--body",
       `Declined by \`${mySession}\` and marked \`blocked\`: ${blockedReason}`]);
+    landed.push("posted the blocked reason");
   }
 
   if (isClosed) {
@@ -1355,8 +1457,10 @@ function runDispatchOrClaim(mode, issueNumber, rest) {
       process.exitCode = 1;
     }
   } catch (error) {
-    process.stderr.write(`COULD NOT DETERMINE: ${/** @type {Error} */ (error).message}\n`);
-    process.exitCode = 2;
+    // #1399: a failure after a landed write exits LANDED_WRITE_EXIT and names the writes; otherwise exit 2.
+    const report = failureReport(error);
+    process.stderr.write(`${report.text}\n`);
+    process.exitCode = report.exitCode;
   }
 }
 
@@ -1407,8 +1511,10 @@ function runDecline(issueNumber, rest) {
       process.exitCode = 1;
     }
   } catch (error) {
-    process.stderr.write(`COULD NOT DETERMINE: ${/** @type {Error} */ (error).message}\n`);
-    process.exitCode = 2;
+    // #1399: a failure after a landed write exits LANDED_WRITE_EXIT and names the writes; otherwise exit 2.
+    const report = failureReport(error);
+    process.stderr.write(`${report.text}\n`);
+    process.exitCode = report.exitCode;
   }
 }
 
