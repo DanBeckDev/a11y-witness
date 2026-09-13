@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
-// command: the one sanctioned way to move the primary checkout: fetch, detach at origin/main, rebuild
+// command: the one sanctioned way to move the primary checkout: fetch, detach at origin/main, install if the lockfile moved, rebuild
 // THE ONE WAY TO UPDATE THE PRIMARY CHECKOUT — issue #126. Fetch, then detach at `origin/main`. Nothing
 // else: no merge, no rebase, no branch, because the primary is read-only except fast-forward and the
 // `post-checkout` hook will otherwise immediately undo anything this script leaves it on.
@@ -65,34 +65,87 @@ function moveLocalMain(run, sha) {
   run(["update-ref", "refs/heads/main", sha, before]);
 }
 
+/** The one lockfile of this workspace. Every package resolves through the root `node_modules` it describes. */
+export const LOCKFILE = "package-lock.json";
+
+/**
+ * DID THE MOVE CHANGE THE LOCKFILE? Asked of the two commits the checkout actually moved between, never of
+ * the working tree, because the primary's tree is clean by construction and a clean tree answers "no".
+ *
+ * A HEAD that did not move asks nothing: there is no range, and a `git diff` of a commit against itself
+ * would be a question whose answer is empty by construction.
+ *
+ * It reads the output as a LIST OF PATHS and looks for the lockfile by name, rather than treating any
+ * output as "changed", so that a `run` answering something unexpected cannot install by accident.
+ *
+ * @param {(args: string[]) => string} run @param {string} before @param {string} after
+ */
+export function lockfileMoved(run, before, after) {
+  if (before === after) return false;
+  const paths = run(["diff", "--name-only", before, after, "--", LOCKFILE]).split("\n");
+  return paths.map((path) => path.trim()).includes(LOCKFILE);
+}
+
 /**
  * @param {string} [root]
  * @param {(args: string[]) => string} [run]
- * @param {(root: string) => void} [buildAt]
+ * @param {(root: string, args: string[]) => void} [npmAt] runs npm in `root`; throws on a non-zero exit
  */
 export function updatePrimary(root = REPO, run = (args) =>
-  execFileSync("git", args, { cwd: root, env: sandboxGitEnv(), encoding: "utf8" }), buildAt = build) {
+  execFileSync("git", args, { cwd: root, env: sandboxGitEnv(), encoding: "utf8" }), npmAt = runNpm) {
   if (!isPrimaryWorktree(root)) {
     throw new Error(`${root} is not the primary checkout (its .git is a linked worktree's, not a real `
       + "directory) — this script only ever updates the primary. Use plain `git pull`/`git fetch` here.");
   }
   run(["fetch", "origin"]);
+  // Read BEFORE the checkout: afterwards HEAD is the new commit, and the old one is the only way to ask
+  // what the move changed.
+  const before = run(["rev-parse", "HEAD"]).trim();
   run(["checkout", "--detach", "origin/main", "--quiet"]);
   const sha = run(["rev-parse", "HEAD"]).trim();
   moveLocalMain(run, sha);
-  // THE WRAPPING LIVES HERE, NOT IN `build`, because what a failed build MEANS is a fact about this
-  // checkout's relationship to every worktree -- true whichever build function ran, and the reason a
-  // caller needs the message at all.
-  try {
-    buildAt(root);
-  } catch (error) {
-    const status = /** @type {{ status?: number }} */ (error).status;
-    throw new Error("the primary moved, but `npm run build` failed (exit "
-      + `${status ?? "?"}). Every worktree resolves THIS checkout's dist, so they are now compiling `
-      + "against a source this dist does not match. Fix the build here before trusting a cross-package "
-      + "import anywhere.", { cause: error });
-  }
+  // INSTALL BEFORE BUILD: the build compiles against `node_modules`, so building first would compile the
+  // new source against the old dependencies and fail on exactly the module the install was about to add.
+  if (lockfileMoved(run, before, sha)) installAt(root, npmAt);
+  buildAt(root, npmAt);
   return sha;
+}
+
+/** @param {unknown} error @returns {string} the child's exit status, or `?` when it has none */
+function exitOf(error) {
+  const status = /** @type {{ status?: number }} */ (error).status;
+  return String(status ?? "?");
+}
+
+/**
+ * INSTALL WHEN THE LOCKFILE MOVED, BECAUSE EVERY WORKTREE RESOLVES THIS CHECKOUT'S `node_modules` -- #1384.
+ *
+ * Measured 2026-09-13: #1380 (`8fe2db08`) added `@rstest/core` as a root devDependency. This script moved
+ * the primary to the new lockfile and rebuilt, and nothing installed, so from 18:46Z every push from every
+ * worktree on the host failed its pre-push typecheck with TS2307 on a module the shared `node_modules`
+ * did not have, until `ceo` noticed and installed by hand.
+ *
+ * `npm install`, NEVER `npm ci` (`ceo`'s ruling on the row). `npm ci` deletes `node_modules` before it
+ * installs, which removes it from under every worktree that is running a test or a push at that moment.
+ * `npm install` is additive and respects the lockfile.
+ *
+ * A FAILED INSTALL IS REPORTED, NEVER SWALLOWED, the same way a failed build is, and for the same reason:
+ * the checkout has already moved and is correct. The message also says a re-run will not retry, because
+ * the next run finds HEAD already at the target and so asks no lockfile question at all.
+ *
+ * @param {string} root @param {(root: string, args: string[]) => void} npmAt
+ */
+function installAt(root, npmAt) {
+  try {
+    npmAt(root, ["install"]);
+  } catch (error) {
+    throw new Error(`the primary moved to a new ${LOCKFILE}, but \`npm install\` failed (exit `
+      + `${exitOf(error)}). Every worktree resolves THIS checkout's node_modules, so they are now resolving `
+      + "a stale node_modules against the new lockfile, and a push from any of them can fail its typecheck "
+      + "on a missing module. The build did not run. Re-running primary:update will NOT retry the install "
+      + "(HEAD is already at the target), so run `npm install` here by hand -- never `npm ci`, which "
+      + "deletes node_modules from under every running worktree.", { cause: error });
+  }
 }
 
 /**
@@ -118,12 +171,27 @@ export function updatePrimary(root = REPO, run = (args) =>
  * already happened and is correct, and leaving a stale `dist` beside a moved source with a loud error is
  * strictly better than silently reverting a checkout somebody else may already be reading.
  *
- * @param {string} root
+ * THE WRAPPING LIVES HERE, NOT IN `npmAt`, because what a failed build MEANS is a fact about this
+ * checkout's relationship to every worktree -- true whichever npm runner ran, and the reason a caller
+ * needs the message at all.
+ *
+ * @param {string} root @param {(root: string, args: string[]) => void} npmAt
  */
-function build(root) {
+function buildAt(root, npmAt) {
+  try {
+    npmAt(root, ["run", "build"]);
+  } catch (error) {
+    throw new Error(`the primary moved, but \`npm run build\` failed (exit ${exitOf(error)}). Every `
+      + "worktree resolves THIS checkout's dist, so they are now compiling against a source this dist "
+      + "does not match. Fix the build here before trusting a cross-package import anywhere.", { cause: error });
+  }
+}
+
+/** @param {string} root @param {string[]} args */
+function runNpm(root, args) {
   // `npmCliInvocation`, never a bare `npm` -- #? : a bare npm/npx spawn is unsafe on Windows and this
   // repository's own guard refuses one anywhere in the tree. Same call shape as every other site.
-  const npm = npmCliInvocation("npm", ["run", "build"]);
+  const npm = npmCliInvocation("npm", args);
   execFileSync(npm.command, npm.args, { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
 }
 
