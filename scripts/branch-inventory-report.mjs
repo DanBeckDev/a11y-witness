@@ -63,10 +63,13 @@ export function rowsFor(numbers, { run = defaultRun } = {}) {
   const rows = new Map();
   for (const n of numbers) {
     try {
-      const issue = JSON.parse(run("gh", ["issue", "view", String(n), "--repo", REPO,
-        "--json", "number,state,labels"]));
-      rows.set(n, { number: issue.number, state: issue.state,
-        labels: issue.labels.map((/** @type {{name: string}} */ l) => l.name) });
+      // `gh api .../issues/<n>` rather than `gh issue view`: REST answers for PULL REQUESTS at the same
+      // path, and only this route carries the `pull_request` key that tells them apart. `gh issue view`
+      // silently returned a PR for `archive/gate-ages-rebased-137` and the tool called it a row.
+      const issue = JSON.parse(run("gh", ["api", `repos/${REPO}/issues/${n}`]));
+      rows.set(n, { number: issue.number, state: String(issue.state).toUpperCase(),
+        isPullRequest: Object.hasOwn(issue, "pull_request"),
+        labels: (issue.labels ?? []).map((/** @type {{name: string}} */ l) => l.name) });
     } catch {
       rows.set(n, null); // a number in a branch name that names no row -- reported, never guessed at
     }
