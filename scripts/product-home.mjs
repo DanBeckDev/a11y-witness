@@ -8,7 +8,8 @@
 // was the one the BOARD reads. So the copy nobody compared was the copy with the most expensive reader.
 //
 // WHY THIS IS A LEAF AND NOT A FUNCTION IN `board-document.mjs`. The guard has to reach this value to
-// compare it, and `board-document.mjs` needs `token` -- `todaysReleaseExists` spawns `gh` at line 1190.
+// compare it, and `board-document.mjs` needs `token` -- `publishToDraftRelease` spawns `gh` (#1290 removed
+// `todaysReleaseExists`, which this line used to name).
 // Importing it into `homepage-agreement.test.ts` would move that file from `[]` to `["token"]` in #827's
 // closure walk and disqualify it from the job that runs acceptance commands. Measured with the real
 // deriver, both before and after. Same extraction, same reason, as `region-paths.mjs` (#462, B4).
