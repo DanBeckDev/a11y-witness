@@ -26,6 +26,36 @@ inventory. Do not read it out of `inventory.yml` by hand and do not paste it int
 a record. On 2026-09-09 three deploy attempts failed for three different reasons and the first was this
 value being unset in the shell; the fix was knowing where it lives, which is why this section exists.
 
+## Any fleet write starts with `fleet:status`: is every box on the network? (#1298)
+
+**Before a deploy, a provision, a recover or a key change, run `npm run fleet:status` and read its first
+lines.** For every box that does not answer `/health` it asks the control plane's neighbour table, and it
+prints one line per box BEFORE the table, then a `fleet write:` line:
+
+    OFF THE NETWORK (no layer-2 answer from <name>: check cable and power)
+    ON THE NETWORK, worker not answering (<name> answers at layer 2 ...)
+    unknown (control plane unreachable) for <name>: <why it could not ask>
+    unknown (no layer-2 verdict for <name>: <what the table said>)
+    fleet write: HOLD — off the network: <names>; unknown: <names>
+
+**A write proceeds only on `fleet write: may proceed`.** UNKNOWN holds exactly as OFF does (`ceo`,
+2026-09-13): the absence of a measurement is not a measurement of presence, and 8 of 10 healthy boxes read
+`STALE` after a probe on the morning this was written.
+
+**A box that is OFF THE NETWORK is reported to the chairman by inventory name, in one line, before anything
+else is attempted on it.** Not a deploy to the other nine that forgets it, and not a key change that would
+strand it: on #918 the channel that installs keys was the one a withdrawn key would have closed.
+
+**Try one wake-on-LAN packet before the walk: `npm run fleet:wake -- <name>`.** It needs no credential and
+costs nothing. After that it is a person at the machine, because **layer 2 cannot tell a powered-off box, an
+OS that is not up and a running machine whose link is down.** Measured on #918: a worker was absent at layer
+2 from two vantage points for about forty minutes with an uptime of 1303 minutes throughout, on a loose
+cable. Only the box's own uptime, once it returns, separates the three.
+
+**UNKNOWN is a better read, not a walk.** `control plane unreachable` means the question was never asked;
+`no layer-2 verdict` means it was asked and the entry never settled. `npm run fleet:link-view` asks the same
+question from three vantage points.
+
 ## THE PRIMARY CHECKOUT IS THE FLEET-DRIVING TREE
 
 **Nothing is ever checked out or edited in it. Feature work is worktrees only.**
