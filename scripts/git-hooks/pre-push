@@ -228,21 +228,42 @@ skipped=()
 # ever skips when EVERY line read is a deletion -- and an empty read (no lines at all) must NOT count as
 # "all deletions", since that is indistinguishable from a caller that supplied no stdin and existed before
 # this check did; both keep this check fully active.
+#
+# #1292: A TAG WRITE HAS NO BASE TO BE STALE AGAINST EITHER. `git push origin <sha>:refs/tags/<name>`
+# records a commit that already exists; no branch is advanced, and HEAD is not part of what is written,
+# so "does HEAD contain origin/main's tip" is not a question about this push. 91 of 91 such pushes were
+# refused in one run (#1246) -- a refusal true of its own subject and irrelevant to the command, which
+# teaches the override. Keyed on the REMOTE ref, the one field that names what is written: measured on
+# git 2.53.0, a mixed push reports its branch line's LOCAL ref as `HEAD`. A push that also writes any
+# branch still refuses, and the refusal names the ref(s) that made it a branch push, so a mixed push
+# cannot hide a real finding behind its tag.
 push_ref_lines=0
 push_deletion_lines=0
+push_tag_lines=0
+push_based_refs=()
 while IFS=' ' read -r push_local_ref push_local_sha push_remote_ref push_remote_sha; do
   push_ref_lines=$((push_ref_lines + 1))
   if [ "$push_local_sha" = "0000000000000000000000000000000000000000" ]; then
     push_deletion_lines=$((push_deletion_lines + 1))
+  elif [[ "$push_remote_ref" == refs/tags/* ]]; then
+    push_tag_lines=$((push_tag_lines + 1))
+  else
+    push_based_refs+=("$push_remote_ref")
   fi
 done
 push_is_all_deletions=0
 if [ "$push_ref_lines" -gt 0 ] && [ "$push_ref_lines" -eq "$push_deletion_lines" ]; then
   push_is_all_deletions=1
 fi
+push_is_tags_only=0
+if [ "$push_tag_lines" -gt 0 ] && [ "$push_ref_lines" -eq $((push_tag_lines + push_deletion_lines)) ]; then
+  push_is_tags_only=1
+fi
 
 if [ "$push_is_all_deletions" = "1" ]; then
   skipped+=("stale-base-check (this push only deletes remote ref(s), which have no base to be stale against)")
+elif [ "$push_is_tags_only" = "1" ]; then
+  skipped+=("stale-base-check (this push only writes or deletes tag(s), which record an existing commit rather than advance a branch built on HEAD)")
 elif git rev-parse --verify -q origin/main >/dev/null; then
   if ! git merge-base --is-ancestor origin/main HEAD; then
     if [ -n "${A11Y_STALE_BASE_REASON:-}" ]; then
@@ -250,6 +271,9 @@ elif git rev-parse --verify -q origin/main >/dev/null; then
     else
       echo "pre-push: REFUSING — HEAD does not contain origin/main's tip (#348: a failed checkout in an" >&2
       echo "&& chain leaves a branch that looks right). Merge origin/main in before pushing." >&2
+      if [ "${#push_based_refs[@]}" -gt 0 ]; then
+        echo "The ref(s) in this push that need a base: ${push_based_refs[*]}" >&2
+      fi
       echo "If this is deliberate: A11Y_STALE_BASE_REASON=\"<why>\" git push ... — the reason is printed," >&2
       echo "not just the override, so a deliberate exception is in the log rather than in somebody's" >&2
       echo "memory." >&2
