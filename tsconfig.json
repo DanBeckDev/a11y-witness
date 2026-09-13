@@ -43,6 +43,12 @@
     "packages/*/scripts/**/*.mjs",
     "packages/*/bin/**/*.mjs",
     "packages/*/*.mjs",
+    // #1149: `nightly/` got a `.ts` entry above when #1135 created it and a `.mjs` entry never,
+    // because the directory held only tests. The first non-test file to land there — the tenant
+    // manifest — fell outside the program, so its `// @ts-check` would have been a comment and
+    // `tsc --noEmit` would have reported clean over it. `typecheck-coverage.test.ts` caught it; the
+    // entry is here rather than the file moved, because every other `.mjs` population has one.
+    "packages/*/nightly/**/*.mjs",
     // The shared git-sandbox test helper lives at the repo root, not inside a package, because it is
     // imported by tests across four packages (lab, judge, control, worker-fleet) and none of those may
     // depend on each other -- see ADR 0004. Same shape as the gate scripts above: a helper eleven tests
