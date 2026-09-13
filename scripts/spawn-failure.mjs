@@ -24,6 +24,14 @@
  *
  * THREE ABSENCES, THREE STRINGS. "It wrote nothing to stderr", "its stderr was not captured" and "it never
  * started" are different facts about a failure, and a reader acting on the line needs to know which.
+ *
+ * `code` IS NOT "NEVER STARTED" (worker-judge's blocker on #1301, reproduced). Node sets `code` with a null
+ * `status` for a child that never ran (`ENOENT`: `pid` 0, no signal) AND for a child it started and then
+ * KILLED -- `ENOBUFS` when output passed `maxBuffer` (#1244's own failure), `ETIMEDOUT` past `timeout`. A
+ * killed child has a real `pid`, a `signal`, and possibly stderr worth its last line; only the first case
+ * is "never started". The SIGNAL is what separates them in every shape measured, so "never started" needs a
+ * code and no signal, and a killed child names its code as WHY. (`pid` 0 also marks ENOENT, but no measured
+ * shape has a code, no signal and a real pid, so a clause on it would be untestable.)
  */
 
 /**
@@ -41,10 +49,11 @@
 export function describeSpawnFailure(error, { inherited }) {
   const failure = /** @type {SpawnError} */ (error ?? {});
   const argv = firstLine(failure.message) ?? "a spawned command failed with no message";
-  if (failure.code && typeof failure.status !== "number") {
+  if (failure.code && !failure.signal) {
     return `${argv} -- the command never started (${failure.code})`;
   }
-  const outcome = failure.signal ? `killed by ${failure.signal}` : `exited ${failure.status ?? "without a status"}`;
+  const why = failure.code ? ` (${failure.code})` : "";
+  const outcome = failure.signal ? `killed by ${failure.signal}${why}` : `exited ${failure.status ?? "without a status"}`;
   return inherited
     ? `${argv} -- ${outcome}; its stderr is above`
     : `${argv} -- ${outcome}: ${lastStderrLine(failure.stderr)}`;
