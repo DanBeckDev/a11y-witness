@@ -40,6 +40,29 @@ const WORDS = /\b(un-?convinced|not\s+(?:\w+\s+){0,3}convinced|convinced)\b/i;
 const OPENER = /\b(?:Review|Re-read)\s+(?:of|at)\b/i;
 
 /**
+ * #1259: THE HEAD AND THE AUTHOR, READ FROM THE VERDICT'S OWN OPENER LINE AND NOWHERE ELSE.
+ *
+ * A clock does not ask "is there a verdict" but "is there a verdict AT THIS HEAD, FROM A REVIEWER WHO IS NOT
+ * ME". The word had one parser (#1245); the other two fields were still retyped per session, and on #1244 a
+ * genuine `Re-read of \`94d6e948\` — **convinced**.` stalled a PR for thirty minutes because it named no
+ * author and a hand-typed matcher required one.
+ *
+ * ONLY THE OPENER LINE, because a verdict's body routinely quotes other shas and other people ("my first
+ * not-convinced at `84aa8c0f`", "found by worker-capture"), and a field read from the body would be a
+ * confident wrong answer where the absent one is at least visible.
+ *
+ * ABSENT IS `null`, AND IT IS RETURNED, NEVER DEFAULTED. A clock that read a missing author as "someone else"
+ * would mark a PR ready on its author's own comment; `null` makes that caller decide.
+ */
+const HEAD = /`([0-9a-f]{7,40})`/i;
+const AUTHOR = /\bby\s+`?([A-Za-z][\w-]*)`?/;
+
+/** @param {string} text @returns {string | null} the first line that opens like a verdict */
+function openerLine(text) {
+  return text.split("\n").find((line) => OPENER.test(line)) ?? null;
+}
+
+/**
  * The verdict a comment carries.
  *
  * `unrecognised` is a RETURNED VALUE, never a silent null: a comment that opens like a verdict and whose
@@ -52,20 +75,26 @@ const OPENER = /\b(?:Review|Re-read)\s+(?:of|at)\b/i;
  * fail worse -- a verdict written without a header would go invisible -- so the limit is stated here
  * rather than closed.
  *
+ * `head` and `author` come from the opener line only (#1259) and are `null` when that line does not carry them.
+ *
  * @param {string} body
- * @returns {{ verdict: "convinced" | "not-convinced" | "unrecognised" | "none", word: string | null }}
+ * @returns {{ verdict: "convinced" | "not-convinced" | "unrecognised" | "none", word: string | null,
+ *             head: string | null, author: string | null }}
  */
 export function reviewVerdict(body) {
   const text = typeof body === "string" ? body : "";
+  const opener = openerLine(text);
+  const head = opener ? (HEAD.exec(opener)?.[1] ?? null) : null;
+  const author = opener ? (AUTHOR.exec(opener)?.[1] ?? null) : null;
   const m = WORDS.exec(text);
   if (m) {
     const word = m[0].toLowerCase().replace(/\s+/g, " ");
     // NEGATION IS A SEPARATE MECHANISM FROM THE BOUNDARY, and conflating them is how one gets fixed by
     // breaking the other. `\bconvinced\b` is TRUE for "not convinced yet" and correctly so -- the word IS
     // present. What decides the verdict is which of the three alternatives above matched.
-    return { verdict: word === "convinced" ? "convinced" : "not-convinced", word: m[0] };
+    return { verdict: word === "convinced" ? "convinced" : "not-convinced", word: m[0], head, author };
   }
   return OPENER.test(text)
-    ? { verdict: "unrecognised", word: null }
-    : { verdict: "none", word: null };
+    ? { verdict: "unrecognised", word: null, head, author }
+    : { verdict: "none", word: null, head, author };
 }
