@@ -14,8 +14,10 @@
  *   mock.fn / mock.method                             -> `rs.fn` / `rs.spyOn` (`mock-functions.mdx`), with
  *     node:test's `mock.callCount()` added to the result -- the suite's only mock accessor, in 1 file
  *
- * WHAT IT REFUSES, by name: every other `mock` property, `run`, and `t.todo()`. Stubbing them would report those
- * tests as passing for a reason that has nothing to do with the runner. A SYMBOL lookup on a refused name
+ * WHAT IT REFUSES, by name: every other `mock` property, `run`, `t.todo()`, a `test()` option other than `skip`,
+ * `todo` and `timeout`, and any `describe()` option (#1383). Stubbing or dropping them would report those tests as
+ * passing for a reason that has nothing to do with the runner: a dropped `{ skip: true }` on a `describe` RUNS the
+ * suite node:test would skip. A SYMBOL lookup on a refused name
  * returns `undefined` rather than throwing, so code that enumerates a module is not failed by the shim itself.
  *
  * NO TOP-LEVEL AWAIT, and rstest's collecting runtime is read from `globalThis` (the config sets `globals: true`)
@@ -51,26 +53,41 @@ function contextFor(name, ctx) {
   };
 }
 
+/** The `test()` options this shim maps onto rstest. Every other key is refused by name, never dropped (#1383). */
+export const MAPPED_TEST_OPTIONS = Object.freeze(["skip", "todo", "timeout"]);
+
+/** @param {string} what */
+const refusal = (what) => new Error(`node-test-shim: node:test's \`${what}\` is not mapped onto rstest`);
+
+/**
+ * The keys of an options object this shim does not map, as one refusal naming each -- or nothing to refuse.
+ * @param {string} call `test` or `describe` @param {Record<string, unknown>} options @param {readonly string[]} mapped
+ */
+function refuseUnmapped(call, options, mapped) {
+  const unmapped = Object.keys(options).filter((key) => !mapped.includes(key));
+  if (unmapped.length > 0) throw refusal(`${call}() option ${unmapped.map((key) => `"${key}"`).join(", ")}`);
+}
+
 /**
  * node:test's `test(name, fn)`, `test(name, options, fn)` and `test(fn)`, registered with rstest.
- * Options mapped: `skip`, `todo`, `timeout`; the suite uses no others.
+ * Options mapped: `skip`, `todo`, `timeout`. Any other key -- `concurrency`, `only`, `plan`, or one node:test adds
+ * later -- is REFUSED by name at registration, because dropping it silently changes what the test does (#1383).
+ * EXPORTED with `register` injected, so the refusal is driven without rstest's runtime.
  * @param {Loose} register rstest's `test` (or `test.only`)
  */
-function adapt(register) {
+export function adapt(register) {
   /** @param {Loose} nameOrFn @param {Loose} [optionsOrFn] @param {Loose} [maybeFn] */
   return (nameOrFn, optionsOrFn, maybeFn) => {
     const name = typeof nameOrFn === "string" ? nameOrFn : (nameOrFn?.name || "<anonymous>");
     const fn = [nameOrFn, optionsOrFn, maybeFn].find((part) => typeof part === "function");
     const options = typeof optionsOrFn === "object" && optionsOrFn !== null ? optionsOrFn : {};
+    refuseUnmapped("test", options, MAPPED_TEST_OPTIONS);
     const body = fn ? (/** @type {Loose} */ ctx) => fn(contextFor(name, ctx)) : () => {};
     if (options.skip) return register.skip(name, body);
     if (options.todo) return register.todo(name, body);
     return register(name, body, options.timeout);
   };
 }
-
-/** @param {string} what */
-const refusal = (what) => new Error(`node-test-shim: node:test's \`${what}\` is not mapped onto rstest`);
 
 /** @param {string} what @returns {Loose} */
 const refused = (what) => new Proxy(function refusedNodeTestApi() {}, {
@@ -82,9 +99,21 @@ const refused = (what) => new Proxy(function refusedNodeTestApi() {}, {
   apply: () => { throw refusal(what); },
 });
 
-/** @param {string} name @param {Loose} optionsOrFn @param {Loose} [maybeFn] */
-export const describe = (name, optionsOrFn, maybeFn) =>
-  api.describe(name, typeof optionsOrFn === "function" ? optionsOrFn : maybeFn);
+/**
+ * node:test's `describe(name, fn)` and `describe(name, options, fn)`, registered with rstest's `describe`. NO
+ * describe option is mapped, so every key is refused by name (#1383): a dropped `{ skip: true }` ran the whole suite
+ * where node:test skips it. An empty options object has nothing to refuse. EXPORTED with the api injected.
+ * @param {Loose} registerApi the object whose `describe` registers the suite
+ */
+export function describeOn(registerApi) {
+  /** @param {string} name @param {Loose} optionsOrFn @param {Loose} [maybeFn] */
+  return (name, optionsOrFn, maybeFn) => {
+    if (typeof optionsOrFn === "object" && optionsOrFn !== null) refuseUnmapped("describe", optionsOrFn, []);
+    return registerApi.describe(name, typeof optionsOrFn === "function" ? optionsOrFn : maybeFn);
+  };
+}
+
+export const describe = describeOn(api);
 /** @param {() => unknown} fn */
 export const before = (fn) => api.beforeAll(fn);
 /** @param {() => unknown} fn */
