@@ -343,10 +343,13 @@ export function fetchBoardItems({ run = defaultRun, fetchReady = fetchReadyIssue
   // It is LOUD on every snapshot instead, and it names the count. The row's own ordering is guard first,
   // then the move -- moving them before this existed would mean doing it twice.
   const contradictions = statusContradictions(items);
-  if (contradictions.closedButLive.length > 0 || contradictions.openButDone.length > 0) {
-    process.stderr.write(`board-snapshot: ${contradictions.closedButLive.length} CLOSED row(s) advertise `
-      + `a live Status and ${contradictions.openButDone.length} OPEN row(s) advertise Done. A closed row `
-      + `at a live column is finished work a session reading the board will take as available.\n`
+  const { closedButLive, openButDone, closedUnboarded } = contradictions;
+  if (closedButLive.length > 0 || openButDone.length > 0 || closedUnboarded.length > 0) {
+    process.stderr.write(`board-snapshot: ${closedButLive.length} CLOSED row(s) advertise `
+      + `a live Status, ${openButDone.length} OPEN row(s) advertise Done, and ${closedUnboarded.length} `
+      + `CLOSED row(s) carry NO Status at all. A closed row at a live column is finished work a session `
+      + `reading the board will take as available; a closed row with no Status is invisible to a check `
+      + `that reads Statuses, which is why it is counted separately (#1228).\n`
       + `${statusCensus(items)}\n`);
   }
   return items;
