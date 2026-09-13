@@ -164,8 +164,12 @@ export function workflowCreatedAt(workflowFile) {
  */
 export function workflowRunEvents(workflowFile) {
   try {
+    // #1263: `status` COMES BACK TOO, because `gh run list` includes runs that have not finished --
+    // a ghost run (#1253: `queued` forever, zero jobs) carries `event: "schedule"` and proves nothing
+    // about whether the schedule ever RAN. The filtering is left to `scheduleNeverFired`, which is the
+    // pure function a test can reach; doing it here would hide the decision in the fetcher.
     return JSON.parse(gh(["run", "list", "--repo", REPO, "--workflow", workflowFile,
-      "--json", "event", "--limit", "100"])).map((/** @type {{ event: string }} */ r) => r.event);
+      "--json", "event,status,conclusion", "--limit", "100"]));
   } catch {
     return null;
   }
@@ -177,12 +181,26 @@ export function workflowRunEvents(workflowFile) {
  * answers: a workflow added an hour ago having no scheduled run yet is not evidence of anything, and a
  * failed lookup must never be read as either "fine" or "dead".
  *
- * @param {{ events: string[] | null, createdAt: string | null, now: Date, graceHours?: number }} args
+ * @param {{ events: (string | { event: string, status?: string, conclusion?: string | null })[] | null,
+ *          createdAt: string | null, now: Date, graceHours?: number }} args
  * @returns {boolean | null}
  */
 export function scheduleNeverFired({ events, createdAt, now, graceHours = GRACE_HOURS }) {
   if (events === null || createdAt === null) return null;
-  if (events.includes("schedule")) return false;
+  // #1263: ONLY A **COMPLETED** SCHEDULED RUN COUNTS AS "IT HAS FIRED".
+  //
+  // This read `events.includes("schedule")` over every run `gh run list` returns, finished or not. A
+  // ghost run (#1253) is registered with its trigger's event and never runs, so one of them answered
+  // `false` here -- "the schedule has fired" -- on the strength of a run that did nothing. Measured:
+  //
+  //   no scheduled run at all   -> true    ("never fired")
+  //   one GHOST scheduled run   -> false   ("it has fired")     <- the defect
+  //
+  // A plain string is still accepted and read as completed, so the legacy shape does not silently
+  // become "not fired" -- that would swap a false green for a false alarm, which is not an improvement.
+  const fired = events.some((r) => (typeof r === "string" ? r : r.event) === "schedule"
+    && (typeof r === "string" || r.conclusion != null));
+  if (fired) return false;
   const hoursSinceCreated = (now.getTime() - Date.parse(createdAt)) / 3_600_000;
   if (hoursSinceCreated < graceHours) return null;
   return true;

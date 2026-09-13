@@ -222,6 +222,67 @@ function mainTipCommittedAt(repo, run) {
 }
 
 /**
+ * THE RUNS THAT HAVE FINISHED, AND A COUNT OF THOSE THAT HAVE NOT.
+ *
+ * #1263. `mainColour` used to read `newestFirst[0].conclusion !== "failure"` over the unfiltered list.
+ * An in-flight run's conclusion is `null`, which is not `"failure"` -- so ANY run newer than the last
+ * completed one masked a red main. Driven on that function, same red trunk, one ghost run (#1253) added:
+ *
+ *   red trunk, no ghost                readable=true  red=true
+ *   SAME red trunk + one GHOST newer   readable=true  red=false
+ *
+ * An ordinary in-flight run masks it too and self-corrects within minutes. A GHOST never completes
+ * (`queued` AND zero jobs AND `updated_at == created_at`; the two on #1253 were still stuck 90
+ * minutes after creation, read at 10:49:54Z against a 09:19:57Z creation), so the masking never lifts.
+ * AND A GHOST OUTLIVES ITS BRANCH: `agent/verdict-parser-1245` merged and was deleted at 10:26Z, and
+ * both were still `queued` against a ref that no longer exists -- so "the branch is gone, its runs
+ * are settled" is wrong about them, and no cleanup anyone performs will clear one. This is the fourth member of the family this file already
+ * guards -- a 502, an empty list, a stopped list -- each of which must never return what green returns.
+ *
+ * `inFlight` is reported ALONGSIDE the colour rather than replacing it. Deciding "cannot say" whenever
+ * anything is running would silence the clock most of the day, since CI runs constantly: the newest
+ * COMPLETED run is a real answer about main, and the in-flight one is a real fact about what is not in
+ * it yet. Only when NOTHING has completed is there no answer to give.
+ *
+ * COMPLETION IS `conclusion != null`, NOT `status === "completed"`. GitHub gives a finished run a
+ * conclusion (`cancelled` and `skipped` included) and an unfinished one `null`, so the conclusion alone
+ * answers it; requiring `status` as well adds no discrimination and rejects a caller passing only the
+ * field this function reads.
+ *
+ * @param {{ conclusion: string | null, created_at: string, databaseId?: number, id?: number }[]} runs
+ */
+function splitByCompletion(runs) {
+  const completed = runs.filter((r) => r.conclusion != null);
+  return { completed, inFlight: runs.length - completed.length };
+}
+
+/**
+ * THE RED STREAK: the FIRST failure after the last success, and how long ago it began.
+ *
+ * Not the newest failure, which understates every streak longer than one run -- #928 was 8 runs over
+ * 27.8 hours and the newest-failure reading would have said 0. `atLeast` is true when NO success appears
+ * in the page at all, so the oldest run here is a PAGE BOUNDARY rather than the start of the streak and
+ * the figure is a LOWER BOUND; carrying that to the caller is what stops a bound being printed as an
+ * exact number. worker-capture's finding; the fixture reached everything except that branch.
+ *
+ * #1263: THE CALLER PASSES **COMPLETED** RUNS ONLY, and that is load-bearing rather than tidy. An
+ * in-flight run has no conclusion, so `findIndex(conclusion === "success")` steps straight past it and
+ * `slice(0, lastSuccess)` puts it INSIDE the streak -- with an unfinished run between the last success
+ * and the newest failure, `oldest` IS that run, so the streak is reported as starting early and
+ * `firstFailing` goes looking for the failing assertion of a run that never ran.
+ *
+ * @param {{ conclusion: string | null, created_at: string, databaseId?: number, id?: number }[]} completed
+ * @param {Date} now
+ */
+function redStreak(completed, now) {
+  const lastSuccess = completed.findIndex((r) => r.conclusion === "success");
+  const atLeast = lastSuccess === -1;
+  const streak = atLeast ? completed : completed.slice(0, lastSuccess);
+  const oldest = streak[streak.length - 1];
+  return { oldest, atLeast, hours: (now.getTime() - Date.parse(oldest.created_at)) / 3_600_000 };
+}
+
+/**
  * MAIN'S COLOUR, and how long since the last success -- the read #928 existed for.
  *
  * RED OVER AN HOUR REPORTS WITH THE FIRST FAILING TEST NAMED, never the job name: in #928 both `docs` and
@@ -231,7 +292,7 @@ function mainTipCommittedAt(repo, run) {
  * @returns {{ readable: boolean, red: boolean, since: string | null, hours: number | null,
  *             atLeast: boolean, firstFailing: string | null, why: string | null,
  *             windows: { since: string, until: string | null, hours: number, open: boolean }[],
- *             examined: number, pageBeginsMidRed: boolean }}
+ *             examined: number, pageBeginsMidRed: boolean, inFlight?: number }}
  */
 
 // #909/#1154 (2026-09-12): the trunk workflow file is `trunk.yml` (it was `trunk-guard.yml`), and the
@@ -290,9 +351,16 @@ export function mainColour({ repo, workflow = "trunk", now = new Date(), run = d
       why: `${workflow}'s newest run on main is older than main's own tip commit, so it has stopped `
         + `seeing main -- a renamed or deleted workflow still answers with its frozen history (#1154)` };
   }
-  if (newestFirst[0].conclusion !== "failure") {
+  const { completed, inFlight } = splitByCompletion(newestFirst);
+  if (completed.length === 0) {
+    return { readable: false, red: false, since: null, hours: null, atLeast: false, firstFailing: null,
+      windows: [], examined: 0, pageBeginsMidRed: false, inFlight,
+      why: `${workflow} has ${inFlight} run(s) on main and NONE of them has completed, so nothing here `
+        + `says what main's colour is -- a run that has not finished is not a green one (#1263)` };
+  }
+  if (completed[0].conclusion !== "failure") {
     return { readable: true, red: false, since: null, hours: null, atLeast: false, firstFailing: null,
-      why: null, ...sequence };
+      why: null, inFlight, ...sequence };
   }
   // THE FIRST failure AFTER THE LAST success -- not the newest failure, which understates every streak
   // longer than one run. #928 was 8 runs over 27.8 hours and the newest-failure reading would have said 0.
@@ -301,16 +369,13 @@ export function mainColour({ repo, workflow = "trunk", now = new Date(), run = d
   // BOUNDARY rather than the start of the streak, and the figure is a LOWER BOUND. `atLeast` carries that
   // to the caller rather than letting a bound be printed as an exact number -- the shape #928's own table
   // is about. worker-capture's finding; the fixture reached everything except this branch.
-  const lastSuccess = newestFirst.findIndex((r) => r.conclusion === "success");
-  const atLeast = lastSuccess === -1;
-  const streak = atLeast ? newestFirst : newestFirst.slice(0, lastSuccess);
-  const oldest = streak[streak.length - 1];
-  const hours = (now.getTime() - Date.parse(oldest.created_at)) / 3_600_000;
+  const { oldest, hours, atLeast } = redStreak(completed, now);
   const id = oldest.databaseId ?? oldest.id;
   return {
     ...sequence,
     readable: true,
     red: true,
+    inFlight,
     since: oldest.created_at,
     hours: Math.round(hours * 10) / 10,
     atLeast,
