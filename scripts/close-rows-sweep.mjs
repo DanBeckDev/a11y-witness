@@ -61,10 +61,8 @@ import { pathToFileURL } from "node:url";
 import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-flags.mjs";
 // #1227: `settleClosedStatus` is imported rather than re-derived, for the reason this file's own header
 // gives about `stripClaimLabels`: a second copy of that decision is the "fact stated twice" shape.
-import { closurePlan, stripClaimLabels, closeRowsExit } from "./close-rows-for-merged-pr.mjs";
+import { closurePlan, stripClaimLabels, closeRowsExit, LIVE_SETTLE_DEPS } from "./close-rows-for-merged-pr.mjs";
 import { settleClosedStatus } from "./settle-closed-status.mjs";
-import { moveProjectStatus } from "./row-claim.mjs";
-import { scopedStatus } from "./board-snapshot.mjs";
 
 /** @typedef {import("./settle-closed-status.mjs").Refusal} Refusal */
 /** @typedef {import("./settle-closed-status.mjs").SettleOutcome} SettleOutcome */
@@ -121,7 +119,7 @@ function settleAlreadyClosed(already, repo, { strip, settle }) {
  *   closed row whose Status did not move -- both empty on success
  */
 export function closeOnePr(number, repo, { gh_ = gh, strip = stripClaimLabels,
-  settle = (/** @type {number} */ n) => settleClosedStatus(n, { moveStatus: moveProjectStatus, currentStatus: scopedStatus }) } = {}) {
+  settle = (/** @type {number} */ n) => settleClosedStatus(n, LIVE_SETTLE_DEPS) } = {}) {
   const [owner, name] = repo.split("/");
   let issues, sha;
   try {
