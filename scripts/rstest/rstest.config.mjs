@@ -19,6 +19,11 @@
  *   against 63.9 s without it, because the build is under 1% of the run (#1315), so it stays off here. The chairman
  *   asked for it in CI, where `reusable-build-test.yml` persists it with `actions/cache`, prints HIT or MISS, and fails
  *   the job when a run leaves it empty. rstest writes it under `node_modules/.cache/rstest-<project-name>`.
+ *   `buildCache: false` writes nothing: in @rstest/core 0.11.12, `normalizeBuildCache` returns false for a falsy value
+ *   and the adapter maps `false` to `false`. The one local cache seen while building #1319 came from a MUTATION that forced
+ *   it on, which wrote into the primary checkout's shared node_modules. So `A11Y_RSTEST_CACHE_DIR`, when set, moves an
+ *   enabled cache to that directory (rstest's documented `cacheDirectory`), and a test that runs rstest sets it to a
+ *   temporary root. CI does not set it, so CI's cache stays where `reusable-build-test.yml` persists it.
  * - **Workers capped at half the host's cores locally, rstest's default in CI (#1319, ceo's ruling).** The `agents` host
  *   runs eight sessions and two reviewers, and a whole-suite run at one worker per core is a write to a shared resource.
  *   Measured 2026-09-13 22:49Z: a mutation handed rstest an empty include, it ran the whole suite with 92 worker
@@ -42,6 +47,16 @@ const walkScope = fileURLToPath(new URL("../walk-scope.mjs", import.meta.url));
  */
 function isCi(env) {
   return env.CI !== undefined && env.CI !== "" && env.CI !== "false";
+}
+
+/**
+ * #1319: the build cache setting. Off unless CI. When on, `A11Y_RSTEST_CACHE_DIR` moves it out of node_modules.
+ * @param {Record<string, string | undefined>} env
+ * @returns {false | true | { cacheDirectory: string }}
+ */
+function buildCacheFor(env) {
+  if (!isCi(env)) return false;
+  return env.A11Y_RSTEST_CACHE_DIR ? { cacheDirectory: env.A11Y_RSTEST_CACHE_DIR } : true;
 }
 
 /** #1319: half the host's cores, at least one -- the most a local run may take of a host other sessions share. */
@@ -68,5 +83,5 @@ export default defineConfig({
   // three tests timed out on the spike's first run.
   testTimeout: 0,
   hookTimeout: 0,
-  performance: { buildCache: isCi(process.env) },
+  performance: { buildCache: buildCacheFor(process.env) },
 });
