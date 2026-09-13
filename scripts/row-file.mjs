@@ -873,7 +873,7 @@ export function createIssue(argv, deps = {}) {
  *   ensureLabels: typeof ensureLabelsExist }} deps
  * @returns {{ ok: true } | { ok: false, message: string }}
  */
-function boardAndVerify({ issueNumber, url, boarding, session, laneLabels, milestone },
+export function boardAndVerify({ issueNumber, url, boarding, session, laneLabels, milestone },
   { run, fetchBoardStatus, fetchLabels, moveStatus, ensureLabels }) {
   try {
     run("gh", ["project", "item-add", String(PROJECT_NUMBER), "--owner", PROJECT_OWNER, "--url", url]);
@@ -883,12 +883,27 @@ function boardAndVerify({ issueNumber, url, boarding, session, laneLabels, miles
       + `${/** @type {Error} */ (error).message}\n  Add it by hand: gh project item-add ${PROJECT_NUMBER} `
       + `--owner ${PROJECT_OWNER} --url ${url}` };
   }
+  const allLabels = [boarding.label, ...laneLabels];
   const statusResult = moveStatus(issueNumber, boarding.status, { run });
   if (!statusResult.moved) {
+    // #1249: NAME EVERY STEP THIS SKIPS, not only the one that failed.
+    //
+    // #1248 was filed with NO LABELS AT ALL and this message said only that the Status had not moved.
+    // The label step is below and never runs, so an operator who follows the refusal exactly fixes the
+    // Status and stops -- and the row stays invisible to every label-keyed view, which is #623's defect
+    // arriving through a partial filing rather than through a missing label.
+    //
+    // THE ORDER IS KEPT AND THE MESSAGE CARRIES THE WEIGHT. Applying labels first would leave a labelled
+    // row on a Status failure, which is friendlier -- but it makes the Status the partial half instead,
+    // and the board is what the org reads for what is claimable. A report that describes ALL of what is
+    // missing is what must survive, whichever half is written first.
     return { ok: false, message: `FILED as #${issueNumber} and added to Project ${PROJECT_NUMBER}, but `
-      + `its Status could not be set to "${boarding.status}" -- ${statusResult.reason}` };
+      + `its Status could not be set to "${boarding.status}" -- ${statusResult.reason}\n  `
+      + `AND ${allLabels.map((l) => `\`${l}\``).join("/")} were NOT applied, because the Status failed `
+      + `first and the label step never ran. Fixing only the Status leaves this row unlabelled and `
+      + `invisible to every label-keyed view. Apply both: gh issue edit ${issueNumber} --repo ${REPO} `
+      + `${allLabels.map((l) => `--add-label ${l}`).join(" ")}` };
   }
-  const allLabels = [boarding.label, ...laneLabels];
   try {
     // #883: `lane:<owner>` is a PER-DERIVATION label -- `lane:dispatcher`, `lane:any`, whatever the
     // Region maps to -- and #749's own lesson applies identically here: `gh issue edit --add-label`
