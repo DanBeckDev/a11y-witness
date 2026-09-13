@@ -930,12 +930,7 @@ export function lateEditionRefusal({ summary, stated, editionExists, londonNow }
  * The SCHEDULE delivers that (the summary is written at 07:25 and the edition renders at 08:00); this is
  * the backstop that catches a stale one reaching the board, so it is the wider sixty.
  *
- * #1345: `now` is the ONE clock read the message and the age both come from. The age used to be computed from an
- * "HH:MM" string, which carries no day, so a summary written at 23:50 and rendered at 00:30 was refused as 1,400
- * minutes stale.
- *
- * @param {boolean} publishing @param {{text: string} | null | undefined} summary @param {string} today
- * @param {Date} [now] the render instant
+ * @param {boolean} publishing @param {{text: string} | null | undefined} summary @param {string} today @param {Date} [now]
  */
 export function requireSummaryIsFresh(publishing, summary, today, now = new Date()) {
   if (!publishing || !summary) return;
