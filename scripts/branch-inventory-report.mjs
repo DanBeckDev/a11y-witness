@@ -19,8 +19,10 @@ import { sandboxGitEnv } from "./git-env.mjs";
 import { branchFacts, renderInventory, rowNumberFromBranch, sessionFromLabels } from "./branch-inventory.mjs";
 
 /** @type {(cmd: string, args: string[]) => string} */
+const MAX_BUFFER = 64 * 1024 * 1024; // a paginated listing is megabytes; the 1 MB default is an ENOBUFS
 const defaultRun = (cmd, args) =>
-  execFileSync(cmd, args, { encoding: "utf8", env: sandboxGitEnv(), stdio: ["ignore", "pipe", "pipe"] });
+  execFileSync(cmd, args,
+    { encoding: "utf8", env: sandboxGitEnv(), stdio: ["ignore", "pipe", "pipe"], maxBuffer: MAX_BUFFER });
 
 /**
  * Every branch on `origin` except `main`, with the tip sha and its commit date in ONE read.
@@ -39,10 +41,18 @@ export function branchesWithTips({ run = defaultRun } = {}) {
   }).filter((b) => b.branch !== "main");
 }
 
-/** Head refs of every OPEN PR -- the branches that are already visible to review. */
+/**
+ * Head refs of every OPEN PR -- the branches already visible to review.
+ *
+ * REST, not `gh pr list --json`, and that is not a style choice: `--json` routes through GraphQL, and on
+ * 2026-09-13 at 11:25Z the org's shared GraphQL budget was exhausted while REST still had 4,641 of 5,000.
+ * This tool failed on exactly that call. A read-only inventory that cannot run when the board is busy is
+ * a tool for quiet afternoons, so every call here is REST.
+ */
 export function openPrHeads({ run = defaultRun } = {}) {
-  return new Set(JSON.parse(run("gh", ["pr", "list", "--repo", REPO, "--state", "open",
-    "--limit", "500", "--json", "headRefName"])).map((/** @type {{headRefName: string}} */ p) => p.headRefName));
+  const refs = run("gh", ["api", `repos/${REPO}/pulls?state=open&per_page=100`, "--paginate",
+    "--jq", ".[].head.ref"]);
+  return new Set(refs.split("\n").filter((r) => r.trim() !== ""));
 }
 
 /** How many commits this branch carries that `origin/main` does not. */
@@ -51,30 +61,38 @@ export function aheadOf(branch, { run = defaultRun } = {}) {
 }
 
 /**
- * The rows the branches name, fetched ONE BY ONE and only for numbers that appear in a branch name.
+ * THE ROWS THE BRANCHES NAME, in ONE paginated REST listing rather than one call per branch.
  *
- * A listing would be cheaper and cannot answer this: a row may be closed, and a closed row is exactly the
- * interesting case -- `gh issue list` defaults to open, and asking for `--state all` returns a page rather
- * than the specific numbers. #1248's own lesson one door along: a label-keyed listing cannot report a row
- * with no labels either. So each number is asked for by name, and a 404 is RETURNED as null rather than
- * throwing: "#N does not exist" is a fact about the branch, not a failure of the sweep.
+ * Measured 2026-09-13: 54 of the 93 branches carry a row number, so the per-number route cost 54 calls;
+ * the listing costs about 13 at `per_page=100` over ~1,280 issues. That matters beyond tidiness — this
+ * account's GraphQL budget was exhausted by the org at 11:25Z while REST still had 4,641 of 5,000, and a
+ * tool that spends 54 calls per run is part of why a shared limit runs out.
+ *
+ * REST, DELIBERATELY, AND `gh api` RATHER THAN `gh issue list`: the `--json` flag routes through GraphQL,
+ * which is the budget that empties first and the one the board already needs. This path stayed usable
+ * through the outage that refused every `gh pr view`.
+ *
+ * THE LISTING RETURNS PULL REQUESTS TOO, and that is carried rather than filtered: a branch whose
+ * trailing number names a PR must be REPORTED as naming a PR, not silently dropped into "does not
+ * exist". `pull_request` is the discriminator; `archive/gate-ages-rebased-137` is the case that found it.
+ *
+ * @param {number[]} numbers the row numbers actually wanted -- the listing is indexed, never scanned
  */
 export function rowsFor(numbers, { run = defaultRun } = {}) {
-  const rows = new Map();
-  for (const n of numbers) {
-    try {
-      // `gh api .../issues/<n>` rather than `gh issue view`: REST answers for PULL REQUESTS at the same
-      // path, and only this route carries the `pull_request` key that tells them apart. `gh issue view`
-      // silently returned a PR for `archive/gate-ages-rebased-137` and the tool called it a row.
-      const issue = JSON.parse(run("gh", ["api", `repos/${REPO}/issues/${n}`]));
-      rows.set(n, { number: issue.number, state: String(issue.state).toUpperCase(),
-        isPullRequest: Object.hasOwn(issue, "pull_request"),
-        labels: (issue.labels ?? []).map((/** @type {{name: string}} */ l) => l.name) });
-    } catch {
-      rows.set(n, null); // a number in a branch name that names no row -- reported, never guessed at
-    }
+  const wanted = new Set(numbers);
+  const rows = new Map(numbers.map((n) => [n, null]));
+  // PROJECTED SERVER-SIDE-ISH WITH `--jq`, because the raw listing is megabytes of issue BODIES and
+  // `execFileSync` met it as `spawnSync gh ENOBUFS` -- loudly, which is the only reason this is a fixed
+  // bug rather than a silent truncation. Four fields per row, one JSON object per line.
+  const projected = run("gh", ["api", `repos/${REPO}/issues?state=all&per_page=100`, "--paginate",
+    "--jq", '.[] | {number, state, isPullRequest: has("pull_request"), labels: [.labels[].name]}']);
+  for (const line of projected.split("\n")) {
+    if (line.trim() === "") continue;
+    const issue = JSON.parse(line);
+    if (!wanted.has(issue.number)) continue;
+    rows.set(issue.number, { ...issue, state: String(issue.state).toUpperCase() });
   }
-  return rows;
+  return rows; // a number the listing never produced stays null: "#N does not exist", reported as a fact
 }
 
 /**
