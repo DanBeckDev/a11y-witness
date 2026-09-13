@@ -152,8 +152,9 @@ person about to type `publish-for-real` is the one whose judgement the release i
 <!-- The marker above is what `npm run release:rehearsal-check` reads -- checked by
      `rehearsal-currency-gate.test.ts` against `check-rehearsal-currency.mjs`'s own regex, so a rewording
      of the prose above can never silently stop the gate from finding the commit it names. Update BOTH the
-     prose and the marker together when a fresh rehearsal runs; a mismatch between them is caught by
-     `rehearsal-currency.test.ts`'s own "the marker names the same sha the prose does" check. -->
+     prose and the marker together when a fresh rehearsal runs. NOTHING checks that the two agree: this
+     comment once named a `rehearsal-currency.test.ts` check for it, and that file holds no such test
+     (checked 2026-09-13, #1291). -->
 Full reading: [#324](https://github.com/DanBeckDev/a11y-witness/issues/324). It produced **five** filed
 defects, every one surviving a fully green internal suite — the argument for why this gate exists rather
 than a good idea:
@@ -165,20 +166,23 @@ than a good idea:
 | #811 | the finding list under-reported: seven genuine focus losses detected, five emitted, because a shared dedup keyed on `wcag|evidence` collapses repeated occurrences that word themselves identically |
 | #812 | a finding whose quoted before/after names two *different* controls, passing its own equality check only because both happen to contain the word "collapsed" |
 
-**A rehearsal covers the commit it ran against, and only that one.** "A rehearsal was run once" and "a
-rehearsal covers this release" are different claims — the table above is evidence for the first, not
-proof of the second. Whenever the current commit is not the one named above, no rehearsal covers it, and
+**A rehearsal covers what it ran against, and nothing that has changed since.** "A rehearsal was run once"
+and "a rehearsal covers this release" are different claims — the table above is evidence for the first, not
+proof of the second. A later commit is covered only while it descends from the commit named above AND
+nothing the rehearsal exercised has changed since: the three documents in requirement 2, `action.yml`, and
+every package a consumer installs (each `packages/*/package.json` not marked `private`). It is never the
+SAME commit — recording the rehearsal here is itself a later commit (#1265). Whenever that does not hold,
 the entry in **NOT verified** below is not a formality: it is the honest state until a fresh rehearsal
 names a newer commit here.
 
 ## NOT verified
 
-- **This release, if its commit is not `8849f92d` (the rehearsal above).** A rehearsal names the one
-  commit it actually ran against; it does not extend forward by assumption to whatever HEAD has become
-  since. `npm run release:rehearsal-check` is in `release:gate:ci` and REFUSES (prints both shas) when the
-  commit being released is not the one the marker above names — a command failing, not a reader who forgot
-  to check the date. Run the rehearsal again and update the entry above with its date, run URL, commit and
-  marker before treating the outward-facing path as covered.
+- **This release, if anything the rehearsal above exercised has changed since `8849f92d`.** A rehearsal
+  does not extend forward by assumption to whatever HEAD has become since. `npm run release:rehearsal-check`
+  is in `release:gate:ci` and REFUSES when the marker above is not an ancestor of the commit being released,
+  or when an exercised document or published package has changed since it, printing the paths — a command
+  failing, not a reader who forgot to check the date. Run the rehearsal again and update the entry above
+  with its date, run URL, commit and marker before treating the outward-facing path as covered.
 
 - **The `anthropic` and `openai` judge backends.** Written to their SDK specs and unexercised; this project
   keeps no metered key. They are opt-in, never the default.
