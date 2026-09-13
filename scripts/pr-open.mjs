@@ -160,7 +160,10 @@ export function sendToGitHub(mode, rest, { run = defaultGh, git = defaultGit, er
       "(unknown)"), message })}\n`);
     return false;
   }
-  for (const args of armAfterCreate(mode, rest)) run(args.slice(1));
+  // `armAfterCreate` returns a WHOLE `gh` argv (`["pr", "merge", ...]`) and `run` is `gh` with its args as
+  // given -- `args.slice(1)` stripped `pr` and spawned `gh merge`, an unknown command, after every ready
+  // create since #1277, so the wrapper exited 1 on a PR that already existed.
+  for (const args of armAfterCreate(mode, rest)) run(args);
   return true;
 }
 
