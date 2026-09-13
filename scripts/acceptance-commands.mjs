@@ -92,6 +92,35 @@ const FLEET_LAB_PATTERNS = /** @type {[RegExp, string][]} */ ([
   [/\bcapture:check\b/, "needs a real worker and NVDA"],
 ]);
 
+/**
+ * #1241: DOES THIS ROW'S ACCEPTANCE NAME A FLEET OR LAB COMMAND? The lane derivation asks; nothing else
+ * could answer it.
+ *
+ * `laneLabelsFor` derives a lane from the Region's PATHS, so **a row whose deliverable is not a commit
+ * can never carry a lane** -- #1042 (a destination the chairman provisions) and #1234 (a systemd timer on
+ * the control plane) both reached `ready`/`lane:any` with an acceptance naming a specific session, and an
+ * engineer had to read the body to discover the row was not theirs. Twice.
+ *
+ * THE LIST IS NOT RETYPED. `FLEET_LAB_PATTERNS` above is the resource ban every role file below `ceo` and
+ * `orchestrator` already carries, and a second copy is the fact-stated-twice shape on the one question
+ * both are answering. CORPUS_PATTERNS is deliberately NOT included: a `runs/`-reading gate is a verdict
+ * somebody else must report, which is a different rule from "this command needs hardware nobody else has".
+ *
+ * @param {string} body a row body
+ * @returns {string | null} the reason the matched command needs the fleet or lab, or null
+ */
+export function fleetOrLabAcceptance(body) {
+  const section = extractAcceptanceSection(body);
+  // STRUCTURED, not text: `extractAcceptanceSection` returns `{kind, commands}`. Testing the regexes
+  // against the object stringifies it and matches nothing -- my first version did, and returned null for
+  // `npm run fleet:provision`. The commands are the population; prose in the section is not a command.
+  const commands = section && section.kind === "commands" ? section.commands : [];
+  for (const [pattern, reason] of FLEET_LAB_PATTERNS) {
+    if (commands.some((/** @type {string} */ c) => pattern.test(c))) return reason;
+  }
+  return null;
+}
+
 // `runs/` is gitignored -- a GitHub runner never has a corpus, so these read nothing and report cleanly.
 // CLAUDE.md: "A GATE THAT READS runs/ IS NOT YOURS TO REPORT."
 const CORPUS_PATTERNS = /** @type {[RegExp, string][]} */ ([
