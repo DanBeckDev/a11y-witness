@@ -971,6 +971,33 @@ export function classifyCommand(command,
 }
 
 /**
+ * #728: the shell construct that makes a line's `tsx --test` arguments something other than this
+ * command's argv, or null when there is none.
+ *
+ * NAMED RATHER THAN COUNTED, because the message has to be followable: "it contains a pipe" sends the
+ * reader to the right character, where "cannot parse" sends them to re-read the whole line.
+ *
+ * Deliberately NOT a shell parser. This is the list of constructs that relocate the arguments, and
+ * anything outside it is still tokenised as before -- a guard that refuses what it does not recognise
+ * would refuse every ordinary command the moment someone added a new flag.
+ *
+ * @param {string} command
+ * @returns {string | null}
+ */
+function unparseableConstruct(command) {
+  const withoutTrailingComment = command.replace(/(?:^|\s)#.*$/, "");
+  for (const [pattern, name] of /** @type {[RegExp, string][]} */ ([
+    [/\|\|/, "a `||`"],
+    [/&&/, "an `&&`"],
+    [/\|/, "a pipe"],
+    [/\$\(|`/, "a subshell"],
+    [/[<>]/, "a redirection"],
+    [/;/, "a `;`"],
+  ])) if (pattern.test(withoutTrailingComment)) return name;
+  return null;
+}
+
+/**
  * DOES A `tsx --test` COMMAND'S FILE/GLOB ARGUMENT ACTUALLY MATCH ANYTHING? -- #353's fifth hazard, found
  * on #350 an hour before this shipped: `npx tsx --test "packages/lab/src/packaging/nothing-matches-*"`
  * exits 0 with NO diagnostic at all when the pattern matches nothing, and a typo'd path MIXED with one
@@ -991,10 +1018,22 @@ export function classifyCommand(command,
  * does.
  *
  * @param {string} command
- * @returns {{ ok: true } | { ok: false, missing: string[] }}
+ * @returns {{ ok: true } | { ok: false, missing: string[] } | { ok: false, unparseable: string }}
  */
 export function testFileArgumentsResolve(command) {
   if (!/\btsx\s+--test\b/.test(command)) return { ok: true };
+  // #728: WHAT THIS CANNOT PARSE, IT MUST NOT MAKE CLAIMS ABOUT.
+  //
+  // `tsxTestFileArgs` splits the WHOLE line on whitespace, so on
+  // `node scripts/tree-wide-guards.mjs | xargs npx tsx --test` it reported
+  // `matched no file: node, |, xargs` -- a claim about the filesystem, and a false one. `|` is not a
+  // filename at all, and a reader following that message goes looking for missing test files.
+  //
+  // #419 closed the BACKTICK form of this and the pipe form was never considered. The refusal is right;
+  // the assertion about what it checked is the defect -- the same class as `row-reachability` reporting
+  // a Region-scoped search as a whole-tree one (#719).
+  const construct = unparseableConstruct(command);
+  if (construct) return { ok: false, unparseable: construct };
   const missing = tsxTestFileArgs(command).filter((pattern) => {
     if (/[*?[{]/.test(pattern)) {
       try {
@@ -1378,6 +1417,17 @@ function runOneCommand(command, run, { prefix, isPass, commandExists: exists, ca
     // `executed: true`: the command was ATTEMPTED and answered. A glob matching nothing is a real
     // failure of this line, not a capability this job lacks -- the section examined something and found
     // it wanting, which is the opposite of examining nothing.
+    // #728: AN UNPARSEABLE LINE IS `REFUSED`, NOT `RAN`. The command was never attempted, so saying
+    // `RAN ... -> fail` is the same false confidence as the message this row replaced, one level up:
+    // it reports a verdict about a command that did not execute. `ok: true` because the line may be
+    // perfectly good -- this check cannot tell, and failing a PR for containing a pipe is a behaviour
+    // this row did not ask for. The section still reports having executed nothing, which is the honest
+    // answer and is what stops it reading as a pass.
+    if ("unparseable" in fileCheck) {
+      return { executed: false, ok: true,
+        line: `${prefix}: REFUSED ${command} -> cannot check this line: it contains ${fileCheck.unparseable}, `
+          + "so the arguments to `tsx --test` are not this command's argv" };
+    }
     return { executed: true,
       line: `${prefix}: RAN ${command} -> fail (matched no file: ${fileCheck.missing.join(", ")})`, ok: false };
   }
