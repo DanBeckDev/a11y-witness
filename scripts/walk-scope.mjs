@@ -158,6 +158,11 @@ const GIT_DIRECTORIES = gitDirectoriesOf(REPO_ROOT);
 /** @param {unknown} target @param {string} base @returns {string | null} an absolute path, or null for a descriptor */
 function absoluteOf(target, base) {
   let path = target;
+  // #1398: A `node:` SPECIFIER NAMES A BUILTIN MODULE, NEVER A FILE. Under `rstest --coverage`, `@rstest/core`'s
+  // bundled source-map support calls `fs.existsSync` on each stack frame's file name, and a Node internal frame's
+  // is `node:internal/...`: resolved against the working directory, that string landed inside the repository, and
+  // all five WALK_SCOPE consumers failed on four of them. Checked before `fileURLToPath`, which throws on a `node:` URL.
+  if ((typeof path === "string" && path.startsWith("node:")) || (path instanceof URL && path.protocol === "node:")) return null;
   if (path instanceof URL || (typeof path === "string" && path.startsWith("file:"))) path = fileURLToPath(path);
   if (typeof path !== "string" && !Buffer.isBuffer(path)) return null; // a file descriptor: its open was seen
   return resolve(base, String(path));
