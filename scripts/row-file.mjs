@@ -578,7 +578,106 @@ export function milestoneRefusal(milestones) {
  * @returns {{ label: "backlog" | "ready", status: "Backlog" | "Ready" }}
  */
 export function boardingFor(argv) {
-  return argv.includes(READY_FLAG) ? { label: "ready", status: "Ready" } : { label: "backlog", status: "Backlog" };
+  // #1322: a filer who writes `--label=ready` means `--ready`. Read as anything else it came out `backlog`
+  // AND `ready` (#1315), a row saying "take me" and "not yet" at once.
+  const ready = argv.includes(READY_FLAG) || labelValuesFromArgv(argv).some((label) => sameLabel(label, "ready"));
+  return ready ? { label: "ready", status: "Ready" } : { label: "backlog", status: "Backlog" };
+}
+
+/**
+ * #1322 review (worker-capture): `gh` resolves a `--label` name CASE-INSENSITIVELY (`strings.EqualFold`,
+ * api/queries_repo.go at v2.100.0), so `--label=Ready` IS the `ready` label. Every comparison here folds case,
+ * or `Ready` boards Backlog and `Lane:Orchestrator` files unrefused.
+ * @param {string} a @param {string} b
+ */
+const sameLabel = (a, b) => a.toLowerCase() === b.toLowerCase();
+
+/** The two board labels, which `boardAndVerify` applies after the Status move (#844) and nothing else may. */
+const BOARD_LABELS = Object.freeze(["backlog", "ready"]);
+
+/** One comma list, split the way `gh` splits it. @param {string} value */
+const splitLabels = (value) => value.split(",").map((label) => label.trim()).filter(Boolean);
+
+/**
+ * Where each `--label` sits in argv, in every spelling `gh issue create` takes: `--label X`, `--label=X`,
+ * `-l X`, `-l=X`. `span` is how many argv entries the occurrence occupies.
+ * @param {string[]} argv
+ * @returns {{ start: number, span: 1 | 2, values: string[] }[]}
+ */
+function labelOccurrences(argv) {
+  /** @type {{ start: number, span: 1 | 2, values: string[] }[]} */
+  const found = [];
+  for (let i = 0; i < argv.length; i += 1) {
+    const inline = /^(?:--label|-l)=(.*)$/s.exec(argv[i]);
+    if (inline) {
+      found.push({ start: i, span: 1, values: splitLabels(inline[1]) });
+    } else if ((argv[i] === "--label" || argv[i] === "-l") && i + 1 < argv.length) {
+      found.push({ start: i, span: 2, values: splitLabels(argv[i + 1]) });
+      i += 1;
+    }
+  }
+  return found;
+}
+
+/**
+ * #1322: EVERY LABEL THE FILER GAVE, in any spelling. `row-file` composed its own labels beside these without
+ * reading them, so every filer who said what they meant got both meanings.
+ * @param {string[]} argv
+ * @returns {string[]}
+ */
+export function labelValuesFromArgv(argv) {
+  return labelOccurrences(argv).flatMap((occurrence) => occurrence.values);
+}
+
+/**
+ * #1322: argv with `drop`'s labels taken out of every `--label`, in place. An occurrence left with no value is
+ * removed whole, so `gh` is never handed an empty `--label`; one left untouched keeps its original spelling.
+ * @param {string[]} argv @param {readonly string[]} drop
+ * @returns {string[]}
+ */
+export function withoutLabels(argv, drop) {
+  const out = [];
+  let next = 0;
+  for (const { start, span, values } of labelOccurrences(argv)) {
+    out.push(...argv.slice(next, start));
+    const kept = values.filter((value) => !drop.some((dropped) => sameLabel(dropped, value)));
+    if (kept.length === values.length) out.push(...argv.slice(start, start + span));
+    else if (kept.length > 0) out.push("--label", kept.join(","));
+    next = start + span;
+  }
+  out.push(...argv.slice(next));
+  return out;
+}
+
+/**
+ * #1322: REFUSED BEFORE ANYTHING IS FILED, when the filer's own labels contradict the ones `row-file` applies.
+ *
+ * - **A lane the Region does not derive.** The lane label is derived from the file the merge guard reads (#883),
+ *   so a typed lane that differs is a row telling a lane it may take work the guard will refuse. Measured: #1313
+ *   was filed `--label lane:orchestrator` and came out `lane:any, lane:orchestrator`; #1306 `--label=lane:any`
+ *   came out `lane:any, lane:ceo`. Both names are printed, so the filer fixes the Region or drops the label.
+ * - **`ready` and `backlog` together**, in any mix of `--ready` and `--label`. There is no reading of both.
+ *
+ * A typed lane EQUAL to a derived one is not refused; it is dropped from the create call, and the derived set
+ * is applied once, after the Status.
+ * @param {string[]} argv @param {readonly string[]} laneLabels the derived set
+ * @returns {string | null}
+ */
+export function labelRefusal(argv, laneLabels) {
+  const given = labelValuesFromArgv(argv);
+  const stray = given.filter((label) => sameLabel(label.slice(0, "lane:".length), "lane:")
+    && !laneLabels.some((derived) => sameLabel(derived, label)));
+  if (stray.length > 0) {
+    return `row-file: REFUSING to file -- --label ${stray.join(", ")} is not the lane this row's Region derives `
+      + `(${laneLabels.join(", ")}). The lane label is derived from docs/lane-ownership.json, the file the merge `
+      + "guard reads (#883), so a typed lane that differs would send the row to a lane that cannot merge it. Fix "
+      + "the Region, or drop the --label. Nothing was filed.";
+  }
+  if (boardingFor(argv).label === "ready" && given.some((label) => sameLabel(label, "backlog"))) {
+    return "row-file: REFUSING to file -- this filing says both `ready` and `backlog`. `--ready` (or "
+      + "`--label ready`) boards it Ready; no board flag boards it Backlog. Give one. Nothing was filed.";
+  }
+  return null;
 }
 
 /**
@@ -723,10 +822,12 @@ function spawnGhIssueCreate(argv) {
  * nothing is filed on a guess. `body` is assumed to already carry a `## Region` section: the only caller,
  * `createIssue`, checks that via `fileRefusalReason` first, so `declaredRegionFiles` cannot return `null`
  * here.
- * @param {string} body @param {typeof loadLanes} loadLanesConfig
+ * #1322: and the filer's own `--label` values are READ against the lanes it derives, before anything is filed --
+ * see `labelRefusal`. Here rather than in `createIssue` because it is the same question: which labels this row gets.
+ * @param {string} body @param {typeof loadLanes} loadLanesConfig @param {string[]} argv
  * @returns {{ ok: true, laneLabels: string[] } | { ok: false, message: string }}
  */
-function laneLabelsOrRefusal(body, loadLanesConfig) {
+function laneLabelsOrRefusal(body, loadLanesConfig, argv) {
   const lanes = loadLanesConfig();
   if (lanes === null) {
     return { ok: false, message: "row-file: could not read docs/lane-ownership.json (absent, empty or "
@@ -744,7 +845,8 @@ function laneLabelsOrRefusal(body, loadLanesConfig) {
   // the code. The two lanes answer different questions and a row may need both answers.
   const fleetReason = fleetOrLabAcceptance(body);
   if (fleetReason && !laneLabels.includes("lane:orchestrator")) laneLabels.push("lane:orchestrator");
-  return { ok: true, laneLabels };
+  const labelProblem = labelRefusal(argv, laneLabels);
+  return labelProblem ? { ok: false, message: labelProblem } : { ok: true, laneLabels };
 }
 
 /**
@@ -806,7 +908,7 @@ export function createIssue(argv, deps = {}) {
   if (slashless) process.stderr.write(`row-file: ${slashless}\n`);
   // #883: THE LANE(S), DERIVED BEFORE ANYTHING IS FILED -- see `laneLabelsOrRefusal`'s own header for why
   // a missing/malformed `docs/lane-ownership.json` refuses here rather than guessing.
-  const laneResult = laneLabelsOrRefusal(/** @type {string} */ (body), loadLanesConfig);
+  const laneResult = laneLabelsOrRefusal(/** @type {string} */ (body), loadLanesConfig, argv);
   if (!laneResult.ok) {
     process.stderr.write(`${laneResult.message}\n`);
     return 1;
@@ -822,7 +924,10 @@ export function createIssue(argv, deps = {}) {
   // until AFTER the Project Status is set, not merely after the issue exists. The lane label(s) travel
   // with it for the identical reason and the same simplicity: one label-add step, not two.
   // #1130: the label alone must not leave the row out of the milestone that says the same thing.
-  const filedArgv = withFiledBy(outOfReleaseArgv(argv), session, /** @type {string} */ (body));
+  // #1322: the board and lane labels are this tool's to apply, after the Status move. A filer's copy of either is
+  // dropped from the create call rather than landing at creation beside them -- a `ready` there is #867's refusal.
+  const filedArgv = withFiledBy(withoutLabels(outOfReleaseArgv(argv), [...BOARD_LABELS, ...laneLabels]), session,
+    /** @type {string} */ (body));
 
   /** @type {string} */
   let url;
