@@ -115,7 +115,12 @@ jobs:
         uses: actions/cache@v4
         id: node-modules-cache
         with:
-          path: node_modules
+          # #1319: rstest's build cache lives under node_modules/.cache and has its own step below, keyed on the lockfile
+          # AND the rstest config. Left inside this one, a node_modules restore would bring back a cache the rstest step
+          # then reports as a MISS, and a cold figure would be measured warm.
+          path: |
+            node_modules
+            !node_modules/.cache
           key: node-modules-${{ hashFiles('package-lock.json') }}
       - if: inputs.use-node-modules-cache && steps.node-modules-cache.outputs.cache-hit != 'true'
         run: npm ci --ignore-scripts
@@ -145,6 +150,23 @@ jobs:
         run: npm run lint
       - if: inputs.run-lint-typecheck
         run: npm run typecheck
+      # #1319: RSTEST'S BUILD CACHE, PERSISTED -- the chairman's requirement for the runner switch, per rstest's CI guide.
+      # `scripts/rstest/rstest.config.mjs` turns `performance.buildCache` on only when `CI` is set, and rstest writes it
+      # under node_modules/.cache/rstest-<project-name>. Keyed on the two inputs the row names, the lockfile and the rstest
+      # config; rstest's own invalidation handles a changed source file inside a hit. HIT or MISS is printed so a run
+      # log can be quoted, and the step after the tests fails the job if the cache is empty.
+      - if: inputs.run-ts-tests
+        uses: actions/cache@v4
+        id: rstest-build-cache
+        with:
+          path: node_modules/.cache/rstest-*
+          key: rstest-build-${{ runner.os }}-${{ hashFiles('package-lock.json', 'scripts/rstest/rstest.config.mjs') }}
+      - name: "#1319: rstest build cache HIT or MISS, printed so the run log can be quoted"
+        if: inputs.run-ts-tests
+        run: |
+          echo "rstest build cache: ${{ steps.rstest-build-cache.outputs.cache-hit == 'true' && 'HIT' || 'MISS' }}"
+          files=$( (find node_modules/.cache -path 'node_modules/.cache/rstest-*' -type f 2>/dev/null || true) | wc -l)
+          echo "files under node_modules/.cache/rstest-* before the tests: $files"
       # A1B: WHICH TEST FILES DOES THIS DIFF ACTUALLY REACH -- unchanged from ci.yml's own `ts` job. Only
       # relevant when ts-test-scope is 'scoped'; the unscoped path below is trunk-guard's own long-standing
       # "test everything, on every merge" choice, which needs no diff at all.
@@ -156,6 +178,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # #1319: both branches go through the floor to rstest. Each glob or file becomes its own `--include`, so rstest
+          # runs exactly these, and a selected path that matches nothing is refused before rstest starts. The broad branch
+          # passes one glob per PACKAGE, and a package can have no tests (nvda-speech has no src), so it names and drops an
+          # empty package glob with --drop-empty. It still refuses if every glob is empty.
           if [ "${{ steps.select.outputs.broad }}" = "true" ]; then
             globs=()
             for pkg in ${{ inputs.test-packages }}; do
@@ -167,7 +193,7 @@ jobs:
               echo "loudly rather than silently running nothing."
               exit 1
             fi
-            npx tsx --test "${globs[@]}"
+            node scripts/assert-glob-not-empty.mjs "${globs[@]}" --min=1 --drop-empty --run --runner=rstest
           else
             files=(${{ steps.select.outputs.testFiles }})
             if [ "${#files[@]}" -eq 0 ]; then
@@ -176,7 +202,7 @@ jobs:
               echo "running nothing, this job's whole reason for existing."
               exit 1
             fi
-            npx tsx --test "${files[@]}"
+            node scripts/assert-glob-not-empty.mjs "${files[@]}" --min=1 --run --runner=rstest
           fi
       # UNSCOPED path -- trunk-guard's own choice, unchanged: the whole tree, never a per-package slice,
       # because every merge to main needs the full answer regardless of what that merge's own diff touched.
@@ -184,7 +210,22 @@ jobs:
         if: inputs.run-ts-tests && inputs.ts-test-scope == 'unscoped'
         env:
           GH_TOKEN: ${{ github.token }}
+        # #1319: `test:ts` passes `--runner=rstest` to the floor, so this step runs rstest over the whole glob.
         run: npm run test:ts
+      # #1319: A CACHE THAT IS NEVER WRITTEN RESTORES NOTHING AND STILL READS GREEN. rstest ran above with its build cache
+      # on, since CI is set, so the cache directory must now hold files. An empty one fails the job rather than leaving
+      # the HIT or MISS line to describe a cache that does not exist. No workflow expressions, so
+      # runner-is-rstest.test.ts executes this exact script against an empty and a filled directory.
+      - name: "#1319: rstest build cache must hold files after the tests"
+        if: inputs.run-ts-tests
+        run: |
+          files=$( (find node_modules/.cache -path 'node_modules/.cache/rstest-*' -type f 2>/dev/null || true) | wc -l)
+          echo "files under node_modules/.cache/rstest-* after the tests: $files"
+          if [ "$files" -eq 0 ]; then
+            echo "rstest ran with performance.buildCache on and wrote no cache files -- the cache step above would save"
+            echo "an empty directory, and every later run would read MISS while looking configured."
+            exit 1
+          fi
       - if: inputs.run-python-tests
         uses: actions/setup-python@v5
         with: { python-version: "3.12", cache: pip }

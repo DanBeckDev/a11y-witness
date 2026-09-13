@@ -18,7 +18,7 @@
 // never another `*.test.ts` (that is the defect this row exists to end, one level further in).
 //
 //   node scripts/assert-glob-not-empty.mjs <glob...> [--min=N]                 -- check only
-//   node scripts/assert-glob-not-empty.mjs <glob...> [--min=N] --run [--test-concurrency=N]
+//   node scripts/assert-glob-not-empty.mjs <glob...> [--min=N] [--drop-empty] --run [--runner=tsx|rstest] [--test-concurrency=N]
 //
 // Each glob given is resolved independently and must match at least `--min` files (default 1 -- "not
 // vacuous", never "exactly this many"). A directory rename, a package restructure, or #66's tree-wide
@@ -35,7 +35,7 @@
 // fix meant to close it. "A fact stated twice" (this file's own CLAUDE.md section) applies to a shell
 // command's own argv, not only to prose. `--run` makes the two uses of the pattern the same JS array.
 import { globSync, realpathSync } from "node:fs";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { refuseUnknownFlags, flagValue } from "@a11ign/worker-fleet/cli-flags";
 import { npmCliInvocation } from "./npm-cli-executable.mjs";
@@ -53,15 +53,99 @@ export function underFloor(patterns, min, glob = globSync) {
     .filter(({ matched }) => matched < min);
 }
 
+/**
+ * #1319: SPLIT PATTERNS INTO THOSE THAT MATCH SOMETHING AND THOSE THAT MATCH NOTHING, with `underFloor`'s own
+ * predicate, so `--drop-empty` is not a second copy of the floor.
+ *
+ * For a caller whose patterns come from a list of PACKAGES rather than from typing: CI's broad branch passes one glob per
+ * implicated package, and a package can legitimately have no tests. `nvda-speech` has no `src` at all, and #1469's
+ * first two CI runs were refused on exactly that glob, where `tsx --test` had passed it silently.
+ * @param {string[]} patterns
+ * @param {(pattern: string) => string[]} [glob]
+ * @returns {{ kept: string[], dropped: string[] }}
+ */
+export function partitionEmpty(patterns, glob = globSync) {
+  const dropped = underFloor(patterns, 1, glob).map(({ pattern }) => pattern);
+  return { kept: patterns.filter((pattern) => !dropped.includes(pattern)), dropped };
+}
+
+/**
+ * #1319: `--drop-empty`. NAMES every dropped pattern, never skips one silently, and REFUSES when every pattern is empty:
+ * dropping all of them would run nothing and pass. Returns the patterns to check and run, or null after refusing.
+ * @param {string[]} patterns
+ * @returns {string[] | null}
+ */
+function dropEmptyPatterns(patterns) {
+  const { kept, dropped } = partitionEmpty(patterns);
+  for (const pattern of dropped) {
+    process.stderr.write(`assert-glob-not-empty: ${pattern}  matched 0 -- dropped (--drop-empty), nothing to run for it\n`);
+  }
+  if (kept.length === 0) {
+    process.stderr.write("REFUSING: every glob matched nothing -- --drop-empty drops an empty glob, never all of them, "
+      + "because running nothing would pass.\n");
+    process.exitCode = 1;
+    return null;
+  }
+  return kept;
+}
+
+/** #1319: the runners `--run` can execute. `tsx` is the default, so a caller that names none is unchanged. */
+export const RUNNERS = Object.freeze(["tsx", "rstest"]);
+
+/** #1319: the rstest config every rstest run uses, resolved from this file so the caller's cwd cannot change it. */
+export const RSTEST_CONFIG = fileURLToPath(new URL("./rstest/rstest.config.mjs", import.meta.url));
+
+/**
+ * #1319: THE COMMAND `--run` EXECUTES, PURE, so the runner switch is pinned by a test rather than read off a spawn.
+ *
+ * `tsx` stays the default: `test:nightly` and c8's `coverage` still run node:test through it until step 4 of the rstest
+ * adoption (#1320) moves coverage. `test:ts` and CI's scoped step ask for `rstest`.
+ *
+ * EACH PATTERN GOES TO RSTEST AS ITS OWN `--include`, NEVER AS A POSITIONAL ARGUMENT. A positional argument is a
+ * filter matched inside the config's include: measured at `9c12a0f5`, the bare word `region-paths` selected
+ * `region-paths.test.ts`. `--include` replaces the include with exactly these patterns, which is what a list of
+ * selected files needs, and a pattern outside the config's include still runs (measured on `packages/*` + `/nightly`).
+ * `--test-concurrency` maps to rstest's worker count, the nearest equivalent of node:test's file concurrency.
+ * @param {{ runner: string, patterns: string[], concurrency?: string }} request
+ * @returns {string[]} the arguments for `npx`
+ */
+export function runnerInvocation({ runner, patterns, concurrency }) {
+  // AN EMPTY PATTERN LIST NEVER REACHES A RUNNER. `rstest run` with no `--include` falls back to the config's include,
+  // and `tsx --test` with no file uses its default glob: either way, the WHOLE suite. Measured 2026-09-13 22:49Z, when a
+  // mutation of `--drop-empty` let an empty list through and 92 rstest workers loaded the shared host to 64.
+  if (patterns.length === 0) {
+    throw new Error("assert-glob-not-empty: no pattern to run -- refusing, because a runner given no pattern runs the "
+      + "whole suite rather than nothing.");
+  }
+  if (runner === "tsx") {
+    return ["tsx", "--test", ...(concurrency ? [`--test-concurrency=${concurrency}`] : []), ...patterns];
+  }
+  if (runner === "rstest") {
+    return ["rstest", "run", "--config", RSTEST_CONFIG, ...(concurrency ? [`--pool.maxWorkers=${concurrency}`] : []),
+      ...patterns.flatMap((pattern) => ["--include", pattern])];
+  }
+  throw new Error(`assert-glob-not-empty: --runner=${runner} is not a runner this script knows `
+    + `(${RUNNERS.join(", ")}) -- refusing to guess which one to run.`);
+}
+
 function main() {
-  refuseUnknownFlags(["--min", "--run", "--test-concurrency"],
+  refuseUnknownFlags(["--min", "--drop-empty", "--run", "--runner", "--test-concurrency"],
     { entry: import.meta.url, command: "node scripts/assert-glob-not-empty.mjs" });
-  const patterns = process.argv.slice(2).filter((arg) => !arg.startsWith("--"));
-  if (!patterns.length) {
+  const given = process.argv.slice(2).filter((arg) => !arg.startsWith("--"));
+  if (!given.length) {
     process.stderr.write("assert-glob-not-empty: no glob pattern given -- nothing to check.\n");
     process.exitCode = 2;
     return;
   }
+  const runner = flagValue(process.argv, "runner") ?? "tsx";
+  if (!RUNNERS.includes(runner)) {
+    process.stderr.write(`assert-glob-not-empty: --runner=${runner} is not a runner this script knows `
+      + `(${RUNNERS.join(", ")}) -- refusing to guess which one to run.\n`);
+    process.exitCode = 2;
+    return;
+  }
+  const patterns = process.argv.includes("--drop-empty") ? dropEmptyPatterns(given) : given;
+  if (patterns === null) return;
   const min = Number(flagValue(process.argv, "min") ?? "1");
   const offenders = underFloor(patterns, min);
   if (offenders.length) {
@@ -77,7 +161,7 @@ function main() {
   if (!process.argv.includes("--run")) return;
   // The SAME `patterns` array just proven non-vacuous -- not a second copy re-typed by the caller.
   const concurrency = flagValue(process.argv, "test-concurrency");
-  const args = ["tsx", "--test", ...(concurrency ? [`--test-concurrency=${concurrency}`] : []), ...patterns];
+  const args = runnerInvocation({ runner, patterns, concurrency });
   // `NODE_TEST_CONTEXT=child-v8` is how Node's OWN test runner marks a process as a subtest reporting to a
   // parent harness, and it is set in THIS process's env whenever something here is itself invoked from
   // inside `node --test` (this script's own test suite does exactly that, exercising `--run` end to end).
