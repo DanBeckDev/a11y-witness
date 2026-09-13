@@ -141,9 +141,12 @@ false accusation.
 ### What this does NOT change
 
 **THE FLOOR IS DERIVED PER TRAINING RUN, NOT FIXED — and the paragraph that used to stand here was
-falsified by a table seventeen screens down in this same document.** Measured on 2026-09-12: the derived
-floor is **0.6557** on both arms of #1178's experiment (`floorSource: training-set-minimum`), and
-`before/tickets.html` sits at novelty **0.7208** — **IN support, scored, and caught.**
+falsified by a table seventeen screens down in this same document.** Measured 2026-09-13 on the
+**SHIPPED** model: the derived floor is **0.6557** (`floorSource: training-set-minimum`), and
+`before/tickets.html` sits at novelty **0.7221** — **IN support, scored, and caught.** All three models
+measured that day derive the same **0.6557**, each read from its own `training-report.json` rather than
+from the sweep's floor list. (The **0.7208** this paragraph carried until 2026-09-13 was the SCRATCH
+arm's; shipped and candidate both read 0.7221. [#1190, 2026-09-13 08:08:42Z][arms].)
 
 **What was withdrawn, verbatim, because a record that quietly loses a falsified claim teaches the next
 reader that decision records are always right:**
@@ -168,22 +171,61 @@ the worked example of a page that moved INTO support as the corpus grew, which i
 standing numeric threshold cannot describe. **A document that quotes a derived value as settled is the
 defect, whichever value it quotes.**
 
-**Measured on 2026-09-12, on a SCRATCH model** — not the shipped model and not the candidate:
+**Measured 2026-09-13 on the SHIPPED model, with the CANDIDATE beside it.** The corpus is the same on
+disk for all three arms — 49 calibration pages captured 2026-09-12T18:30:45Z, one fleet code hash — so
+the arms differ only in the model, and the sweep's own output names which answered rather than anyone
+asserting it. [#1190, 2026-09-13 08:08:42Z][arms].
 
-| | |
-|---|---|
-| publisher-declared inaccessible pages caught | **3 of 3** |
-| conformant real pages carrying a finding the publisher contradicts | **2 of 42** |
-| wrong cells | **2 of 309 tested** |
-| corroborated-disclosure findings | **0** |
+| | **SHIPPED** | **CANDIDATE** |
+|---|---|---|
+| publisher-declared inaccessible pages caught | **3 of 3** | **3 of 3** |
+| conformant real pages carrying a finding the publisher contradicts | **1 of 40** | **2 of 42** |
+| wrong cells, of cells tested | **1 of 294** | **2 of 309** |
+| corroborated-disclosure findings | **0** | **0** |
+| pages scored at that floor | 43 of 49 | 45 of 49 |
+| derived floor | 0.6557 | 0.6557 |
+| `before/tickets.html` novelty | **0.7221** | **0.7221** |
 
-**Caveat 1:** that second column counts publisher-enumerated failures among non-accusations.
-**Caveat 2: every figure above is a SCRATCH model's.** The shipped and candidate arms are #1238's to
-produce; until they land this record carries scratch, labelled scratch at each number.
+```
+shipped     Model: packages/scorer/models/screenreader-scorer     (-e model= OMITTED)
+candidate   Model: /opt/a11y/runs/model-candidate                 (-e model=candidate)
+```
+
+**Caveat 1:** that second row counts publisher-enumerated failures among non-accusations.
+
+**Caveat 2 — THE COMPARISON IS BOUNDED, and the bound is the fleet operator's own, carried here rather
+than left on the issue.** The shipped model makes fewer contradicted assertions than the candidate and
+catches the same 3 of 3, so on this set shipping the candidate would trade one additional false
+accusation for no additional catch. That is a narrow reading:
+
+> *"The denominators differ (40 vs 42 conformant pages scored) because the models put different pages in
+> support, so this is not one metric moving — it is two slightly different populations each measured
+> correctly. Two contradicted findings against one, on populations two pages apart, over a 49-page
+> calibration set, is not a result I would call a regression."* — `orchestrator`, [#1190][arms]
+
+**A figure without its bound is what this ADR keeps having to correct**, so the bound is quoted rather
+than summarised: a reader who takes 1-of-40 against 2-of-42 as a model comparison is leaning on
+something its own author declined to call one.
+
+[arms]: https://github.com/DanBeckDev/a11y-witness/issues/1190#issuecomment-5652128308
 
 **STANDING RULE FOR THIS ADR: a figure here names the model it was read from.** An unattributed number in
 a decision record is read as the shipped tool's, which is the reading that makes a scratch measurement
 into a claim about the product.
+
+**THERE ARE NOW THREE MODELS AND THE RULE HAS TO DISCRIMINATE, not merely be stated.** When it was
+written there was one arm and "names the model" cost nothing; the arms are:
+
+| | | |
+|---|---|---|
+| **shipped** | `packages/scorer/models/screenreader-scorer` | what a consumer runs; selected by OMITTING `-e model=` |
+| **candidate** | `/opt/a11y/runs/model-candidate` | #1238's arm, not shipped |
+| scratch | `/opt/a11y/runs/model-scratch` | #1178's experiment, measured 2026-09-12 — history, not a current reading |
+
+**The failure the rule is against is not an unlabelled number; it is a number labelled with the wrong
+arm.** The 0.7208 corrected above sat under a heading that said scratch and was still read across this
+document as the reading — including in a "why not" row seventeen screens down, which had to be corrected
+with it. **A figure and its model travel together or the label does not survive being quoted.**
 
 **The ADR 0010 misattribution above stays recorded as history** — it was wrong when written and the record
 of it being wrong is the useful part.
@@ -254,7 +296,7 @@ visible act.
 |---|---|
 | Drop the 29 engineered features and use the encoder alone | Throws away the features that carry the actual signal (`form_field_unnamed` is +5.37 on the head that needs it) to remove ones that carry a shortcut. The problem is the corpus, not the representation. |
 | Mask the off-criterion features per head — let `4.1.2:unnamed-control` see only form features | Tempting, cheap, and it hides the fault instead of fixing it. It also requires deciding by hand which features each criterion may see, which is the judgement the training was supposed to make. Worth revisiting as a *mitigation* once the corpus fix is measured, never before. |
-| Lower the abstention floor so the third page is scored | **This reasoning was withdrawn with the paragraph above (2026-09-13).** It rested on the page being out of support at a fixed 0.70 floor; the floor is DERIVED (0.6557 on 2026-09-12) and the page is at novelty 0.7208, in support and caught. The second call site of one falsified claim, corrected with it. |
+| Lower the abstention floor so the third page is scored | **This reasoning was withdrawn with the paragraph above (2026-09-13).** It rested on the page being out of support at a fixed 0.70 floor; the floor is DERIVED (0.6557, and the same on all three models measured 2026-09-13) and the page is at novelty 0.7221 on the SHIPPED model, in support and caught. The second call site of one falsified claim, corrected with it. |
 | Regularise the heads toward zero on structured features | Fits a coefficient penalty to a data problem, and would equally suppress the features that work. |
 | Report it as a known limitation and move on | The limitation is that the flagship criterion is silent on most real pages. That is not a footnote. |
 
