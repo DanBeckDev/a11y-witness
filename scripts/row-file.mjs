@@ -302,6 +302,21 @@ const ASSERTS_AN_OUTPUT = /\b(?:prints?|returns?|reads?|outputs?|gives?|yields?)
 const LOOKS_LIKE_A_COMMAND = /^\s*(?:\$\s+)?(?:npx|npm|node|git|gh|grep|rg|sed|awk|cat|ls|find|python3?|bash|sh)\b/;
 
 /**
+ * #1316: A `$ ` PROMPT MARKS A COMMAND, WHATEVER ITS FIRST WORD. The allowlist above decided alone until this row, so a
+ * real pasted run beginning `$ echo …`, `$ touch …` or `$ printf …` had no "command" line and was refused with the
+ * very instruction it followed. Measured 2026-09-13: worker-judge's #1314 transcript, pasted from the run, was
+ * refused, and the same run re-typed as `bash -c '…'` was accepted -- the same command with a different first word.
+ * A prompt is the paste's own evidence that the line was typed; the allowlist still recognises an unprompted
+ * command, as before.
+ */
+const PROMPTED_COMMAND = /^\s*\$\s+\S/;
+
+/** @param {string | undefined} line @returns {boolean} */
+function isCommandLine(line) {
+  return line !== undefined && (PROMPTED_COMMAND.test(line) || LOOKS_LIKE_A_COMMAND.test(line));
+}
+
+/**
  * Is there a transcript in `section` whose OUTPUT sits directly under its COMMAND?
  *
  * #1174 clause 2, and the clause that carries the row: **adjacency is the property.** A check asking only
@@ -318,7 +333,7 @@ function hasAdjacentTranscript(section) {
     for (let i = 0; i < lines.length - 1; i += 1) {
       // A command with a NON-command line straight after it, inside one fence. Two commands in a row are
       // two commands; a command as the last line of a fence printed nothing here.
-      if (LOOKS_LIKE_A_COMMAND.test(lines[i]) && !LOOKS_LIKE_A_COMMAND.test(lines[i + 1])) return true;
+      if (isCommandLine(lines[i]) && lines[i + 1] !== undefined && !isCommandLine(lines[i + 1])) return true;
     }
   }
   return false;
