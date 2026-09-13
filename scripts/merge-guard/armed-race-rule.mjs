@@ -38,12 +38,16 @@ import { checkReasons } from "./checks-rule.mjs";
 import { gh, lookup, lookupRequiredContexts, lookupCheckRuns } from "./lookups.mjs";
 
 /**
+ * #1408: `run` is `gh` unless a caller injects one -- the test does, so a local suite never asks GitHub. The default is
+ * exercised only by `merge-guard.mjs`'s own call, through the real pre-push hook; if that wiring broke, the hook's
+ * armed-PR refusal (or its absence) is where it would show.
  * @param {string} branchName
- * @returns {{ number: number, armed: boolean, green: boolean | null, behindBy: number | null } | null}
+ * @param {{ run?: typeof gh }} [deps]
+ * @returns {{ number: number | null, armed: boolean, green: boolean | null, behindBy: number | null } | null}
  */
-export function lookupArmedPrStatus(branchName) {
+export function lookupArmedPrStatus(branchName, { run = gh } = {}) {
   return lookup(() => {
-    const prs = JSON.parse(gh(["pr", "list", "--repo", REPO, "--head", branchName, "--state", "open",
+    const prs = JSON.parse(run(["pr", "list", "--repo", REPO, "--head", branchName, "--state", "open",
       "--json", "number,autoMergeRequest,headRefOid"]));
     if (prs.length === 0) return { number: null, armed: false, green: false, behindBy: null };
     const pr = prs[0];
@@ -57,7 +61,7 @@ export function lookupArmedPrStatus(branchName) {
     const reasons = checkReasons({ headRefOid: pr.headRefOid }, required, runs);
     const green = reasons.length === 0;
     const behindBy = green ? lookup(() => {
-      const value = JSON.parse(gh(["api", `repos/${REPO}/compare/main...${pr.headRefOid}`])).behind_by;
+      const value = JSON.parse(run(["api", `repos/${REPO}/compare/main...${pr.headRefOid}`])).behind_by;
       return typeof value === "number" ? value : null;
     }) : null;
     return { number: pr.number, armed: true, green, behindBy };
