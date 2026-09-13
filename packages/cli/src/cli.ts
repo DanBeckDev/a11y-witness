@@ -34,7 +34,7 @@ import { workerIsUsable } from "@a11ign/worker-fleet/health";
 // `annotateCapture` is a VALUE (the shadow scorer calls it); the rest are types. Split rather than
 // combined into one `import {...}` so `import type` stays type-only and cannot pull evidence into a
 // runtime graph that does not need it.
-import { annotateCapture } from "@a11ign/evidence";
+import { annotateCapture, leftSite, withinTheSite, type LeftSite } from "@a11ign/evidence";
 import type { CaptureStructure, CaptureInteraction, CaptureRequest as WireCaptureRequest,
   CaptureFormState } from "@a11ign/evidence";
 import type { RuleLayerCoverage } from "@a11ign/judge/outcomes";
@@ -685,31 +685,33 @@ async function runWitness(
 
   reportOnTheCapture(cap, debug);
 
+  const { left, notExamined, examined } = examineWithinTheSite(cap);
+
   process.stderr.write(`Captured ${cap.transcript.length} announcements; judging ...\n`);
-  await shadowScreenReaderCapture(cap);
+  await shadowScreenReaderCapture(examined);
   const verdict = await judge({
-    url: cap.url,
+    url: examined.url,
     task,
-    screenReader: cap.screenReader,
-    transcript: cap.transcript,
-    structure: cap.structure,
-    interaction: cap.interaction,
+    screenReader: examined.screenReader,
+    transcript: examined.transcript,
+    structure: examined.structure,
+    interaction: examined.interaction,
     // The oracle counts, so the rules that assert an ABSENCE can corroborate it. Without these a page
     // with no headings and a capture that failed to reach them are the same input.
-    ...oracleCounts(cap),
+    ...oracleCounts(examined),
   });
 
-  const conformance = conformanceFor(cap, ruleFindings);
+  const conformance = conformanceFor(examined, ruleFindings, left && { control: left.control, notExamined });
   // Per-criterion ACT outcomes. `truncatedSweeps` is what turns Conformance Requirement 2 into something
   // per-criterion: a link sweep that stopped at its cap makes 2.4.4 `cantTell`, not `passed`.
   const outcomes = criterionOutcomes({
-    capture: cap,
+    capture: examined,
     findings: verdict.findings,
     abstained: verdict.abstained === true,
-    truncatedSweeps: truncatedSweeps(sweepOutcomes(cap.diagnostics ?? [])),
+    truncatedSweeps: truncatedSweeps(sweepOutcomes(examined.diagnostics ?? [])),
     // The SECOND way a sweep is short: it ended cleanly and still missed something. Without this a
     // capture whose landmark sweep found 0 of 1 reported 1.3.1 as "examined in full".
-    completeness: oracleCounts(cap).completeness,
+    completeness: oracleCounts(examined).completeness,
     // The SECOND assessor. Without it every criterion outside the screen-reader layer printed "No
     // assessor in this tool covers this criterion" -- in a run that had just started by announcing
     // "rule-based axe-core + real screen reader".
@@ -717,7 +719,8 @@ async function runWitness(
   });
   if (json) {
     printJson({
-      url, task, cap, verdict, ruleFindings, captureVerified, unverifiedReason, conformance, outcomes,
+      url, task, cap: examined, verdict, ruleFindings, captureVerified, unverifiedReason, conformance, outcomes,
+      leftSite: left,
       artifactPath: artifactPath ? relative(process.cwd(), artifactPath) : null,
     });
   } else {
@@ -749,7 +752,8 @@ async function runWitness(
  * and this repo has 2,122 real captures on disk — so it is testable against evidence a real screen reader
  * produced, not against a hand-written shape somebody imagined.
  */
-export function conformanceFor(cap: CaptureResponse, axe: AxeFinding[] | null): ConformanceRequirement[] {
+export function conformanceFor(cap: CaptureResponse, axe: AxeFinding[] | null,
+  left?: { control: string; notExamined: readonly string[] } | null): ConformanceRequirement[] {
   const env = (cap as { environment?: Record<string, string> }).environment ?? {};
   const version = (name: string, ver: string): string | null =>
     env[name] ? `${env[name]}${env[ver] ? ` ${env[ver]}` : ""}` : null;
@@ -775,6 +779,9 @@ export function conformanceFor(cap: CaptureResponse, axe: AxeFinding[] | null): 
   };
   return conformanceScope({
     assessedCriteria: assessedCriteria(),
+    // #1363: where the examination ended, when an activation left the site. `cap` is then already cut to what
+    // was observed before it, and Requirement 2 names what was not examined.
+    leftSite: left,
     sweeps: sweepOutcomes(diagnostics),
     censusCountsDistinctNames: censusCountsDistinctNames(diagnostics),
     screenReader: version("screenReader", "screenReaderVersion") ?? cap.screenReader,
@@ -802,6 +809,32 @@ export function conformanceFor(cap: CaptureResponse, axe: AxeFinding[] | null): 
 }
 
 /**
+ * Say on stderr, in the run's own log, that the examination ended early (#1363) -- before the judge's lines, so
+ * nobody reads a finding count as a verdict on everything the probe touched.
+ */
+function warnLeftSite(left: LeftSite, notExamined: readonly string[]): void {
+  process.stderr.write(`a11ign: examination ENDED -- activating ${JSON.stringify(left.control)} left the site`
+    + `${left.to ? ` (to ${left.to})` : ""}. Nothing observed after it is attributed to ${left.from}; NOT `
+    + `EXAMINED: ${notExamined.join(", ") || "nothing further was recorded"}.\n`);
+}
+
+/**
+ * #1363: WHERE THE EXAMINATION ENDED. Rehearsal 2's probe opened the W3C's embedded YouTube player, the tab became
+ * youtube.com, and every probe after it -- the rest of the form-field sweep, the links, the focus pass, the
+ * route-change finding -- was judged as w3.org's. What this returns as `examined` is only what was observed ON the
+ * page, and it is what the judge, the conformance scope, the outcomes and the JSON are given. `captureDoubt` keeps
+ * the whole capture: whether the run read the requested page at all is a question about everything it read.
+ */
+export function examineWithinTheSite(cap: CaptureResponse):
+  { left: LeftSite | null; notExamined: readonly string[]; examined: CaptureResponse } {
+  const left = leftSite(cap);
+  if (!left) return { left: null, notExamined: [], examined: cap };
+  const { capture, notExamined } = withinTheSite(cap, left);
+  warnLeftSite(left, notExamined);
+  return { left, notExamined, examined: capture };
+}
+
+/**
  * The machine-readable result, for CI and for anything downstream of this tool.
  *
  * `structure` and `interaction` are included DELIBERATELY. They were omitted once, so this output carried only
@@ -811,15 +844,19 @@ export function conformanceFor(cap: CaptureResponse, axe: AxeFinding[] | null): 
  */
 function printJson(
   { url, task, cap, verdict, ruleFindings, captureVerified, unverifiedReason, conformance, outcomes,
-    artifactPath }: {
+    leftSite: left, artifactPath }: {
     url: string; task: string; cap: CaptureResponse; verdict: Report["verdict"];
     ruleFindings: AxeFinding[] | null; captureVerified: boolean; unverifiedReason?: CaptureDoubt;
-    conformance: ConformanceRequirement[]; outcomes: CriterionOutcome[]; artifactPath: string | null;
+    conformance: ConformanceRequirement[]; outcomes: CriterionOutcome[]; leftSite: LeftSite | null;
+    artifactPath: string | null;
   },
 ): void {
   const layered = { ...verdict, findings: verdict.findings.map((f) => ({ ...f, layer: layerOf(f.wcag) })) };
   console.log(JSON.stringify({
     url, task, screenReader: cap.screenReader, transcript: cap.transcript,
+    // #1363: where the examination ENDED, as its own field -- `null` when every activation stayed on the page.
+    // `structure` and `interaction` below are then only what was observed before it.
+    leftSite: left,
     structure: cap.structure, interaction: cap.interaction,
     // #431: where the capture behind this JSON was written, or `null` under `--no-keep` -- a machine
     // consumer's equivalent of the plain-text report's last line, so it never has to scrape stdout for it.

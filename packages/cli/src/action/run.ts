@@ -11,7 +11,7 @@ import { readFileSync, writeFileSync, appendFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { renderSummary, shouldFail, type FailOn, type RunResult } from "./summary.js";
+import { logLines, renderSummary, shouldFail, type FailOn, type RunResult } from "./summary.js";
 import { taskVerdictLabel } from "@a11ign/judge";
 import { flagValue } from "@a11ign/worker-fleet/cli-flags";
 
@@ -99,12 +99,9 @@ function main(): void {
     process.exit(2);
   }
 
-  const counts = findings.reduce<Record<string, number>>((acc, f) => {
-    acc[f.severity] = (acc[f.severity] ?? 0) + 1;
-    return acc;
-  }, {});
-  const breakdown = Object.entries(counts).map(([s, n]) => `${n} ${s}`).join(", ") || "none";
-  process.stderr.write(`a11ign: ${findings.length} finding(s) (${breakdown}); fail-on=${failOn}\n`);
+  // #1363: the log is what a reader sees without opening the summary, so it says where the examination ended
+  // BEFORE it counts findings -- a bare count reads as a verdict about everything the run touched.
+  for (const line of logLines(result, failOn)) process.stderr.write(`${line}\n`);
 
   if (fail) {
     process.stderr.write(`a11ign: failing the check — findings met the ${failOn} threshold.\n`);
