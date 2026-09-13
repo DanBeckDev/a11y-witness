@@ -930,13 +930,13 @@ export function lateEditionRefusal({ summary, stated, editionExists, londonNow }
  * The SCHEDULE delivers that (the summary is written at 07:25 and the edition renders at 08:00); this is
  * the backstop that catches a stale one reaching the board, so it is the wider sixty.
  *
- * @param {boolean} publishing @param {{text: string} | null | undefined} summary @param {string} today
+ * @param {boolean} publishing @param {{text: string} | null | undefined} summary @param {string} today @param {Date} [now]
  */
-export function requireSummaryIsFresh(publishing, summary, today) {
+export function requireSummaryIsFresh(publishing, summary, today, now = new Date()) {
   if (!publishing || !summary) return;
   const londonNow = new Intl.DateTimeFormat("en-GB",
-    { timeZone: "Europe/London", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date());
-  const stated = statedWritingTime(summary.text, londonNow);
+    { timeZone: "Europe/London", hour: "2-digit", minute: "2-digit", hour12: false }).format(now);
+  const stated = statedWritingTime(summary.text, now);
   if (!stated) {
     console.error(`REFUSING to render: the summary for ${today} does not say when it was written.\n`
       + 'Open it with "Written at HH:MM on D Month" -- a document the board reads at 08:00 must say how '
