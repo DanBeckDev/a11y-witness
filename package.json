@@ -160,6 +160,7 @@
     "pr:release": "node scripts/pr-hold.mjs --release",
     "pr:open": "node scripts/pr-open.mjs create",
     "pr:edit": "node scripts/pr-open.mjs edit",
+    "branches:inventory": "node scripts/branch-inventory-report.mjs",
     "worktree:whose": "node scripts/worktree-owner.mjs",
     "worktree:stamp": "node scripts/worktree-owner.mjs --stamp"
   },

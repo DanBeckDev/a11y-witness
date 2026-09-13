@@ -1,0 +1,149 @@
+// command: (not a command) the PURE half of the #623 branch inventory -- classification and
+//          reconciliation over data somebody else fetched; `branch-inventory-report.mjs` is the CLI.
+//
+// #623: 93 branches on `origin` have no open PR and carry 291 commits that exist on no other ref, and the
+// org transfer on 2026-09-15 rewrites history. **After the 15th, "was there anything in that branch" stops
+// being an answerable question.** The row asks for FOUR facts about each one -- the branch, its last
+// commit, its owner, and its row state -- so that each owner decides about their OWN branch.
+//
+// SEPARATED FROM THE FETCHING FOR ONE REASON: this file spawns nothing, so a test that imports it needs no
+// token and the row's acceptance command can run in a job that has none (#1009). The CLI beside it reads
+// git and `gh` and carries that requirement.
+//
+// THE OWNER IS DERIVED AND ITS SOURCE IS CARRIED, never guessed. `git` records who pushed a branch nowhere
+// this repository can read -- every commit is authored by the one account, which is why the incident that
+// produced #1128 could happen at all. So the owner comes from the ROW the branch names, and a branch that
+// names no row, or names one with no `session:` label, is **unknown** rather than attributed to the prefix
+// it happens to carry. `lead/`, `dispatcher/` and `pm/` are RETIRED roles (org shape, 2026-09-10): a
+// prefix can say which role pushed it and cannot produce a session that is able to answer today.
+
+/** A trailing `-<digits>` is the row the branch was cut for. `null` when the name carries none. */
+export function rowNumberFromBranch(branch) {
+  const m = /-(\d+)$/.exec(branch);
+  return m === null ? null : Number(m[1]);
+}
+
+/** The `session:<name>` label on a row, or null. A row may carry none -- that is a fact, not an error. */
+export function sessionFromLabels(labels = []) {
+  const found = labels.find((l) => l.startsWith("session:"));
+  return found === undefined ? null : found.slice("session:".length);
+}
+
+/**
+ * THE OWNER OF A CLOSED ROW, RECOVERED FROM THE TIMELINE -- and without this the list is mostly UNKNOWN.
+ *
+ * Measured while building this: of 93 branches, 64 came back unowned, and the cause is not that nobody
+ * claimed them. **Closing a row STRIPS its `session:` label** (`stripClaimLabels`), so the live labels of
+ * every finished row say nothing about who worked it. The claim is still on the record as a `labeled`
+ * EVENT, which no close removes:
+ *
+ *   #119, labels today: [backlog]
+ *   timeline:  labeled backlog | labeled ready | labeled in-progress | labeled session:worker-audit
+ *              | unlabeled ready | unlabeled in-progress | unlabeled session:worker-audit
+ *
+ * THE LAST ONE ADDED WINS, because a row can change hands and the most recent claim is the live one. An
+ * `unlabeled` event is deliberately NOT treated as a disowning: that is what closing does to every row, so
+ * reading it as "no owner" would throw away exactly the population this is for.
+ *
+ * @param {{ event: string, label?: { name: string } }[]} timeline
+ */
+export function sessionFromTimeline(timeline = []) {
+  const claims = timeline.filter((e) => e.event === "labeled" && (e.label?.name ?? "").startsWith("session:"));
+  const last = claims[claims.length - 1];
+  return last === undefined ? null : last.label.name.slice("session:".length);
+}
+
+/** Roles that no longer run, so a branch carrying one has no owner who can answer for it today. */
+const RETIRED_PREFIXES = new Set(["lead", "dispatcher", "pm", "measure", "marketing", "archive"]);
+
+/**
+ * WHO OWNS THIS BRANCH, and HOW THAT WAS DECIDED -- the second half is the point.
+ *
+ * `source` is returned beside `owner` because these are not equally good answers: a `session:` label on
+ * the row is a record somebody wrote, and a branch prefix is an inference from a naming habit. A list that
+ * flattened them would read as 93 attributions when it holds two kinds of claim.
+ *
+ * @param {{ branch: string, row: { number: number, state: string, labels: string[] } | null }} input
+ * @returns {{ owner: string | null, source: "row-label" | "retired-role" | "unknown" }}
+ */
+export function ownerOfBranch({ branch, row, timeline = [] }) {
+  const fromRow = row === null ? null : sessionFromLabels(row.labels);
+  if (fromRow !== null) return { owner: fromRow, source: "row-label" };
+  const fromHistory = sessionFromTimeline(timeline);
+  if (fromHistory !== null) return { owner: fromHistory, source: "claim-history" };
+  const prefix = branch.split("/")[0];
+  if (RETIRED_PREFIXES.has(prefix)) return { owner: `${prefix} (retired role)`, source: "retired-role" };
+  return { owner: null, source: "unknown" };
+}
+
+/**
+ * The four facts, for one branch. `rowState` distinguishes three things a reader will otherwise conflate:
+ * a branch naming an OPEN row is live work, one naming a CLOSED row is work whose row is finished (so the
+ * commits are either landed elsewhere or abandoned), and one naming NO row cannot be traced at all.
+ *
+ * @param {{ branch: string, ahead: number, lastCommit: { sha: string, at: string },
+ *           row: { number: number, state: string, labels: string[] } | null }} input
+ */
+export function branchFacts({ branch, ahead, lastCommit, row, timeline = [] }) {
+  const rowNumber = rowNumberFromBranch(branch);
+  const rowState = rowNumber === null ? "no row number in the name"
+    : row === null ? `#${rowNumber} does not exist`
+    : `#${rowNumber} ${row.state}`;
+  return { branch, ahead, lastCommit, rowState, ...ownerOfBranch({ branch, row, timeline }) };
+}
+
+/**
+ * THE RECONCILIATION THE ROW ASKS FOR, as a returned value rather than a sentence somebody checks.
+ *
+ * "The count at the end reconciles with the count at the start, or the difference is explained." Branches
+ * land and are created during a sweep, so a difference is expected -- what must not happen is a total that
+ * changed quietly. `balanced` is the arithmetic; `drift` is what moved between the two reads.
+ *
+ * @param {{ candidates: number, noOpenPR: number, merged: number, unmerged: number }} start
+ * @param {{ candidates: number, noOpenPR: number, merged: number, unmerged: number }} end
+ */
+export function reconcile(start, end) {
+  const balanced = (c) => c.merged + c.unmerged === c.noOpenPR;
+  return {
+    startBalanced: balanced(start),
+    endBalanced: balanced(end),
+    drift: { candidates: end.candidates - start.candidates, noOpenPR: end.noOpenPR - start.noOpenPR,
+      merged: end.merged - start.merged, unmerged: end.unmerged - start.unmerged },
+  };
+}
+
+/**
+ * The list, as the row wants to read it: grouped by owner, because the row's whole mechanism is that each
+ * owner answers for their OWN branches. Unknown sorts LAST and is never omitted -- an unattributed branch
+ * is exactly the one nobody will claim, so burying it at the top of a long table is how it goes unanswered.
+ *
+ * @param {ReturnType<typeof branchFacts>[]} facts
+ */
+export function groupByOwner(facts) {
+  const groups = new Map();
+  for (const f of facts) {
+    const key = f.owner ?? "UNKNOWN -- nobody is recorded as owning this";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(f);
+  }
+  const named = [...groups.entries()].filter(([k]) => !k.startsWith("UNKNOWN"))
+    .sort((a, b) => b[1].length - a[1].length);
+  const unknown = [...groups.entries()].filter(([k]) => k.startsWith("UNKNOWN"));
+  return [...named, ...unknown];
+}
+
+/** One markdown table per owner, every branch on its own line with all four facts. */
+export function renderInventory(facts) {
+  const lines = [];
+  for (const [owner, rows] of groupByOwner(facts)) {
+    const commits = rows.reduce((n, r) => n + r.ahead, 0);
+    lines.push(`### ${owner} — ${rows.length} branch(es), ${commits} commit(s) on no other ref`, "",
+      "| branch | commits | last commit | row | owner known from |", "|---|---|---|---|---|");
+    for (const r of [...rows].sort((a, b) => b.ahead - a.ahead)) {
+      lines.push(`| \`${r.branch}\` | ${r.ahead} | \`${r.lastCommit.sha}\` ${r.lastCommit.at} `
+        + `| ${r.rowState} | ${r.source} |`);
+    }
+    lines.push("");
+  }
+  return lines.join("\n");
+}
