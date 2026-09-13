@@ -142,6 +142,12 @@ export interface ConformanceScopeInput {
    * document. `null`/absent means the census (if any) is trusted.
    */
   censusMismatchReason?: string | null;
+  /**
+   * WHERE THE EXAMINATION ENDED, when an activation took the browser off the page's site (#1363): the
+   * control that left, and every channel that was therefore NOT EXAMINED. When set, Requirement 2 says so
+   * FIRST, because it is the cause and every other shortfall after that point is its symptom.
+   */
+  leftSite?: { control: string; notExamined: readonly string[] } | null;
 }
 
 /** One element type's reach: how many the screen reader got to, against how many exist. */
@@ -758,10 +764,34 @@ export function ranOutInsideADialog(input: ConformanceScopeInput): { type: strin
     .map(([type, seen]) => ({ type, dialog: seen.dialog as string }));
 }
 
+/**
+ * Requirement 2 when an activation took the browser off the page's site (#1363). Only what was observed
+ * BEFORE that activation is this page's, so the full-page claim is withheld and every channel that would have
+ * run afterwards is named as NOT EXAMINED -- never counted as zero.
+ */
+function leftTheSite(input: ConformanceScopeInput, left: NonNullable<ConformanceScopeInput["leftSite"]>):
+  ConformanceRequirement {
+  const unexamined = left.notExamined.length > 0 ? left.notExamined.join(", ") : "nothing further was recorded";
+  return {
+    number: 2,
+    name: "Full pages",
+    establishes: "Part of the page was examined: what was observed before the activation that left it.",
+    limitation: `The examination ENDED when activating ${JSON.stringify(left.control)} took the browser off this `
+      + "site, so nothing observed after that point is attributed to this page. NOT EXAMINED, because they would "
+      + `have run afterwards: ${unexamined}.` + coverageSentence(input)
+      + " Separately: one viewport only, iframes not entered, and any state reachable without a URL change is "
+      + "part of this same page and was not examined."
+      + renderSentence(input) + activationSentence(input),
+  };
+}
+
 function fullPages(input: ConformanceScopeInput): ConformanceRequirement {
   const truncated = truncatedSweeps(input.sweeps);
   const short = ranOutShortOfTheCensus(input);
   const sealed = ranOutInsideADialog(input);
+  // #1363: AN ACTIVATION THAT LEFT THE SITE IS CHECKED BEFORE EVERYTHING, because it is the cause of any other
+  // shortfall after it: a sweep that "ran out" once the browser was on another site ran out of that site.
+  if (input.leftSite) return leftTheSite(input, input.leftSite);
   // SEALED INSIDE A DIALOG IS CHECKED FIRST, because it is the CAUSE and #887's arithmetic is the
   // symptom: a sweep confined to a modal is usually also trips-short, and reporting the arithmetic when
   // the capture can name the dialog would bury the answer under the evidence for it.
