@@ -17,8 +17,10 @@
 // lesson the prune report's ACTIVE column taught this repo twice in one morning. A hook that refused on
 // this would be answering the second with the first.
 
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, realpathSync } from "node:fs";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 
 /** The stamp's filename, inside the worktree it names. */
 export const OWNER_FILE = ".a11y-owner";
@@ -71,8 +73,12 @@ export function whoseWorktree(worktree, asking, { owner = worktreeOwner } = {}) 
 
 /** `npm run worktree:whose [-- <path>]` -- defaults to the tree you are standing in. */
 function main() {
+  // NO FLAGS AT ALL, and the guard still runs: this command takes one positional path, so a typo'd
+  // `--path=...` would otherwise be skipped by the `??` and answer confidently about the tree the caller
+  // is standing in -- the exact "ignored flag runs the default and reports success" shape #453 is about.
+  refuseUnknownFlags([], { entry: import.meta.url, command: "npm run worktree:whose -- <path>" });
   const target = process.argv[2] ?? process.cwd();
   const asking = process.env.A11Y_SESSION ?? "(no A11Y_SESSION set)";
   process.stdout.write(`${whoseWorktree(target, asking)}\n`);
 }
-if (import.meta.url === `file://${process.argv[1]}`) main();
+if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) main();
