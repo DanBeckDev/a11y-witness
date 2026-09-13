@@ -102,7 +102,13 @@ if [ -n "$stale" ] && [ "$named_paths_only" = 0 ]; then
   exit 1
 fi
 
-if [ "$count" -gt "$MAX_FILES" ]; then
+# #1422: THE BREADTH REFUSAL'S OWN REMEDY MUST PASS TOO. It says "Name the paths you mean", and naming them was refused
+# by this same count: a `git commit` naming 13 files hands this hook a next-index commit holding exactly those 13, so
+# `$count` is 13. Reproduced on git 2.53.0 in a sandbox (#1422's first comment): the path commit and a plain commit of
+# the same files were refused with identical text. The breadth net exists to catch files swept in by a bulk add, and a
+# next-index commit carries only what was named (`named_paths_only`, #1314 above), so the count is skipped there. A
+# plain commit, `-i` and `-a` still see the whole index, and are still refused.
+if [ "$count" -gt "$MAX_FILES" ] && [ "$named_paths_only" = 0 ]; then
   echo "pre-commit: refusing — $count files staged (limit $MAX_FILES):" >&2
   printf '%s\n' "$staged" | sed 's/^/  /' >&2
   echo "Name the paths you mean, or set A11Y_COMMIT_ALL=1 if the breadth is deliberate." >&2
