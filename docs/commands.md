@@ -74,7 +74,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/trunk-revert.mjs` — revert a push to main that fails its own gate, unattended, since nothing else runs after it lands
 - `node scripts/trunk-sweep.mjs` — sweep main for a gate failure while GITHUB_TOKEN-authored merges suppress every triggering event
 - `node scripts/update-branch-sweep.mjs` — push every armed, green-or-running PR up to main's new tip after a merge lands
-- `node scripts/update-primary.mjs` — the one sanctioned way to move the primary checkout: fetch, detach at origin/main, rebuild
+- `node scripts/update-primary.mjs` — the one sanctioned way to move the primary checkout: fetch, detach at origin/main, install if the lockfile moved, rebuild
 - `node scripts/workflow-lane-check.mjs` — check a PR changing a lane-owned path was opened from that lane's branch, or names its exception
 - `node scripts/workflow-run-liveness.mjs` — watchdog: did CI actually run before this commit reached main, checked automatically
 - `node scripts/worktree-owner.mjs` — print which session stamped a worktree, so a session can tell whose tree it is standing in
