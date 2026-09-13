@@ -56,7 +56,9 @@ import { pathToFileURL } from "node:url";
 import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-flags.mjs";
 // #1227: `settleClosedStatus` is imported rather than re-derived, for the reason this file's own header
 // gives about `stripClaimLabels`: a second copy of that decision is the "fact stated twice" shape.
-import { closurePlan, stripClaimLabels, settleClosedStatus } from "./close-rows-for-merged-pr.mjs";
+import { closurePlan, stripClaimLabels } from "./close-rows-for-merged-pr.mjs";
+import { settleClosedStatus } from "./settle-closed-status.mjs";
+import { moveProjectStatus } from "./row-claim.mjs";
 
 export const EXIT = { DONE: 0, COULD_NOT_CLOSE: 1, CANNOT_ASK: 2 };
 export const DEFAULT_WINDOW_MINUTES = 45;
@@ -118,7 +120,7 @@ function closeOnePr(number, repo) {
   for (const { number: n, labels } of already) {
     console.log(`SWEEP: #${n} ALREADY CLOSED -- left alone.`);
     stripClaimLabels(n, labels, repo, "SWEEP");
-    settleClosedStatus(n);
+    settleClosedStatus(n, { moveStatus: moveProjectStatus });
   }
 
   const failed = [];
@@ -139,7 +141,7 @@ function closeOnePr(number, repo) {
     // file's own header). "SWEEP" as the log prefix, never "CLOSE-ROWS", for the same reason every other
     // line here is distinguished -- which path did the work is a fact about the pipeline's health.
     stripClaimLabels(n, labels, repo, "SWEEP");
-    settleClosedStatus(n);
+    settleClosedStatus(n, { moveStatus: moveProjectStatus });
   }
   return failed;
 }
