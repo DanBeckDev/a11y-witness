@@ -40,6 +40,7 @@ import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 import { execFileSync } from "node:child_process";
 import { sandboxGitEnv } from "./git-env.mjs";
 import { REPO, ROOT, gh, git, REPORTED_KINDS } from "./board-data.mjs";
+import { editionDay } from "./board-discussion.mjs";
 
 const ISSUE = "20";
 const SUMMARY_WORDS = 120;
@@ -427,15 +428,9 @@ export function reportedVerdict({ localText, remote }) {
  * document will actually render from.
  */
 function nextEditionDay(now = new Date()) {
-  return londonDay(now);
-}
-
-/** The date in LONDON, not UTC -- the edition's day is the board's day, and between 00:00 and 01:00 BST
- * those differ. A UTC date here would ask for yesterday's summary for the first hour of every summer
- * morning, which is exactly the kind of small untruth this pipeline refuses elsewhere. */
-export function londonDay(now = new Date()) {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London", year: "numeric", month: "2-digit",
-    day: "2-digit" }).format(now);
+  // LONDON's date, from the one definition every edition script shares (#1302). This file had its own copy,
+  // `londonDay`, which was right while the render and the Discussion used UTC: two copies of "today".
+  return editionDay(now);
 }
 
 
