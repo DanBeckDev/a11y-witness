@@ -704,8 +704,10 @@ export function selectionFor(files, { repoRoot, allPackages, testPackages }) {
     sourceClosure(join(repoRoot, testFile), repoRoot, packages);
   // EVERY test file in the repository, not `testFiles` -- that one is scoped to the implicated packages,
   // and a guard in `packages/worker-fleet` governs a file added to `packages/judge`. Measured at ~0.7s
-  // for all 453 test files, which is why the whole population is affordable to walk here. #1358: the same
-  // population is where a document's by-path readers are searched for.
+  // for all 453 test files when #A1d landed, which is why the whole population is affordable to walk here.
+  // The count grows with the tree and the time was not re-measured since; `git ls-files
+  // 'packages/*/src/**/*.test.ts' | wc -l` gives today's count. #1358: the same population is where a
+  // document's by-path readers are searched for.
   const everyTestFile = discoverTestFiles(repoRoot, allPackages);
   const result = selectTests(files, { closureOf, testFiles, repoRoot, testPackages, referenceCandidates: everyTestFile });
   return { result, closureOf, everyTestFile };
