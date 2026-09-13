@@ -580,9 +580,17 @@ export function milestoneRefusal(milestones) {
 export function boardingFor(argv) {
   // #1322: a filer who writes `--label=ready` means `--ready`. Read as anything else it came out `backlog`
   // AND `ready` (#1315), a row saying "take me" and "not yet" at once.
-  const ready = argv.includes(READY_FLAG) || labelValuesFromArgv(argv).includes("ready");
+  const ready = argv.includes(READY_FLAG) || labelValuesFromArgv(argv).some((label) => sameLabel(label, "ready"));
   return ready ? { label: "ready", status: "Ready" } : { label: "backlog", status: "Backlog" };
 }
+
+/**
+ * #1322 review (worker-capture): `gh` resolves a `--label` name CASE-INSENSITIVELY (`strings.EqualFold`,
+ * api/queries_repo.go at v2.100.0), so `--label=Ready` IS the `ready` label. Every comparison here folds case,
+ * or `Ready` boards Backlog and `Lane:Orchestrator` files unrefused.
+ * @param {string} a @param {string} b
+ */
+const sameLabel = (a, b) => a.toLowerCase() === b.toLowerCase();
 
 /** The two board labels, which `boardAndVerify` applies after the Status move (#844) and nothing else may. */
 const BOARD_LABELS = Object.freeze(["backlog", "ready"]);
@@ -632,7 +640,7 @@ export function withoutLabels(argv, drop) {
   let next = 0;
   for (const { start, span, values } of labelOccurrences(argv)) {
     out.push(...argv.slice(next, start));
-    const kept = values.filter((value) => !drop.includes(value));
+    const kept = values.filter((value) => !drop.some((dropped) => sameLabel(dropped, value)));
     if (kept.length === values.length) out.push(...argv.slice(start, start + span));
     else if (kept.length > 0) out.push("--label", kept.join(","));
     next = start + span;
@@ -657,14 +665,15 @@ export function withoutLabels(argv, drop) {
  */
 export function labelRefusal(argv, laneLabels) {
   const given = labelValuesFromArgv(argv);
-  const stray = given.filter((label) => label.startsWith("lane:") && !laneLabels.includes(label));
+  const stray = given.filter((label) => sameLabel(label.slice(0, "lane:".length), "lane:")
+    && !laneLabels.some((derived) => sameLabel(derived, label)));
   if (stray.length > 0) {
     return `row-file: REFUSING to file -- --label ${stray.join(", ")} is not the lane this row's Region derives `
       + `(${laneLabels.join(", ")}). The lane label is derived from docs/lane-ownership.json, the file the merge `
       + "guard reads (#883), so a typed lane that differs would send the row to a lane that cannot merge it. Fix "
       + "the Region, or drop the --label. Nothing was filed.";
   }
-  if (boardingFor(argv).label === "ready" && given.includes("backlog")) {
+  if (boardingFor(argv).label === "ready" && given.some((label) => sameLabel(label, "backlog"))) {
     return "row-file: REFUSING to file -- this filing says both `ready` and `backlog`. `--ready` (or "
       + "`--label ready`) boards it Ready; no board flag boards it Backlog. Give one. Nothing was filed.";
   }
