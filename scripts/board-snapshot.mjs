@@ -43,7 +43,8 @@ import { READY_LABEL } from "./claim-labels.mjs";
 // #1275: the scoped half, PURE OF `gh` -- see that file's header. The constants live there and are re-exported above,
 // because a constant that file imported from here would carry this file's `token` into its closure.
 import { PROJECT_OWNER, PROJECT_NUMBER, SNAPSHOT_DIR, snapshotStamp, graphqlErrors, describeGraphqlErrors,
-  graphqlErrorFromFailedRun, persistSnapshot, touchedIssues, snapshotRoute, withScopedSnapshot, forgetScopedSnapshots }
+  graphqlErrorFromFailedRun, persistSnapshot, touchedIssues, snapshotRoute, withScopedSnapshot, forgetScopedSnapshots,
+  scopedStatusOf }
   from "./board-snapshot-scope.mjs";
 
 export { PROJECT_OWNER, PROJECT_NUMBER, SNAPSHOT_DIR, snapshotStamp } from "./board-snapshot-scope.mjs";
@@ -369,6 +370,34 @@ export function writeBoardSnapshot({
 }
 
 /**
+ * #852's validity rule, ONE COPY: a held snapshot licenses reuse while its file is still on disk and inside the bound.
+ * Shared by `withBoardSnapshot` and `scopedStatus` (#1360), whose read the move must be able to reuse.
+ * @param {Date} at @param {(path: string) => boolean} exists
+ * @returns {(snapshot: { path: string, takenAt: Date } | null | undefined) => boolean}
+ */
+function snapshotStillValid(at, exists) {
+  return (snapshot) => snapshot != null && exists(snapshot.path)
+    && at.getTime() - snapshot.takenAt.getTime() < SNAPSHOT_MAX_AGE_MS;
+}
+
+/**
+ * #1360: ISSUE N'S CURRENT STATUS, READ BY THE SCOPED SNAPSHOT ITS MOVE WOULD TAKE, with the same `gh` request and
+ * validity rule `withBoardSnapshot`'s scoped route uses, so the move that follows reuses this read (see
+ * `scopedStatusOf`). THROWS when the read fails, so `settleClosedStatus` refuses with the cause.
+ * @param {number} issueNumber
+ * @param {{ run?: typeof defaultRun, log?: (line: string) => void, exists?: (path: string) => boolean,
+ *   writeFile?: (path: string, data: string) => void, mkdir?: (path: string) => void, now?: () => Date }} [deps]
+ * @returns {string | null}
+ */
+export function scopedStatus(issueNumber, deps = {}) {
+  const { run = defaultRun, log = (line) => process.stderr.write(`${line}\n`), exists = existsSync, writeFile, mkdir,
+    now = () => new Date() } = deps;
+  const at = now();
+  return scopedStatusOf(issueNumber, { request: (args) => run("gh", args), log, at, now,
+    maxAgeMs: SNAPSHOT_MAX_AGE_MS, stillValid: snapshotStillValid(at, exists), writeFile, mkdir });
+}
+
+/**
  * Wrap a board-mutating call so it can only run once a real snapshot has been written. `mutate` is never
  * invoked if `writeBoardSnapshot` throws -- that is the whole guarantee this file exists to give, and
  * `board-snapshot.test.ts`'s mutation check proves it by making the write fail and asserting `mutate` was
@@ -396,9 +425,7 @@ export function withBoardSnapshot(mutate, deps = {}) {
   const issues = touchedIssues(touches);
   const now = snapshotDeps.now ?? (() => new Date());
   const at = now();
-  /** @param {{ path: string, takenAt: Date } | null | undefined} snapshot */
-  const stillValid = (snapshot) => snapshot != null && exists(snapshot.path)
-    && at.getTime() - snapshot.takenAt.getTime() < SNAPSHOT_MAX_AGE_MS;
+  const stillValid = snapshotStillValid(at, exists);
   const held = processSnapshot;
   // #852 REUSE RE-READS THE DISK RATHER THAN TRUSTING A REMEMBERED PATH.
   //
