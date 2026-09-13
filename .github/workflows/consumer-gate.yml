@@ -22,8 +22,8 @@ jobs:
           fetch-depth: 0
       - name: Refuse a pin that is not an ancestor of the commit this run is executing at
         run: |
-          if ! git merge-base --is-ancestor 4435ae625954b88bb76db59ef803e6b12efec2ea "${{ github.sha }}"; then
-            echo "::error::consumer-gate.yml's uses: step is pinned to 4435ae625954b88bb76db59ef803e6b12efec2ea, which is not an"
+          if ! git merge-base --is-ancestor 82ce9e09e013f41462af8542662b8a02fc6e883a "${{ github.sha }}"; then
+            echo "::error::consumer-gate.yml's uses: step is pinned to 82ce9e09e013f41462af8542662b8a02fc6e883a, which is not an"
             echo "::error::ancestor of the commit this run is executing at, ${{ github.sha }} (ref"
             echo "::error::${{ github.ref_name }}, ${{ github.event_name }}) -- regenerate (node"
             echo "::error::scripts/generate-consumer-gate.mjs) against a commit in this history"
@@ -31,9 +31,9 @@ jobs:
           fi
       - name: Refuse a pin that predates a change to what it pins
         run: |
-          changed=$(git diff --name-only --no-renames 4435ae625954b88bb76db59ef803e6b12efec2ea "${{ github.sha }}" -- README.md scripts/generate-consumer-gate.mjs)
+          changed=$(git diff --name-only --no-renames 82ce9e09e013f41462af8542662b8a02fc6e883a "${{ github.sha }}" -- README.md scripts/generate-consumer-gate.mjs)
           if [ -n "$changed" ]; then
-            echo "::error::consumer-gate.yml is pinned to 4435ae625954b88bb76db59ef803e6b12efec2ea, but this changed since:"
+            echo "::error::consumer-gate.yml is pinned to 82ce9e09e013f41462af8542662b8a02fc6e883a, but this changed since:"
             echo "::error::$changed"
             echo "::error::regenerate (node scripts/generate-consumer-gate.mjs) and dispatch again"
             exit 1
@@ -47,7 +47,7 @@ jobs:
       pull-requests: write         # for the PR comment below; omit it and the report still runs, only quieter
     steps:
       - uses: actions/checkout@v4
-      - uses: DanBeckDev/a11y-witness@4435ae625954b88bb76db59ef803e6b12efec2ea
+      - uses: DanBeckDev/a11y-witness@82ce9e09e013f41462af8542662b8a02fc6e883a
         # Pin it: @main moves under you. Use the full commit SHA if your CI must not change.
         id: a11ign
         with:
