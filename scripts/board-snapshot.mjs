@@ -24,7 +24,7 @@ import { execFileSync } from "node:child_process";
 // #1219: PURE, and deliberately in its own module -- see that file's header. Importing it here costs
 // nothing; importing THIS file from a test costs a `token` requirement the acceptance job cannot meet.
 import { statusContradictions, statusCensus } from "./board-status-health.mjs";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
@@ -34,6 +34,33 @@ import { READY_LABEL } from "./claim-labels.mjs";
 export const PROJECT_OWNER = REPO.split("/")[0];
 export const PROJECT_NUMBER = 2;
 export const SNAPSHOT_DIR = "runs/board-snapshots";
+
+/**
+ * #852: ONE SWEEP PER PROCESS, AND THE BOUND IS WHAT MAKES THAT SAYABLE.
+ *
+ * Every Status move used to sweep the whole board first. Measured on this branch with an injected `run`,
+ * against a 257-item board (3 pages at `items(first: 100)`):
+ *
+ *   1 move   ->  3 board pages, 1 item-edit, 5 gh calls
+ *   3 moves  ->  9 board pages, 3 item-edits, 15 gh calls
+ *   20 moves -> 60 board pages, 20 item-edits, 100 gh calls
+ *
+ * The page count grows with the board, so every row added made every future claim more expensive. On
+ * 2026-09-13 the org exhausted its 5,000-point GraphQL budget while REST still had 4,641 left, and this
+ * is the largest GraphQL consumer in the claim path -- the budget line the row said to wait for.
+ *
+ * THE TRADE, STATED RATHER THAN HIDDEN. The snapshot now describes the board before the FIRST mutation of
+ * this process, not before each one, so an operator reading it as "the state immediately before THIS
+ * change" is reading more than it says. **The age bound is what keeps the weaker claim precise**: after
+ * five minutes the next mutation takes a fresh sweep, so the record is never more than five minutes older
+ * than the change it covers, and the file and the log line both say which. #399's guarantee -- that a
+ * mutation cannot proceed without a real snapshot on disk -- is untouched: a failed write still throws
+ * before `mutate` is called.
+ */
+export const SNAPSHOT_MAX_AGE_MS = 5 * 60 * 1000;
+
+/** @type {{ path: string, takenAt: Date } | null} The snapshot this process has already taken. */
+let processSnapshot = null;
 
 /** @type {(cmd: string, args: string[]) => string} */
 const defaultRun = (cmd, args) => execFileSync(cmd, args, { encoding: "utf8" });
@@ -390,6 +417,11 @@ export function writeBoardSnapshot({
   const path = `${SNAPSHOT_DIR}/${snapshotStamp(takenAt)}.json`;
   const snapshot = {
     takenAt: takenAt.toISOString(),
+    // #852: SAYS WHAT IT IS, so a reader cannot infer the stronger guarantee from its presence. One
+    // sweep per process now covers every board mutation that process makes within SNAPSHOT_MAX_AGE_MS,
+    // so this file is the board before the FIRST of them -- not before each.
+    takenBefore: "the first board mutation of this process; later mutations within "
+      + `${SNAPSHOT_MAX_AGE_MS / 1000}s reuse this snapshot rather than taking their own (#852)`,
     project: { owner: PROJECT_OWNER, number: PROJECT_NUMBER },
     items,
   };
@@ -418,14 +450,52 @@ export function writeBoardSnapshot({
  * @param {() => T} mutate the actual board-mutating call
  * @param {{ run?: typeof defaultRun, fetchReady?: typeof fetchReadyIssueNumbers,
  *   writeFile?: (path: string, data: string) => void, mkdir?: (path: string) => void, now?: () => Date,
- *   log?: (line: string) => void, excludeIssueNumber?: number | null }} [deps]
+ *   log?: (line: string) => void, exists?: (path: string) => boolean,
+ *   excludeIssueNumber?: number | null }} [deps]
  * @returns {T}
  */
 export function withBoardSnapshot(mutate, deps = {}) {
-  const { log = (line) => process.stdout.write(`${line}\n`), ...snapshotDeps } = deps;
-  const path = writeBoardSnapshot(snapshotDeps);
+  const { log = (line) => process.stdout.write(`${line}\n`), exists = existsSync, ...snapshotDeps } = deps;
+  const now = snapshotDeps.now ?? (() => new Date());
+  const at = now();
+  const held = processSnapshot;
+  // #852 REUSE RE-READS THE DISK RATHER THAN TRUSTING A REMEMBERED PATH.
+  //
+  // worker-judge's blocker on #1281, driven: the snapshot was written, `rm -rf runs/` took it, and the
+  // next mutation proceeded with nothing behind it. `runs/` is gitignored, so `git clean -xdf` removes
+  // it too, and `rm -rf runs/` appears three times in this repo's own comments as a scenario worth
+  // defending a corpus from. WITHOUT THIS CHECK THE GUARANTEE MOVES FROM MUTATION TIME TO SWEEP TIME --
+  // true of a process's first mutation and false of every reused one, which is not what #399 promises.
+  if (held !== null && exists(held.path)
+    && at.getTime() - held.takenAt.getTime() < SNAPSHOT_MAX_AGE_MS) {
+    log(`board-snapshot: reusing ${held.path}, taken ${describeAge(at, held.takenAt)} before this `
+      + "mutation -- one sweep per process (#852)");
+    return mutate();
+  }
+  const path = writeBoardSnapshot({ ...snapshotDeps, now });
+  processSnapshot = { path, takenAt: at };
   log(`board-snapshot: wrote ${path} before mutating`);
   return mutate();
+}
+
+/**
+ * How long ago, in the words the log line needs. Whole seconds: a snapshot's age is never sub-second.
+ * @param {Date} at @param {Date} takenAt
+ */
+function describeAge(at, takenAt) {
+  // SUB-SECOND AGES IN MILLISECONDS: rounding two quick mutations to `0s` reads as "no time passed"
+  // rather than "under a second", and the age is the field a reader checks against the change it covers.
+  const ms = at.getTime() - takenAt.getTime();
+  return ms < 1000 ? `${ms}ms` : `${Math.round(ms / 1000)}s`;
+}
+
+/**
+ * FORGET THE PROCESS'S SNAPSHOT. For tests, and named as such: module state that survives between cases
+ * is how one test's arrangement becomes another's silent precondition, and every assertion about "the
+ * first mutation" here depends on which mutation was first.
+ */
+export function forgetProcessSnapshot() {
+  processSnapshot = null;
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
