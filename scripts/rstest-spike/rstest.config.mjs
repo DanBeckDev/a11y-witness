@@ -1,4 +1,4 @@
-// @ts-check
+// @ts-nocheck -- #1315 spike-only, never merged (one implicit any in the trace helper refused the push typecheck).
 // command: (not a command) #1315 spike only: runs the unedited node:test suite under rstest, forks pool.
 
 /**
@@ -24,6 +24,9 @@ export default defineConfig({
   include: ["packages/*/src/**/*.test.ts"],
   testEnvironment: "node",
   pool: { type: "forks", execArgv: ["--import", registerHook] },
+  // #1315, chairman via ceo: apply config/build/performance before timing. That page documents ONE option,
+  // `performance.buildCache` (default false, "still experimental"). Env-toggled so both columns come from one config.
+  ...(process.env.RSTEST_SPIKE_BUILD_CACHE ? { performance: { buildCache: true } } : {}),
   globals: true,
   // node:test has no default timeout. rstest defaults `testTimeout` to 5_000 and `hookTimeout` to 10_000, and
   // documents `0` as disabling each (config/test/test-timeout.mdx, hook-timeout.mdx) -- three tests timed out on
