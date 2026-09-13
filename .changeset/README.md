@@ -35,7 +35,8 @@ large the diff.
 major is released as `minor`, which is semver's own rule for 0.x. A never-published package (0.0.0) has
 exactly `minor` as its highest pending bump, so the first publish is 0.1.0. `changeset-zero-major.test.ts`
 refuses both breaches from the real files. Measured in release dry run 34776105178: two pending `major`
-entries over 0.1.0 manifests would have published 1.0.0.
+entries over 0.1.0 manifests would have published 1.0.0. The fix's own dry run, 34779638909 on `26c1d929`,
+reached the release gate; the gate refused at that run; the versions are read from the run on this commit.
 
 ## Config choices worth knowing
 
