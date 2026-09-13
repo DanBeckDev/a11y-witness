@@ -34,14 +34,15 @@ whether they are followed.
   from ceo.
 - A product PR opens as a DRAFT and is marked ready only when the reviewer writes "convinced";
   docs-and-tests PRs open ready. Nobody merges by hand.
-- **A settled draft with green checks and no verdict is reviewed by whichever engineer is free, unasked.**
-  The clock still names a reviewer when a draft has no verdict at its head — this means you need not wait
-  for that message, not that it stops. **So an engineer with no row in build and a reviewable draft open
-  is NOT idle: reading it is the work.** The reason is a single point of failure rather than a
-  preference — on 2026-09-12 every verdict from 14:02Z onward was engineer-to-engineer, and it worked
-  only because the clock named a reviewer each time, so between wake-ups a settled draft could wait
-  thirty minutes for somebody to be told. Twice that night a verdict arrived before the message did,
-  which is this rule happening before it was one.
+- **A settled draft with green checks and no verdict is reviewed by the external reviewer (`by reviewer:`);
+  an engineer reviews only when ceo names one** — a reviewer stalled past a re-prompt, or a product path
+  ceo wants two eyes on. ceo spot-checks the reviewer's first five verdicts and one in five after. The
+  chairman's instruction, ruled by ceo on 2026-09-13 (#1394) and effective in ceo's heartbeat v10 (#912,
+  comment 5655501080). An engineer with no row in build claims the next Ready row; an open draft is not
+  their work unless ceo has named them.
+  *A record, not an instruction:* from 2026-09-12 until that ruling, a free engineer reviewed settled
+  drafts unasked, because every verdict from 14:02Z that day was engineer-to-engineer and a draft could
+  wait thirty minutes between wake-ups for the clock to name someone.
 
 ## Assertions
 
