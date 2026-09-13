@@ -36,8 +36,9 @@ const EMITTED_STRUCTURE = ["headings", "landmarks", "formFields", "links", "grap
 // `routeChange`, `navigatedOnSubmit` and `postSubmitNames` added architecture-audit.md §5, item 2: all
 // three were on the wire (capture-core.mjs's own `CapturedInteraction` typedef already named them) while
 // this published type described a capture as though they did not exist.
+// `leftSite` added by #1363: the worker records where an activation took the browser off the page's site.
 const EMITTED_INTERACTION = ["controls", "stateChanges", "formChanges", "postSubmitFields", "focusOrder",
-  "routeChange", "navigatedOnSubmit", "postSubmitNames"];
+  "routeChange", "navigatedOnSubmit", "postSubmitNames", "leftSite"];
 // The RESULT envelope, same reason: `media`, `observed` and `environment` were all on the wire (the first
 // two in capture-core.mjs's own `Capture` typedef, the third appended by every `server.mjs` response)
 // while this type omitted them, which is what made `cli.ts` cast around `environment` instead of the
@@ -60,6 +61,7 @@ test("CaptureInteraction declares every probe a capture emits, focusOrder includ
   const declared: Required<CaptureInteraction> = {
     controls: [], stateChanges: [], formChanges: [], postSubmitFields: [], focusOrder: [],
     routeChange: {}, navigatedOnSubmit: { checked: false }, postSubmitNames: [],
+    leftSite: { control: "", kind: null, phase: "sweep", from: "", to: null, evidence: "" },
   };
   assert.deepEqual(Object.keys(declared).sort(), [...EMITTED_INTERACTION].sort());
 });
