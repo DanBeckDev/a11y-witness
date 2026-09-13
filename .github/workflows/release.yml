@@ -91,6 +91,17 @@ jobs:
   # scripts/generate-consumer-gate.mjs`) and commit if that one fires.
   consumer-gate:
     uses: ./.github/workflows/consumer-gate.yml
+    # #1251. A called workflow may not request more than its caller grants, and this repository's default
+    # GITHUB_TOKEN is read-only. consumer-gate.yml is generated from README.md's Quickstart fence, which on
+    # 2026-09-09 gained `pull-requests: write` for the Action's optional PR-comment step -- so from that day
+    # every dispatch of THIS file failed at validation ("The nested job 'a11y' is requesting
+    # 'pull-requests: write', but is only allowed 'pull-requests: none'"), before a single job existed, and
+    # nothing on the PR path could see it because nothing on the PR path calls release.yml. The grant
+    # lives HERE, not in the generator: the generated file must stay exactly what a reader copies.
+    # `release-safety.test.ts` pins that every permission a called job requests is granted on its caller.
+    permissions:
+      contents: read
+      pull-requests: write
 
   release:
     needs: [action-smoke, capture-regression, consumer-gate]
