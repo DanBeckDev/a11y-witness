@@ -63,8 +63,10 @@ const RETIRED_PREFIXES = new Set(["lead", "dispatcher", "pm", "measure", "market
  * the row is a record somebody wrote, and a branch prefix is an inference from a naming habit. A list that
  * flattened them would read as 93 attributions when it holds two kinds of claim.
  *
- * @param {{ branch: string, row: { number: number, state: string, labels: string[] } | null }} input
- * @returns {{ owner: string | null, source: "row-label" | "retired-role" | "unknown" }}
+ * @param {{ branch: string, row: { number: number, state: string, labels: string[] } | null,
+ *           timeline?: { event: string, label?: { name: string } }[] }} input
+ * @returns {{ owner: string | null,
+ *             source: "row-label" | "claim-history" | "retired-role" | "unknown" }}
  */
 export function ownerOfBranch({ branch, row, timeline = [] }) {
   const fromRow = row === null ? null : sessionFromLabels(row.labels);
@@ -82,7 +84,8 @@ export function ownerOfBranch({ branch, row, timeline = [] }) {
  * commits are either landed elsewhere or abandoned), and one naming NO row cannot be traced at all.
  *
  * @param {{ branch: string, ahead: number, lastCommit: { sha: string, at: string },
- *           row: { number: number, state: string, labels: string[] } | null }} input
+ *           row: { number: number, state: string, labels: string[] } | null,
+ *           timeline?: { event: string, label?: { name: string } }[] }} input
  */
 export function branchFacts({ branch, ahead, lastCommit, row, timeline = [] }) {
   const rowNumber = rowNumberFromBranch(branch);
