@@ -15,8 +15,10 @@
  * - **`forks`, and isolated.** `isolate: false` shares module evaluation and process state across files, and
  *   `threads` has no `process.chdir` and a thread-local `process.exit`. In this suite 92 test files spawn
  *   processes (50 of them git or gh), 24 write `process.env`, and 11 use `process.exit` or signals.
- * - **No build cache.** `performance.buildCache` measured 64.0 s cold and 63.9 s warm against 63.9 s without
- *   it: the build is under 1% of the run.
+ * - **A build cache in CI only (#1319).** Locally `performance.buildCache` measured 64.0 s cold and 63.9 s warm
+ *   against 63.9 s without it, because the build is under 1% of the run (#1315), so it stays off here. The chairman
+ *   asked for it in CI, where `reusable-build-test.yml` persists it with `actions/cache`, prints HIT or MISS, and fails
+ *   the job when a run leaves it empty. rstest writes it under `node_modules/.cache/rstest-<project-name>`.
  * - **No coverage block here.** Coverage is step 4 of the adoption, not this one.
  */
 import { defineConfig } from "@rstest/core";
@@ -25,6 +27,16 @@ import { fileURLToPath } from "node:url";
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const registerHook = fileURLToPath(new URL("./register-node-test-alias.mjs", import.meta.url));
 const walkScope = fileURLToPath(new URL("../walk-scope.mjs", import.meta.url));
+
+/**
+ * #1319: rstest's build cache is on exactly when `CI` names a CI run. GitHub Actions sets `CI=true`. An unset, empty or
+ * `false` value is a local run, where #1315 measured no benefit.
+ * @param {Record<string, string | undefined>} env
+ * @returns {boolean}
+ */
+function buildCacheInCi(env) {
+  return env.CI !== undefined && env.CI !== "" && env.CI !== "false";
+}
 
 export default defineConfig({
   root,
@@ -46,4 +58,5 @@ export default defineConfig({
   // three tests timed out on the spike's first run.
   testTimeout: 0,
   hookTimeout: 0,
+  performance: { buildCache: buildCacheInCi(process.env) },
 });
