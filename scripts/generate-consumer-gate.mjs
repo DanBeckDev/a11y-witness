@@ -80,28 +80,60 @@ export const OUT = `${REPO}.github/workflows/consumer-gate.yml`;
  *  several code blocks in README.md, and the one whose ref gets pinned. */
 const ACTION_REF = "DanBeckDev/a11y-witness";
 
-/** Top-level keys `buildWorkflowHeader`/`buildConsumerGateWorkflow` wrap themselves -- a fence carrying
- *  either of its own produces a DUPLICATE key once spliced in. */
+/** Top-level keys `buildWorkflowHeader` wraps itself -- a fence carrying either of its own produces a
+ *  DUPLICATE key once spliced in. */
 const WRAPPED_TOP_LEVEL_KEYS = ["on", "name"];
+
+/** The line `buildConsumerGateWorkflow` splices `check-pin` in after. The fence must BEGIN with it. */
+const JOBS_ROOT = "jobs:\n";
 
 /**
  * #796: A DUPLICATE on:/name: DID NOT ERROR -- IT SILENTLY DROPPED A WHOLE JOB. Measured live: this
  * repo's own README.md briefly carried a top-level `on: pull_request` above its `jobs:` line, and
- * `buildConsumerGateWorkflow`'s `jobsYaml.replace(/^jobs:\n/, ...)` anchors to the STRING's own start
- * (no `/m` flag) -- a fence that does not literally BEGIN "jobs:\n" makes that splice a silent no-op, so
- * `check-pin` vanished from the generated file with no error at all. A guard that produces nothing where
- * it should refuse is worse than no guard, so this is checked here, before any splicing, rather than
- * left for a diff to eventually notice.
+ * `buildConsumerGateWorkflow`'s splice anchors to the STRING's own start -- a fence that does not
+ * literally BEGIN "jobs:\n" made that splice a silent no-op, so `check-pin` vanished from the generated
+ * file with no error at all. A guard that produces nothing where it should refuse is worse than no guard,
+ * so this is checked here, before any splicing, rather than left for a diff to eventually notice.
+ *
+ * #1256: A LIST OF TWO KEYS WAS THE WRONG SHAPE FOR THIS GUARD. It named `on` and `name`, the keys that
+ * also DUPLICATE, but the splice fails for anything above `jobs:`: measured on `9a6c3c6e`, a fence
+ * opening `permissions:`, `env:` or a bare `# comment` was extracted with no error, and generated a
+ * workflow with no `check-pin` job and a `needs: [check-pin]` still pointing at it. So the rule is now
+ * the splice's own precondition -- the fence opens with `jobs:` -- plus no other top-level line below
+ * it, where a trailing `permissions:` would land in the generated workflow as a block the reader never
+ * wrote into their job (this file adds no `permissions:` of its own, for the reason
+ * `buildConsumerGateWorkflow` gives).
  * @param {string} jobsYaml
  */
-function refuseWrappedTopLevelKey(jobsYaml) {
-  const found = WRAPPED_TOP_LEVEL_KEYS.find((key) => new RegExp(`^${key}:`, "m").test(jobsYaml));
-  if (!found) return;
-  throw new Error(`${README_PATH}'s Quickstart fence carries its own top-level "${found}:" key -- this `
-    + `generator wraps ${WRAPPED_TOP_LEVEL_KEYS.map((k) => `"${k}:"`).join(" and ")} itself `
-    + "(buildWorkflowHeader), so a second one produces a duplicate YAML key and silently drops the "
-    + "check-pin job rather than failing loudly. The fence must be a bare `jobs:`-rooted fragment -- what "
+function refuseAnythingButJobsAtTopLevel(jobsYaml) {
+  const [first, ...rest] = jobsYaml.split("\n");
+  const offender = jobsYaml.startsWith(JOBS_ROOT) ? rest.find((line) => /^[^\s#]/.test(line)) : first;
+  if (offender === undefined) return;
+  throw new Error(`${README_PATH}'s Quickstart fence carries ${describeTopLevelLine(offender)} -- `
+    + `${whyTopLevelLineIsRefused(offender)}. The fence must be a bare \`jobs:\`-rooted fragment -- what `
     + "a reader adds to a workflow they already have, never a standalone one.");
+}
+
+/** @param {string} line @returns {string | null} the key a column-0 `key:` line declares */
+function topLevelKeyOf(line) {
+  return /^([^\s:#]+):/.exec(line)?.[1] ?? null;
+}
+
+/** @param {string} line */
+function describeTopLevelLine(line) {
+  const key = topLevelKeyOf(line);
+  return key ? `its own top-level "${key}:" key` : `the top-level line ${JSON.stringify(line)}`;
+}
+
+/** @param {string} line */
+function whyTopLevelLineIsRefused(line) {
+  const splice = "check-pin is spliced in directly after the fence's opening `jobs:` line, so a line above "
+    + "it drops check-pin silently and a top-level key below it lands in the generated workflow unreviewed";
+  const key = topLevelKeyOf(line);
+  return key && WRAPPED_TOP_LEVEL_KEYS.includes(key)
+    ? `this generator wraps "on:" and "name:" itself (buildWorkflowHeader), so a second one is a duplicate `
+      + `YAML key; and ${splice}`
+    : splice;
 }
 
 /**
@@ -116,7 +148,7 @@ export function extractDocumentedJobsBlock(markdown) {
   for (const m of fences) {
     if (m[1].includes(`uses: ${ACTION_REF}`)) {
       const jobsYaml = m[1].trimEnd();
-      refuseWrappedTopLevelKey(jobsYaml);
+      refuseAnythingButJobsAtTopLevel(jobsYaml);
       return jobsYaml;
     }
   }
@@ -222,7 +254,15 @@ export function buildConsumerGateWorkflow(jobsYaml) {
   // job is spliced in right after it, and `needs: [check-pin]` right after the extracted job's own name
   // line -- both string operations, never a re-wrap of the whole block, which is the double-key bug this
   // comment exists to stop being reintroduced.
-  const withCheckPin = jobsYaml.replace(/^jobs:\n/, `jobs:\n${checkPin}`)
+  //
+  // #1256: THE SPLICE REFUSES A BLOCK IT CANNOT ANCHOR. It was `replace(/^jobs:\n/, ...)`, which succeeds
+  // on zero matches, so a block that did not open with `jobs:` generated a workflow with no check-pin and
+  // no error -- a caller that skipped `extractDocumentedJobsBlock`'s guard met the silent drop directly.
+  if (!jobsYaml.startsWith(JOBS_ROOT)) {
+    throw new Error("buildConsumerGateWorkflow: the block does not open with `jobs:`, so check-pin has "
+      + `nowhere to be spliced in -- it starts ${JSON.stringify(jobsYaml.split("\n")[0])} (#796, #1256)`);
+  }
+  const withCheckPin = `${JOBS_ROOT}${checkPin}${jobsYaml.slice(JOBS_ROOT.length)}`
     .replace(new RegExp(`^(  ${jobName}:\\n)`, "m"), `$1    needs: [check-pin]\n`);
 
   return `${header}\n${withCheckPin}\n${buildVerifyReportJob(jobName)}\n`;
