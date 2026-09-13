@@ -604,9 +604,20 @@ function gitProcessCount() {
  *
  * `gh api rate_limit` DOES NOT COUNT against the limit, which is the only reason this is free to print.
  *
+ * `run` is REQUIRED (#1405). It was a plain `execFileSync("gh", ...)` and `render()` called this on every table
+ * it drew, so each of `queue-table.test.ts`'s twelve renders made two live calls -- 24 per local run, spending the
+ * shared pools this line reports. A defaulted `run` would be those two calls again, so none is given; `collect()`
+ * hands in `ghHeaders`, and a test hands in its own.
+ *
+ * @param {{run?: (args: string[]) => string}} [deps] `run` returns a `gh ... -i` call's raw output, and throws with
+ *   the response on `error.stdout` when gh exits non-zero, as `execFileSync` does
  * @returns {{core: Pool | null, graphql: Pool | null} | null}
  */
-export function apiBudget() {
+export function apiBudget({ run } = {}) {
+  if (typeof run !== "function") {
+    throw new Error("apiBudget: no run given -- it is required, because a defaulted one is two live gh calls "
+      + "(#1405: render() reached them on every run of queue-table.test.ts, 24 calls a run).");
+  }
   // TWO POOLS, BOTH SHARED, AND ONLY THE HEADERS TELL THE TRUTH.
   //
   // `gh api rate_limit` reports zero used, always, for these tokens. Measured 2026-09-09: after five real
@@ -624,10 +635,19 @@ export function apiBudget() {
   //
   // Each read costs one call of its own kind, which is the cheapest honest price: the headers come back on
   // a request that has to be made to learn anything at all.
-  const core = poolFromHeaders(["api", `repos/${REPO}`, "-i", "--jq", ".name"]);
-  const graphql = poolFromHeaders(["api", "graphql", "-f", "query=query { viewer { login } }", "-i"]);
+  const core = poolFromHeaders(["api", `repos/${REPO}`, "-i", "--jq", ".name"], run);
+  const graphql = poolFromHeaders(["api", "graphql", "-f", "query=query { viewer { login } }", "-i"], run);
   return core === null && graphql === null ? null : { core, graphql };
 }
+
+/**
+ * The live `run` that `collect()` hands `apiBudget`. Not counted in `ghCalls`, as it never was: the table's own
+ * cost is what it spent learning the queue, and reading the meter is reported beside it, not inside it.
+ *
+ * @param {string[]} args
+ * @returns {string}
+ */
+export const ghHeaders = (args) => execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 
 /**
  * One pool, read from the `X-Ratelimit-*` headers of a real call. `null` when the call or the parse fails
@@ -635,9 +655,10 @@ export function apiBudget() {
  * exists to keep apart.
  *
  * @param {string[]} args
+ * @param {(args: string[]) => string} run
  * @returns {Pool | null}
  */
-function poolFromHeaders(args) {
+function poolFromHeaders(args, run) {
   // THE HEADERS COME BACK ON THE 403, AND THE CALL FAILS EXACTLY WHEN THE POOL IS EXHAUSTED. Measured
   // 2026-09-09: with graphql at 0 of 5000, `gh api graphql -i` exits non-zero -- so a plain `ask()` here
   // returned null and the line read `graphql UNREADABLE` during the one outage it exists to report.
@@ -647,7 +668,7 @@ function poolFromHeaders(args) {
   // a rate-limited response like any other, so the answer is there either way.
   let raw;
   try {
-    raw = execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    raw = run(args);
   } catch (error) {
     raw = /** @type {{stdout?: string}} */ (error).stdout ?? "";
   }
@@ -903,18 +924,23 @@ export function renderHost(host, previousPageouts = null) {
  * Its `incomplete` is section 5's unchanged: a budget we could not read is reported in the line itself
  * and does not make the host section incomplete, because the host was read fine.
  *
+ * The budget is HANDED in, never read here (#1405): `collect()` reads it, so drawing a table calls no `gh`.
+ *
  * @param {{lines: string[], incomplete: boolean}} host
+ * @param {ReturnType<typeof apiBudget>} budget
+ * @param {number} spent
  * @returns {{lines: string[], incomplete: boolean}}
  */
-function withBudget(host) {
-  return { lines: [...host.lines, renderBudget(apiBudget(), ghCallsMade())], incomplete: host.incomplete };
+function withBudget(host, budget, spent) {
+  return { lines: [...host.lines, renderBudget(budget, spent)], incomplete: host.incomplete };
 }
 
 /** @param {{trunk: any, prs: any[] | null, merged: any[] | null, now: Date, fetched?: boolean,
  *   required?: string[] | null, host?: ReturnType<typeof hostState> | null,
- *   branchCensus?: { branches: string[], remoteCount: number } | null}} data */
+ *   branchCensus?: { branches: string[], remoteCount: number } | null,
+ *   budget?: ReturnType<typeof apiBudget>, spent?: number}} data */
 export function render({ trunk, prs, merged, now, fetched = true, required = null, host = null,
-  branchCensus = null }) {
+  branchCensus = null, budget = null, spent = 0 }) {
   const sections = [
     { heading: "1. TRUNK", body: renderTrunk(trunk) },
     { heading: "2. OPEN PRs  (behind is COUNTED, never read off mergeStateStatus)", body: renderOpenPRs(prs) },
@@ -932,7 +958,7 @@ export function render({ trunk, prs, merged, now, fetched = true, required = nul
     },
     {
       heading: "5. THIS HOST  (it was the bottleneck on 2026-09-09 and nothing said so)",
-      body: withBudget(renderHost(host)),
+      body: withBudget(renderHost(host), budget, spent),
     },
     {
       heading: "6. BRANCH PREFIXES  (#790 -- a REAL branch can exist with no owner prefix at all, and only "
@@ -982,8 +1008,10 @@ export function collect(now = new Date()) {
       : null;
     return prRow(pr, behind, now);
   });
-  return { trunk, prs, merged: recentlyMerged(), now, fetched, required: requiredContexts(),
+  const data = { trunk, prs, merged: recentlyMerged(), now, fetched, required: requiredContexts(),
     host: hostState(), branchCensus: ask(() => fetchRemoteBranchesChecked()) };
+  // The budget is read LAST, so `spent` counts every call above it -- as it did when render() read it.
+  return { ...data, budget: apiBudget({ run: ghHeaders }), spent: ghCallsMade() };
 }
 
 function main() {
