@@ -1051,7 +1051,24 @@ test("CORPUS POSITIVE SHAPE: the same orphan one index later IS F55, so the fix 
   assert.match(found[0].evidence, /Delivery instructions/);
 });
 
-test("`checked: false` is 'cannot say', never 'no findings' -- must never read as a clean zero", () => {
+// #1255: THIS TEST'S NAME USED TO CLAIM A DISCRIMINATION ITS ASSERTION CANNOT MAKE.
+//
+// It read "`checked: false` is 'cannot say', never 'no findings' -- must never read as a clean zero",
+// and it asserts ZERO findings. The very next test asserts a confirmed, empty log gives ZERO too.
+// Driven against the real recorded artefact, the two are byte-identical here:
+//
+//   unconfirmed (checked:false + why)  ->  []
+//   confirmed, empty log               ->  []      identical
+//
+// THE BYTES CANNOT CARRY THE DISTINCTION AT THIS LAYER, because findings are this function's only
+// output and "cannot say" has no finding to emit. What the assertion below really checks is that an
+// unreadable log is not ACCUSED -- which is worth pinning and is not the same claim. The distinction
+// lives in `outcomes.ts` (`cantTell` vs `inapplicable`), pinned by `outcomes.test.ts`'s #1255 tests.
+//
+// A name that claims more than its assertion checks is the same defect one level up from the one this
+// family is about: #29 read this layer and concluded nothing separates the two, which is true HERE.
+test("`checked: false` is not ACCUSED -- an unreadable log emits no finding (the distinction itself "
+  + "lives in outcomes.ts, which this layer cannot express)", () => {
   assert.equal(ruleFindings(focusEventsCapture({ checked: false, why: "no event log", log: null }))
     .filter((f) => f.wcag.startsWith("2.4.7")).length, 0);
   assert.equal(ruleFindings(focusEventsCapture(undefined)).filter((f) => f.wcag.startsWith("2.4.7")).length, 0);
