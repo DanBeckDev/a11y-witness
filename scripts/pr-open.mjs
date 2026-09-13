@@ -29,6 +29,7 @@ import { pathToFileURL } from "node:url";
 import { acceptanceReport, closesDeclarationReport } from "./acceptance-commands.mjs";
 import { leakRefusalReason } from "../packages/lab/src/packaging/leak-patterns.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
+import { REPO } from "./repo-identity.mjs";
 
 /**
  * Runs a command FOR REAL, exactly as `acceptance-commands.mjs`'s own (unexported) `runForReal` does --
@@ -173,6 +174,14 @@ const writeErr = (line) => { process.stderr.write(line); };
 
 /** @param {string[]} args */
 const defaultGh = (args) => { execFileSync("gh", args, { stdio: "inherit" }); };
+/**
+ * PR N's head, over REST (`gh api`, the core pool) rather than `gh pr view --json` (GraphQL, the pool that runs out).
+ * @param {string} repo
+ * @param {string} number
+ * @returns {{ ref: string, oid: string } | null}
+ */
+const defaultPrHead = (repo, number) => JSON.parse(execFileSync("gh",
+  ["api", `repos/${repo}/pulls/${number}`, "--jq", "{ref: .head.ref, oid: .head.sha}"], { encoding: "utf8" }));
 /** `sandboxGitEnv()` CALLED: git exports GIT_DIR into every hook environment. @param {string[]} args */
 const defaultGit = (args) =>
   execFileSync("git", args, { encoding: "utf8", env: sandboxGitEnv() }).trim();
@@ -194,7 +203,7 @@ function main() {
     return;
   }
   // #1344: BEFORE checkBody, because checkBody RUNS the Acceptance -- in this working tree, whatever --head says.
-  const headRefused = headTreeRefusal(mode, rest);
+  const headRefused = headTreeRefusal(mode, rest) ?? editTreeRefusal(mode, rest);
   if (headRefused) {
     process.stderr.write(`${headRefused}\n`);
     process.exitCode = 1;
@@ -255,6 +264,72 @@ export function headTreeRefusal(mode, rest, { git = defaultGit } = {}) {
     return `pr-open: REFUSED -- this tree is on \`${head}\` at \`${local ?? "(unreadable)"}\`, but \`origin/${head}\` `
       + `is \`${remote ?? "(unreadable -- push the branch first)"}\`. The Acceptance would test a tree that is not `
       + `the head GitHub opens; push or pull until they are the same commit. ${nothingRan}`;
+  }
+  return null;
+}
+
+/**
+ * PR N's head through `prHead`, or null when the read throws or answers without both a ref and a commit -- a
+ * failed read is never a head this tree could match.
+ * @param {(repo: string, number: string) => { ref: string, oid: string } | null} prHead
+ * @param {string} repo
+ * @param {string} number
+ * @returns {{ ref: string, oid: string } | null}
+ */
+function readPrHead(prHead, repo, number) {
+  try {
+    const head = prHead(repo, number);
+    return head && head.ref && head.oid ? head : null;
+  } catch {
+    return null;
+  }
+}
+
+/** How a refusal names the tree's position: an unreadable checkout, a detached HEAD, or the branch. @param {string | null} branch */
+const treeWhere = (branch) => (branch === null ? "a checkout git could not read"
+  : branch === "HEAD" ? "a detached HEAD" : `\`${branch}\``);
+
+/**
+ * #1446: `edit N` RUNS THE BODY'S ACCEPTANCE IN THIS WORKING TREE, SO THE TREE MUST BE PR N'S HEAD.
+ *
+ * The edit half of #1344. `pr-open edit 1454 --body-file b.md` from a tree on another branch printed
+ * `ACCEPTANCE: RAN ... -> pass` for commands run against THAT tree, then sent #1454 a body whose Acceptance never
+ * ran at #1454's head (reproduced 2026-09-13 21:59Z, behind a gh shim, from a worktree at `da9858fb` against a PR
+ * at `9d954d13`). `create --head` names its branch in the args; `edit` names only a PR, so its head is READ, from
+ * GitHub, through the injected `prHead`.
+ *
+ * Refuses, naming both sides, when the selector is not a PR number, when PR N's head cannot be read, or when this
+ * tree's branch or commit is not that head. The commit compared is the PR's own `head.sha`: GitHub's, not a local
+ * remote-tracking ref, so a push this checkout has not fetched reads as a mismatch, never as a match.
+ *
+ * @param {string} mode
+ * @param {string[]} rest `<pr-number> <gh pr edit args...>`
+ * @param {{ git?: (args: string[]) => string,
+ *           prHead?: (repo: string, number: string) => { ref: string, oid: string } | null }} [deps]
+ * @returns {string | null} the refusal, or null when the tree under test is PR N's head
+ */
+export function editTreeRefusal(mode, rest, { git = defaultGit, prHead = defaultPrHead } = {}) {
+  if (mode !== "edit") return null;
+  const nothingRan = "Nothing ran and nothing was sent (#1446).";
+  const selector = rest[0] ?? "";
+  if (!/^\d+$/.test(selector)) {
+    return `pr-open: REFUSED -- \`edit\` takes the PR NUMBER first (got \`${selector}\`), so it can read that PR's `
+      + `head and check this tree is it. ${nothingRan}`;
+  }
+  const repo = flagAfter(rest, "--repo") ?? REPO;
+  const head = readPrHead(prHead, repo, selector);
+  if (head === null) {
+    return `pr-open: REFUSED -- could not read PR #${selector}'s head from ${repo}, so this tree cannot be checked `
+      + `against the head its Acceptance would test. ${nothingRan}`;
+  }
+  /** @type {(args: string[]) => string | null} */
+  const read = (args) => { try { return git(args) || null; } catch { return null; } };
+  const branch = read(["rev-parse", "--abbrev-ref", "HEAD"]);
+  const local = read(["rev-parse", "HEAD"]);
+  if (branch !== head.ref || local !== head.oid) {
+    return `pr-open: REFUSED -- PR #${selector}'s head is \`${head.ref}\` at \`${head.oid}\`, but this working tree is on `
+      + `${treeWhere(branch)} at \`${local ?? "(unreadable)"}\`. The Acceptance runs in this tree, so it would report a pass for a `
+      + `head it never tested. Run pr-open from a worktree on \`${head.ref}\` at that commit. ${nothingRan}`;
   }
   return null;
 }
