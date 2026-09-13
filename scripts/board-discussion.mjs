@@ -24,8 +24,23 @@ import { gh, REPO } from "./board-data.mjs";
 
 export const EDITION_CATEGORY_SLUG = "board-editions";
 
-/** The date an edition is filed under: the same UTC slice as the summary file and the old release tag. */
-export const editionDay = (now = new Date()) => now.toISOString().slice(0, 10);
+/**
+ * THE DATE AN EDITION IS FILED UNDER, IN LONDON -- decided here ONCE (#1302), and imported by every script
+ * that names an edition's day: the Discussion's title, the republish gate, the summary file the render reads,
+ * and the summary check that warns when it is missing.
+ *
+ * LONDON, NOT UTC, because the edition's day is the board's day, and between 00:00 and 01:00 London in
+ * summer the two differ. This was a UTC slice until #1302, while `board-summary-check.mjs` already asked for
+ * London's day for exactly that reason, so two copies of "today" disagreed for one hour a night. Measured on
+ * #1295's review: a republish dispatched at 00:30 London found YESTERDAY's Discussion and was permitted. Its
+ * freshness refusal then told the operator to rewrite the summary, and doing so updated yesterday's edition.
+ * At the scheduled 08:13 London run the two zones agree, so nothing that runs on schedule changes.
+ *
+ * @param {Date} [now]
+ * @returns {string} YYYY-MM-DD in Europe/London
+ */
+export const editionDay = (now = new Date()) => new Intl.DateTimeFormat("en-CA",
+  { timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
 
 /** ONE POST PER DATE, TITLED BY THE DATE -- the title is the key both republish and the late path look up.
  * @param {string} day */
