@@ -75,6 +75,10 @@ export const LOCKFILE = "package-lock.json";
  * A HEAD that did not move asks nothing: there is no range, and a `git diff` of a commit against itself
  * would be a question whose answer is empty by construction.
  *
+ * `--no-renames`, as `scripts/changed-files.mjs` asks (#939): with rename detection a lockfile moved away
+ * would be listed only under its new path. It is spelled here rather than imported because the helper spawns
+ * git itself, and this function asks through the injected `run` its tests drive.
+ *
  * It reads the output as a LIST OF PATHS and looks for the lockfile by name, rather than treating any
  * output as "changed", so that a `run` answering something unexpected cannot install by accident.
  *
@@ -82,7 +86,7 @@ export const LOCKFILE = "package-lock.json";
  */
 export function lockfileMoved(run, before, after) {
   if (before === after) return false;
-  const paths = run(["diff", "--name-only", before, after, "--", LOCKFILE]).split("\n");
+  const paths = run(["diff", "--name-only", "--no-renames", before, after, "--", LOCKFILE]).split("\n");
   return paths.map((path) => path.trim()).includes(LOCKFILE);
 }
 
