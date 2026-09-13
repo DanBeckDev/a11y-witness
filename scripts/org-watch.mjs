@@ -562,10 +562,27 @@ export function redHoursFigure({ windows, examined, pageBeginsMidRed = false }) 
  * action. `redFor` is how many merge cycles it has been red, which the caller supplies because this
  * function does not know what a cycle is -- a threshold computed inside a reporter is a threshold nobody
  * can change without reading it.
- * @param {{ number: number, checks: { name: string, conclusion: string | null, status: string }[] }[]} prs
- * @returns {{ counts: Record<string, number>, failing: { number: number, jobs: string[] }[], examined: number }}
+ * @param {{ number: number, checks: { name: string, conclusion: string | null, status: string }[] }[]
+ *          | null} prs `null` means the read was REFUSED -- see the note in the body.
+ * @returns {{ refused: boolean, counts: Record<string, number>,
+ *             failing: { number: number, jobs: string[] }[], examined: number | null, why?: string }}
  */
 export function queueReport(prs) {
+  // #1286: `null` MEANS THE READ WAS REFUSED, and it is the CALLER's job to pass it.
+  //
+  // A refused `gh pr list` exits 1 with EMPTY stdout (#1279, measured), so a caller that keeps the exit
+  // status can always tell a refusal from an empty queue and one that pipes it away never can. Passing
+  // `[]` for a refusal made this function answer `examined: 0` -- which the org reads as "nothing is
+  // queued" and acts on. Fourth member of the family this file already guards for `mainColour`: a 502,
+  // an empty list and a stopped list must none of them return what the healthy answer returns.
+  //
+  // AN EMPTY QUEUE IS STILL `examined: 0` AND STILL FINE. A reader that answers `refused` whenever it is
+  // unsure blocks every quiet morning, which is worse than the state this replaces.
+  if (prs === null) {
+    return { refused: true, counts: {}, failing: [], examined: null,
+      why: "the queue could not be read -- a refused `gh` call exits non-zero with empty output, so this "
+        + "is NOT an empty queue and must not be reported as one (#1286)" };
+  }
   /** @type {Record<string, number>} */
   const counts = {};
   const failing = [];
@@ -574,7 +591,7 @@ export function queueReport(prs) {
     const jobs = pr.checks.filter((c) => c.conclusion === "failure").map((c) => c.name);
     if (jobs.length > 0) failing.push({ number: pr.number, jobs });
   }
-  return { counts, failing, examined: prs.length };
+  return { refused: false, counts, failing, examined: prs.length };
 }
 
 /**
