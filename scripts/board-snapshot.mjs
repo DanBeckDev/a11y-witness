@@ -21,6 +21,9 @@
 // find under pressure -- and REFUSES to call `mutate` at all if the snapshot did not write. `runs/` is
 // gitignored on purpose: a snapshot is a recovery artefact, not history: the tracker itself is the record.
 import { execFileSync } from "node:child_process";
+// #1219: PURE, and deliberately in its own module -- see that file's header. Importing it here costs
+// nothing; importing THIS file from a test costs a `token` requirement the acceptance job cannot meet.
+import { statusContradictions, statusCensus } from "./board-status-health.mjs";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
@@ -43,7 +46,7 @@ const ITEMS_QUERY = `
           pageInfo { hasNextPage endCursor }
           nodes {
             id
-            content { ... on Issue { number title } }
+            content { ... on Issue { number title state } }
             fieldValues(first: 20) {
               nodes {
                 ... on ProjectV2ItemFieldSingleSelectValue {
@@ -60,7 +63,13 @@ const ITEMS_QUERY = `
 `;
 
 /**
- * @typedef {{ itemId: string, number: number | null, title: string | null, status: string | null }} BoardItem
+ * @typedef {{ itemId: string, number: number | null, title: string | null, status: string | null,
+ *   state: string | null }} BoardItem
+ *
+ * #1219: `state` was NOT fetched until this row, and that is why the health check could never have
+ * asked whether a CLOSED row advertises live work. It is not that the check was one-directional --
+ * the field that would answer the other direction was never requested, so the question could not be
+ * asked at all. A filter on a field nobody fetched, in the instrument watching for exactly this.
  */
 
 /**
@@ -146,6 +155,10 @@ function parsePage(raw) {
       number: typeof n.content?.number === "number" ? n.content.number : null,
       title: typeof n.content?.title === "string" ? n.content.title : null,
       status: typeof statusValue?.name === "string" ? statusValue.name : null,
+      // #1219: null for a draft item, which has no issue and therefore no state. NOT defaulted to
+      // "OPEN" -- a draft and an open issue are different things, and `statusContradictions`
+      // classifies an unknown state as neither offender rather than guessing.
+      state: typeof n.content?.state === "string" ? n.content.state : null,
     };
   });
   return {
@@ -318,6 +331,23 @@ export function fetchBoardItems({ run = defaultRun, fetchReady = fetchReadyIssue
       + `Status -- refusing to report this snapshot as complete. This is the snapshot reading short, `
       + `not the board being wrong (#747: fieldValues has no totalCount to check itself, so this is `
       + `read against an independent population instead): #${missing.join(", #")}`);
+  }
+  // #1219: THE CONTRADICTIONS ARE REPORTED, NOT REFUSED -- and that is a decision, not a softer guard.
+  //
+  // Measured when this landed: 311 closed rows at a live Status, 220 of them at `In progress`. A throw
+  // would brick every snapshot and every row-filing that takes one, until somebody moved 311 rows by
+  // hand -- so the guard would be removed within the hour rather than obeyed. The same trade #1158 made
+  // for directory Regions and `buildAssertion` makes for an undeclared pin: a refusal that blocks the
+  // repair path is not a stricter guard, it is an absent one.
+  //
+  // It is LOUD on every snapshot instead, and it names the count. The row's own ordering is guard first,
+  // then the move -- moving them before this existed would mean doing it twice.
+  const contradictions = statusContradictions(items);
+  if (contradictions.closedButLive.length > 0 || contradictions.openButDone.length > 0) {
+    process.stderr.write(`board-snapshot: ${contradictions.closedButLive.length} CLOSED row(s) advertise `
+      + `a live Status and ${contradictions.openButDone.length} OPEN row(s) advertise Done. A closed row `
+      + `at a live column is finished work a session reading the board will take as available.\n`
+      + `${statusCensus(items)}\n`);
   }
   return items;
 }
