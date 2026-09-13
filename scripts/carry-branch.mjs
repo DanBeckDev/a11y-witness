@@ -46,6 +46,7 @@ import { pathToFileURL } from "node:url";
 import { sandboxGitEnv } from "./git-env.mjs";
 import { REPO } from "./repo-identity.mjs";
 import { parseWorktreeList } from "./prune-worktrees.mjs";
+import { stampWorktree } from "./worktree-owner.mjs";
 // RELATIVE, not the `@a11ign/worker-fleet/cli-flags` package specifier -- see `row-claim.mjs`'s own
 // header for why: this needs `node_modules` and a completed build, and this file has neither guarantee.
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
@@ -101,12 +102,13 @@ export function branchCheckedOutLocally(branch, repoRoot, { run = defaultRun } =
  *
  * @param {string} repoRoot a real checkout of this repository to run `git worktree add` FROM
  * @param {string} branch bare branch name, e.g. "agent/pre-push-delete-583" -- no `origin/` prefix
- * @param {{ run?: typeof defaultRun, workDir?: string }} [deps] `workDir`: an existing directory to use
+ * @param {{ run?: typeof defaultRun, workDir?: string, stamp?: typeof stampWorktree }} [deps]
+ *   `workDir`: an existing directory to use
  *   instead of a fresh temp one, and skip the automatic cleanup of it -- for tests that want to inspect
  *   the carrying worktree afterward.
  * @returns {{ carried: true, diffstat: string } | { carried: false, reason: string, diffstat?: string }}
  */
-export function carryBranch(repoRoot, branch, { run = defaultRun, workDir } = {}) {
+export function carryBranch(repoRoot, branch, { run = defaultRun, workDir, stamp = stampWorktree } = {}) {
   const dir = workDir ?? realpathSync(mkdtempSync(join(tmpdir(), "carry-branch-")));
   try {
     try {
@@ -114,6 +116,15 @@ export function carryBranch(repoRoot, branch, { run = defaultRun, workDir } = {}
     } catch (error) {
       return { carried: false,
         reason: `could not open a detached checkout of origin/${branch} -- ${errMsg(error)}` };
+    }
+    // #1128: STAMP IT, because the cleanup below is best-effort and a carry tree that survives a failed
+    // removal is precisely an unowned tree somebody else finds later. `/private/tmp/carry-742` is one
+    // today. Never fatal: a carry that failed because a stamp failed would be answering a question
+    // nobody asked, and the stamp is advisory by design.
+    try {
+      stamp(dir, process.env.A11Y_SESSION ?? "row-carry");
+    } catch (error) {
+      process.stderr.write(`carry-branch: could not stamp ${dir} -- ${errMsg(error)}\n`);
     }
     try {
       run("git", ["fetch", "origin", "main"], { cwd: dir });

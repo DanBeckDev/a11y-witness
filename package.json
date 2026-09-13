@@ -160,7 +160,8 @@
     "pr:release": "node scripts/pr-hold.mjs --release",
     "pr:open": "node scripts/pr-open.mjs create",
     "pr:edit": "node scripts/pr-open.mjs edit",
-    "worktree:whose": "node scripts/worktree-owner.mjs"
+    "worktree:whose": "node scripts/worktree-owner.mjs",
+    "worktree:stamp": "node scripts/worktree-owner.mjs --stamp"
   },
   "dependencies": {
     "@a11ign/evidence": "0.1.0",
