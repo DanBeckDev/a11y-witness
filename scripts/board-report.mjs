@@ -25,6 +25,7 @@ import {
   REPO, MILESTONE, HOURS_MS, READ_SET,
   gh, git, issues, milestone, mergeState, misAuthored, reported, daysUntil, readSetIsNotMain, countable,
   conflictMetrics} from "./board-data.mjs";
+import { editionDay } from "./board-discussion.mjs";
 
 const argv = process.argv.slice(2);
 /** @type {(name: string) => string | undefined} */
@@ -283,11 +284,11 @@ function facts(since, sinceLabel) {
     fleetHours, closed, open, blockers, ready, awaiting, conflict };
 }
 
-/** @param {any} d */
-export function render(d) {
+/** @param {any} d @param {Date} [now] the render instant: the title's day is London's, from editionDay (#1442) */
+export function render(d, now = new Date()) {
   const { sinceLabel } = d;
   const L = [];
-  L.push(`# Board report — ${new Date().toISOString().slice(0, 10)}`);
+  L.push(`# Board report — ${editionDay(now)}`);
   L.push("");
   L.push(`Generated from GitHub and git by \`npm run board:report\`. Nothing here is taken from what an `
     + `agent said: issues and the milestone are read from the API, merges from \`git log main\`, and the `
