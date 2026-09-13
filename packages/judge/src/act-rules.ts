@@ -657,9 +657,14 @@ export const ACT_RULES: ActRuleDescription[] = [
       "F78 IS A DIFFERENT FAILURE AND IS NOT DECIDED HERE. Styling a focus indicator away is a pixel "
         + "question this rule says nothing about either way; a clean report is silent on F78, never a "
         + "pass for 2.4.7 as a whole. See `criterion-coverage.ts`, which is `partial` for exactly this.",
-      "AN EMPTY `scriptRemovedFocus` ON A `checked: true` LOG IS A REAL ZERO, NOT AN ABSENCE. The oracle "
-        + "ran and found no script stripping focus, which is a different fact from never having asked — "
-        + "`focusEventVerdict`'s own contract, and this rule reads `checked` before ever reading the array.",
+      "AN EMPTY `log` ON A `checked: true` CAPTURE IS A REAL ZERO, NOT AN ABSENCE. The oracle ran and "
+        + "found no script stripping focus, which is a different fact from never having asked — "
+        + "`focusEventVerdict`'s own contract, and this rule reads `checked` before ever reading the array. "
+        + "(#1255: this assumption named `scriptRemovedFocus` until 2026-09-13, a capture-computed verdict "
+        + "retired by #14 when ADR 0021 moved the deciding from the capture to the rules. No capture on "
+        + "disk carries that key — the four keys a real one carries are `asked`, `checked`, `log`, `why` "
+        + "— so the assumption described the field by a name the producer had stopped writing. Its "
+        + "READERS were fixed then; this record was not, which is why a stale name survives a fix.)",
     ],
     accessibilitySupport: NVDA_EDGE + " The event log is `focusin`/`focusout` over the DevTools protocol, "
       + "not the screen reader, so what is measured is when focus actually moved in the DOM rather than "
