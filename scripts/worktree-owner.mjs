@@ -1,3 +1,6 @@
+// command: print which session stamped a worktree, so a session can tell whose tree it is standing in
+//          before it moves HEAD -- `npm run worktree:whose [-- <path>]`
+//
 // #1128: WHOSE WORKTREE IS THIS? The question the incident needed answered and nothing could.
 //
 // A reviewer moved HEAD inside two worktrees another session was working in, 46 seconds after that
