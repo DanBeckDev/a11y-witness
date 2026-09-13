@@ -38,18 +38,39 @@ the words NVDA spoke.
 If your app is on GitHub, this needs one workflow file and no machine of your own.
 
 ```yaml
+name: a11ign
+
+on:
+  pull_request:
+  workflow_dispatch:
+
 jobs:
   a11ign:
     runs-on: windows-2022        # NVDA is Windows-only; the action fails fast anywhere else
     permissions:
+      contents: read
       pull-requests: write       # for the PR comment below; omit it and the report still runs, only quieter
     steps:
       - uses: actions/checkout@v4
       - uses: DanBeckDev/a11y-witness@main
+        # Pin it: @main moves under you. Use the full commit SHA if your CI must not change.
+        id: a11ign
         with:
           url: https://your-site.example/the-page
           task: Send an enquiry
+      # Keep the evidence: the full result, including the transcript behind every finding. Guarded on the
+      # output existing, so a run that failed does not also fail the upload.
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.a11ign.outputs.result-json != ''
+        with:
+          name: a11ign-result
+          path: ${{ steps.a11ign.outputs.result-json }}
+          if-no-files-found: warn
 ```
+
+Save it as `.github/workflows/a11ign.yml`. It runs on every pull request, and `workflow_dispatch` also lets you start it by hand from the repository's Actions tab (or `gh workflow run a11ign.yml`).
+
+**Not on a pull request, no comment.** A run started by hand or by a push has nothing to comment on: the log shows one line (`a11ign: N finding(s)`), the report is in the run's job summary, and the full result, transcript included, is the `a11ign-result` artifact the upload step saves.
 
 **`task` is load-bearing.** It is what a user is trying to *do*, in plain words, and it changes what gets
 captured: a button whose announced name shares a meaningful word with the task gets activated, and
@@ -62,9 +83,7 @@ sharpen the verdict.
 site — for a first look before choosing anything of your own. We have already run it there
 ([`docs/github-action.md`](./github-action.md#tested-against-real-sites-in-the-wild)): 143 announcements,
 zero findings, and not marginally — a false positive on the W3C's own site would have been damning, so
-that is a real, meaningful result rather than an untested placeholder. It is a safe page to point either
-the CLI or the Action at: informational, nothing to submit, so a `task` about learning something on the
-page (`"Learn about web accessibility"`) is enough — no contact form, no risk of pressing anything real.
+that is a real, meaningful result rather than an untested placeholder. It is informational, with nothing to submit, so a `task` about learning something on the page (`"Learn about web accessibility"`) is enough. **The Action still presses buttons on it.** With `probe-forms` on, which is the Action's default, a control whose announced name shares a word with your task is activated: the V1 rehearsal's run on a Wikipedia article collapsed one of its navigation boxes that way. On a site you do not own, that is someone else's page; [the CLI defaults it off for exactly that reason](#the-other-route-run-it-from-the-repository).
 
 **Once you have seen real output, point it at the page with your contact form on it.** A long page with a
 form exercises far more of this layer than a page of text alone — the form is where the announcements
@@ -91,6 +110,8 @@ that time is not parallelisable or recoverable.
 **A sixth run took 3 m 45 s and that is not a faster run, it is a failed one** — it opened on a consent
 overlay and read almost none of the page. **Under four minutes is a finding, not a success**; see the
 consent-banner section below before you judge how long your own run took.
+
+**Those are capture times, not the job you are billed for.** Setup comes on top. On the V1 rehearsal's cold run (2026-09-13) setup was 85.3 s, capture and judging 7 m 30 s, and the whole job 9 m 20 s; with warm caches the job was 8 m 27 s. Budget runner time for the job, not the capture.
 
 ## The other route: run it from the repository
 
