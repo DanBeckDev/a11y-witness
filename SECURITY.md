@@ -134,13 +134,15 @@ runner, a workstation), know that it writes these registry values, and **nothing
 | key | value | written by | why | persists? |
 |---|---|---|---|---|
 | `HKLM\SOFTWARE\Policies\Microsoft\Edge` | `HideFirstRunExperience` = `1` (DWORD) | `action.yml`, step *Suppress Edge's first-run experience* | a fresh Edge profile shows a first-run sign-in surface, and NVDA's quick navigation escapes into it and reports findings about Edge's own chrome | **yes** — a machine-wide Edge policy for every user, until you delete it; the step creates the key with `New-Item -Force` |
-| `HKLM\SOFTWARE\Policies\Microsoft\Edge` | `BrowserSignin` = `0` (DWORD) | the same step | the same | **yes**, the same — Edge shows these as policies "managed by your organization" |
+| `HKLM\SOFTWARE\Policies\Microsoft\Edge` | `BrowserSignin` = `0` (DWORD) | the same step | the same | **yes**, the same |
 | `HKCU\Control Panel\Desktop` | `ForegroundLockTimeout` = `0` (DWORD) | `packages/worker-fleet/src/provisioning/apply-foreground-lock-timeout.ps1`, run by the step *Allow Edge to be forced into the foreground* | with a non-zero timeout Windows will not let Edge be forced into the foreground, so NVDA reads nothing and a capture returns zero phrases with no error | **yes**, for the user account the runner uses — the script sets it through `SystemParametersInfo` with `SPIF_UPDATEINIFILE`, which writes it into that user's profile, and also writes the registry value directly |
 
 Read from the step and the script, not from a run on a persistent machine: the Action has only ever been run
-on throwaway runners. `ForegroundLockTimeout = 0` lets **any** application take the foreground from the one you
-are using, which is Windows' default protection against focus stealing. To undo on a machine you keep, delete the
-two Edge policy values and set `ForegroundLockTimeout` back to its Windows default of `200000`.
+on throwaway runners. Windows' non-zero `ForegroundLockTimeout` is its protection against focus stealing: it stops
+another application taking the foreground from the one you are using. **`0` turns that protection off, for every
+application, not only Edge.** To undo on a machine you keep, delete the two Edge policy values and set
+`ForegroundLockTimeout` back to what it was: rehearsal 3's runner started at `200000` (run 34774183433 logged
+`ForegroundLockTimeout: 200000 -> 0`).
 
 The Action also installs NVDA (`npx @guidepup/setup install nvda`) and turns off *Speech Viewer at startup* in the `nvda.ini` files of that installation, and installs Python packages with pip. Those are software changes rather than registry settings, and the same
 throwaway-runner assumption covers them.
