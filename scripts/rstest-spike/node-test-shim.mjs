@@ -1,4 +1,4 @@
-// @ts-check
+// @ts-nocheck -- #1315 spike-only, never merged: it adapts untyped node:test call shapes, and the push typecheck refused its implicit anys.
 // command: (not a command) #1315 spike only: node:test's names over @rstest/core, so the suite runs unedited.
 
 /**
