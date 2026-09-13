@@ -1,0 +1,49 @@
+// @ts-check
+
+/**
+ * #1318, STEP 2 OF THE RSTEST ADOPTION (#1317): THE SAME FILES `npm run test:ts` RUNS, WITH NONE OF THEM EDITED.
+ *
+ * Every setting below was measured on #1315's spike before it was kept, and the ones that were tried and
+ * rejected are recorded here so nobody re-adds them:
+ *
+ * - **`node:test` reaches the shim through a Node resolve hook, not through rstest.** rstest does not bundle
+ *   Node built-ins; it leaves them to Node ("Rstest currently preserves Node.js native semantics",
+ *   `guide/debug/troubleshooting.mdx`). So `resolve.alias: { "node:test": … }` never saw the import (the real
+ *   node:test ran every test and rstest reported "No test suites found"), and neither did an Rspack
+ *   `NormalModuleReplacementPlugin` added through `tools.rspack` (the hook ran; the shim never loaded). The
+ *   hook in `register-node-test-alias.mjs` is passed to every worker through the documented `pool.execArgv`.
+ * - **`forks`, and isolated.** `isolate: false` shares module evaluation and process state across files, and
+ *   `threads` has no `process.chdir` and a thread-local `process.exit`. In this suite 92 test files spawn
+ *   processes (50 of them git or gh), 24 write `process.env`, and 11 use `process.exit` or signals.
+ * - **No build cache.** `performance.buildCache` measured 64.0 s cold and 63.9 s warm against 63.9 s without
+ *   it: the build is under 1% of the run.
+ * - **No coverage block here.** Coverage is step 4 of the adoption, not this one.
+ */
+import { defineConfig } from "@rstest/core";
+import { fileURLToPath } from "node:url";
+
+const root = fileURLToPath(new URL("../../", import.meta.url));
+const registerHook = fileURLToPath(new URL("./register-node-test-alias.mjs", import.meta.url));
+const walkScope = fileURLToPath(new URL("../walk-scope.mjs", import.meta.url));
+
+export default defineConfig({
+  root,
+  // The glob `npm run test:ts` hands to node:test, so "the same number of test files run" is checkable.
+  include: ["packages/*/src/**/*.test.ts"],
+  testEnvironment: "node",
+  // `walk-scope.mjs` is PRELOADED into every worker as well, for #1349. It installs its observer on import,
+  // and rstest bundles a second copy into each test that imports it. Measured by worker-judge on #1349: named
+  // imports such as `readFile` from `node:fs/promises`, `openSync`, `readdir` and `spawnSync` are seen only
+  // when a copy loaded before rstest's module graph shares one per-process state with the bundled copies.
+  // The shared state is #1349's; this line is the half that lives here. Measured across all 550 files at
+  // 021563f6, before #1349: the preload changed no result. The only differences were three live GitHub tests
+  // refused by an exhausted GraphQL budget during that run.
+  pool: { type: "forks", execArgv: ["--import", registerHook, "--import", walkScope] },
+  // The shim reads rstest's collecting runtime from globalThis rather than importing a second copy of it.
+  globals: true,
+  // node:test has no default timeout. rstest defaults `testTimeout` to 5_000 and `hookTimeout` to 10_000, and
+  // documents `0` as disabling each (`config/test/test-timeout.mdx`, `hook-timeout.mdx`). Under the defaults
+  // three tests timed out on the spike's first run.
+  testTimeout: 0,
+  hookTimeout: 0,
+});
