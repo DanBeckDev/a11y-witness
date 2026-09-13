@@ -232,8 +232,8 @@ function mainTipCommittedAt(repo, run) {
  *   SAME red trunk + one GHOST newer   readable=true  red=false
  *
  * An ordinary in-flight run masks it too and self-corrects within minutes. A GHOST never completes
- * (`queued` AND zero jobs AND `updated_at == created_at`; the two on #1253 were still stuck at 116
- * minutes), so the masking never lifts. This is the fourth member of the family this file already
+ * (`queued` AND zero jobs AND `updated_at == created_at`; the two on #1253 were still stuck 90
+ * minutes after creation, read at 10:49:54Z against a 09:19:57Z creation), so the masking never lifts. This is the fourth member of the family this file already
  * guards -- a 502, an empty list, a stopped list -- each of which must never return what green returns.
  *
  * `inFlight` is reported ALONGSIDE the colour rather than replacing it. Deciding "cannot say" whenever
