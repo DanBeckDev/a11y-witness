@@ -126,6 +126,61 @@ test("action.yml's real-page claim is derived from CRITERION_COVERAGE, not hand-
       + `realPageEvidence unavailable for ${unfireable.join(", ")}`);
 });
 
+/** Leading spaces: YAML's block structure, which is all the snippet parser below reads. */
+const indentOf = (line: string): number => line.search(/\S/);
+
+/** The leading run of `lines` indented deeper than `indent`: a YAML block's body, ended by its first dedent. */
+function takeDeeperThan(lines: string[], indent: number): string[] {
+  const end = lines.findIndex((line) => indentOf(line) <= indent);
+  return end < 0 ? lines : lines.slice(0, end);
+}
+
+/**
+ * The inputs a workflow snippet passes to THIS action: the direct children of the `with:` that belongs to the
+ * step which `uses:` a11y-witness, and nothing past that step.
+ *
+ * #1353 gave the quickstart a second step, `actions/upload-artifact`, with its own `if:` and `with:`. The
+ * reading this replaces took everything from the FIRST `with:` to the end of the fence, so that step's keys
+ * arrived as a11y-witness inputs and trunk went red on a README that was right. Blank and comment lines are
+ * dropped first: a comment at a step's own indentation neither opens nor closes a YAML block.
+ */
+function inputsGivenToTheAction(snippet: string): Set<string> {
+  const lines = snippet.split("\n").filter((line) => line.trim() !== "" && !line.trim().startsWith("#"));
+  const stepAt = lines.findIndex((line) => /^\s*- uses:\s*\S+\/a11y-witness@/.test(line));
+  if (stepAt < 0) return new Set();
+  const step = takeDeeperThan(lines.slice(stepAt + 1), indentOf(lines[stepAt]));
+  const withAt = step.findIndex((line) => /^\s*with:\s*$/.test(line));
+  if (withAt < 0) return new Set();
+  const block = takeDeeperThan(step.slice(withAt + 1), indentOf(step[withAt]));
+  const childIndent = block.length > 0 ? indentOf(block[0]) : -1;
+  return new Set(block.filter((line) => indentOf(line) === childIndent)
+    .flatMap((line) => /^\s*([a-z-]+):/.exec(line)?.slice(1, 2) ?? []));
+}
+
+test("#1353: only the a11y-witness step's own `with:` is read as its inputs -- no other step's keys, no sibling block's", () => {
+  // The quickstart's real shape since #1353, plus the two neighbours a looser bound would also read. MUTATION
+  // TARGETS: reading to the end of the fence brings in `if`, `name` and `path`; dropping the step bound reads
+  // the upload step's `with:` in the second snippet; dropping the `with:` bound reads `debug`.
+  const steps = (a11yStep: string[]) => [
+    "    steps:",
+    "      - uses: actions/checkout@v4",
+    "      - uses: DanBeckDev/a11y-witness@main",
+    ...a11yStep,
+    "      # Keep the evidence -- a comment at the steps' own indentation",
+    "      - uses: actions/upload-artifact@v4",
+    "        if: always()",
+    "        with:",
+    "          name: a11ign-result",
+    "          path: result.json",
+    "",
+  ].join("\n");
+  const withInputs = steps(["        # Pin it", "        id: a11ign", "        with:",
+    "          url: https://example.com/contact", "          task: Send an enquiry", "        env:", "          debug: \"1\""]);
+  assert.deepEqual([...inputsGivenToTheAction(withInputs)].sort(), ["task", "url"]);
+  assert.deepEqual([...inputsGivenToTheAction(steps(["        id: a11ign"]))], [],
+    "an a11y-witness step with no `with:` of its own passes nothing, whatever the next step passes");
+});
+
 test("the README's quickstart workflow is one a stranger can actually paste", () => {
   // The single most consequential snippet in the repo: B1 is someone outside the project running this on an
   // app they own, and for most readers this is the ONLY path that needs no hardware — a screen reader is an
@@ -135,8 +190,8 @@ test("the README's quickstart workflow is one a stranger can actually paste", ()
   // does not have, or omits a required one, fails on a stranger's runner with a message about our repo.
   //
   // Parsed by hand rather than with a YAML library: this package has ZERO dependencies and that is worth
-  // more than the convenience. The snippet is ten lines of fixed shape, and `action-smoke.yml` runs the
-  // real thing on every push — this guards the COPY, not the mechanism.
+  // more than the convenience. `action-smoke.yml` runs the real thing on every push — this guards the COPY,
+  // not the mechanism.
   const readme = readFileSync(fileURLToPath(new URL("../../../README.md", import.meta.url)), "utf8");
   const snippet = /```yaml\n([\s\S]*?)```/.exec(readme)?.[1];
   assert.ok(snippet, "the quickstart no longer contains a yaml block");
@@ -148,8 +203,7 @@ test("the README's quickstart workflow is one a stranger can actually paste", ()
   // changing it once the repository really moves.
   assert.match(snippet!, /uses:\s*\S+\/a11y-witness@/, "the snippet must reference this action");
 
-  const withBlock = /with:\n([\s\S]*)$/.exec(snippet!)?.[1] ?? "";
-  const given = new Set([...withBlock.matchAll(/^\s{8,}([a-z-]+):/gm)].map((m) => m[1]));
+  const given = inputsGivenToTheAction(snippet!);
   assert.ok(given.size > 0, "no inputs parsed out of the snippet — the shape changed and this guard went blind");
 
   const action = readFileSync(fileURLToPath(new URL("../../../action.yml", import.meta.url)), "utf8");
