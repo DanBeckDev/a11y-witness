@@ -63,13 +63,15 @@ const RETIRED_PREFIXES = new Set(["lead", "dispatcher", "pm", "measure", "market
  * the row is a record somebody wrote, and a branch prefix is an inference from a naming habit. A list that
  * flattened them would read as 93 attributions when it holds two kinds of claim.
  *
- * @param {{ branch: string, row: { number: number, state: string, labels: string[] } | null,
+ * @param {{ branch: string, row: { number: number, state: string, labels: string[], isPullRequest?: boolean } | null,
  *           timeline?: { event: string, label?: { name: string } }[] }} input
  * @returns {{ owner: string | null,
  *             source: "row-label" | "claim-history" | "retired-role" | "unknown" }}
  */
 export function ownerOfBranch({ branch, row, timeline = [] }) {
-  const fromRow = row === null ? null : sessionFromLabels(row.labels);
+  // A PULL REQUEST'S labels are not a row claim: `session:` never appears on one, and treating a PR as a
+  // row is the defect the comment in `branchFacts` records.
+  const fromRow = row === null || row.isPullRequest ? null : sessionFromLabels(row.labels);
   if (fromRow !== null) return { owner: fromRow, source: "row-label" };
   const fromHistory = sessionFromTimeline(timeline);
   if (fromHistory !== null) return { owner: fromHistory, source: "claim-history" };
@@ -84,13 +86,21 @@ export function ownerOfBranch({ branch, row, timeline = [] }) {
  * commits are either landed elsewhere or abandoned), and one naming NO row cannot be traced at all.
  *
  * @param {{ branch: string, ahead: number, lastCommit: { sha: string, at: string },
- *           row: { number: number, state: string, labels: string[] } | null,
+ *           row: { number: number, state: string, labels: string[], isPullRequest?: boolean } | null,
  *           timeline?: { event: string, label?: { name: string } }[] }} input
  */
 export function branchFacts({ branch, ahead, lastCommit, row, timeline = [] }) {
   const rowNumber = rowNumberFromBranch(branch);
+  // A TRAILING NUMBER MAY NAME A PULL REQUEST RATHER THAN A ROW, and the read does not say so by itself.
+  //
+  // Found in the first real sweep: `archive/gate-ages-rebased-137` reported `#137 MERGED`, a state no
+  // issue has. GitHub's REST `/issues/<n>` answers for pull requests too, so `gh issue view 137` returned
+  // the PR and the tool called it a row. One in 93 today -- and under the disposition rules it decides
+  // whether a branch is kept, so a PR read as an open row would hold a branch nobody owns. `pull_request`
+  // is the discriminator GitHub gives; `isPullRequest` carries it rather than inferring from the state.
   const rowState = rowNumber === null ? "no row number in the name"
     : row === null ? `#${rowNumber} does not exist`
+    : row.isPullRequest ? `#${rowNumber} is a PULL REQUEST, not a row`
     : `#${rowNumber} ${row.state}`;
   return { branch, ahead, lastCommit, rowState, ...ownerOfBranch({ branch, row, timeline }) };
 }
