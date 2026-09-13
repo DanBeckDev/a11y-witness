@@ -38,14 +38,16 @@ import { checkReasons } from "./checks-rule.mjs";
 import { gh, lookup, lookupRequiredContexts, lookupCheckRuns } from "./lookups.mjs";
 
 /**
- * #1408: `run` is `gh` unless a caller injects one -- the test does, so a local suite never asks GitHub. The default is
- * exercised only by `merge-guard.mjs`'s own call, through the real pre-push hook; if that wiring broke, the hook's
- * armed-PR refusal (or its absence) is where it would show.
+ * #1408: `run`, `requiredContexts` and `checkRuns` are the real lookups unless a caller injects them -- the test does, so
+ * a local suite never asks GitHub, and an ARMED PR's path is driven rather than assumed. The defaults are exercised only
+ * by `merge-guard.mjs`'s own call, through the real pre-push hook; if that wiring broke, the hook's armed-PR refusal
+ * (or its absence) is where it would show.
  * @param {string} branchName
- * @param {{ run?: typeof gh }} [deps]
+ * @param {{ run?: typeof gh, requiredContexts?: typeof lookupRequiredContexts, checkRuns?: typeof lookupCheckRuns }} [deps]
  * @returns {{ number: number | null, armed: boolean, green: boolean | null, behindBy: number | null } | null}
  */
-export function lookupArmedPrStatus(branchName, { run = gh } = {}) {
+export function lookupArmedPrStatus(branchName,
+  { run = gh, requiredContexts = lookupRequiredContexts, checkRuns = lookupCheckRuns } = {}) {
   return lookup(() => {
     const prs = JSON.parse(run(["pr", "list", "--repo", REPO, "--head", branchName, "--state", "open",
       "--json", "number,autoMergeRequest,headRefOid"]));
@@ -53,8 +55,8 @@ export function lookupArmedPrStatus(branchName, { run = gh } = {}) {
     const pr = prs[0];
     const armed = pr.autoMergeRequest != null;
     if (!armed) return { number: pr.number, armed: false, green: false, behindBy: null };
-    const required = lookupRequiredContexts();
-    const runs = lookupCheckRuns(pr.headRefOid);
+    const required = requiredContexts();
+    const runs = checkRuns(pr.headRefOid);
     if (required === null || runs === null) {
       return { number: pr.number, armed: true, green: null, behindBy: null };
     }
