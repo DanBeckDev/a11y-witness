@@ -233,7 +233,10 @@ function mainTipCommittedAt(repo, run) {
  *
  * An ordinary in-flight run masks it too and self-corrects within minutes. A GHOST never completes
  * (`queued` AND zero jobs AND `updated_at == created_at`; the two on #1253 were still stuck 90
- * minutes after creation, read at 10:49:54Z against a 09:19:57Z creation), so the masking never lifts. This is the fourth member of the family this file already
+ * minutes after creation, read at 10:49:54Z against a 09:19:57Z creation), so the masking never lifts.
+ * AND A GHOST OUTLIVES ITS BRANCH: `agent/verdict-parser-1245` merged and was deleted at 10:26Z, and
+ * both were still `queued` against a ref that no longer exists -- so "the branch is gone, its runs
+ * are settled" is wrong about them, and no cleanup anyone performs will clear one. This is the fourth member of the family this file already
  * guards -- a 502, an empty list, a stopped list -- each of which must never return what green returns.
  *
  * `inFlight` is reported ALONGSIDE the colour rather than replacing it. Deciding "cannot say" whenever
