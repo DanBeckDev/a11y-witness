@@ -74,6 +74,9 @@
 //
 //   node scripts/close-rows-for-merged-pr.mjs <pr-number>
 import { execFileSync } from "node:child_process";
+import { settleClosedStatus } from "./settle-closed-status.mjs";
+// The token-carrying half, imported HERE (an entry point) and injected, so the pure module stays pure.
+import { moveProjectStatus } from "./row-claim.mjs";
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 // RELATIVE, never `@a11y-witness/worker-fleet/cli-flags`: this job runs with `actions/checkout` and
@@ -195,10 +198,13 @@ export function stripClaimLabels(n, labels, repo, logPrefix = "CLOSE-ROWS") {
  *
  * @param {{ close: {number:number, labels:string[]}[], already: {number:number, labels:string[]}[] }} plan
  * @param {{ prNumber: string, sha: string, repo: string }} ctx
- * @param {{ closeOne?: typeof closeOneRow, strip?: typeof stripClaimLabels }} [deps]
+ * @param {{ closeOne?: typeof closeOneRow, strip?: typeof stripClaimLabels,
+ *   settle?: (n: number) => void }} [deps]
  * @returns {number[]} row numbers that could not be closed (empty on success)
  */
-export function applyClosurePlan({ close, already }, ctx, { closeOne = closeOneRow, strip = stripClaimLabels } = {}) {
+export function applyClosurePlan({ close, already }, ctx,
+  { closeOne = closeOneRow, strip = stripClaimLabels,
+    settle = (/** @type {number} */ n) => settleClosedStatus(n, { moveStatus: moveProjectStatus }) } = {}) {
   // #776/#791: THE CLOSE is left alone -- re-closing an already-closed row is not this loop's job, and
   // never was. The CLAIM is not: a row that reaches this script already CLOSED is not necessarily one
   // somebody closed by hand days ago -- it may be THIS exact merge, one second earlier (GitHub's own
@@ -206,6 +212,7 @@ export function applyClosurePlan({ close, already }, ctx, { closeOne = closeOneR
   for (const { number: n, labels } of already) {
     console.log(`CLOSE-ROWS: #${n} ALREADY CLOSED -- left alone.`);
     strip(n, labels, ctx.repo);
+    settle(n);
   }
 
   const failed = [];
@@ -213,6 +220,7 @@ export function applyClosurePlan({ close, already }, ctx, { closeOne = closeOneR
     const closed = closeOne(n, ctx);
     if (!closed) { failed.push(n); continue; }
     strip(n, labels, ctx.repo);
+    settle(n);
   }
   return failed;
 }
