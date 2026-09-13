@@ -163,12 +163,15 @@ export function foldByStart(base, child) {
 export async function mergeChildCoverage({ report, entries, options, root }) {
   const provider = new CoverageProvider(/** @type {any} */ (options), root);
   const children = entries.length > 0 ? await provider.resolveRawCoverage([{ entries, root }]) : null;
-  const folded = { ...report };
+  // A CLONE, not a spread: istanbul's `CoverageMap.merge` keeps the object it is given BY REFERENCE and later merges
+  // rewrite it in place. Measured on #1350: a second map merged onto the caller's entry changed the caller's own
+  // `s` from 4 statements to 8, and a test reading its expectation after the call agreed with the mutated value.
+  const folded = /** @type {Record<string, FileData>} */ (structuredClone(report));
   const childFiles = [];
   const unmatched = { statements: 0, functions: 0, branches: 0 };
   for (const file of children?.files() ?? []) {
     if (!(file in report)) continue;
-    const result = foldByStart(report[file], /** @type {any} */ (children).fileCoverageFor(file).toJSON());
+    const result = foldByStart(folded[file], /** @type {any} */ (children).fileCoverageFor(file).toJSON());
     folded[file] = result.data;
     childFiles.push(file);
     for (const kind of /** @type {const} */ (["statements", "functions", "branches"])) unmatched[kind] += result.unmatched[kind];
