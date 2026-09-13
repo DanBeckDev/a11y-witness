@@ -34,8 +34,8 @@
 // actually present beside it, which is exactly what a `process.platform` override would fake past. #494's
 // consumer gate, on a real `windows-2022` runner, is what proves the spawn runs. A source-text walk
 // structurally cannot catch an `EINVAL`; a unit guard pins the call shape, the consumer gate proves it runs.
-import { existsSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { existsSync, realpathSync } from "node:fs";
+import { join, dirname, delimiter } from "node:path";
 
 /**
  * @param {"npx" | "npm"} name
@@ -54,10 +54,34 @@ function cliScriptName(name) {
 export function npmCliScriptCandidates(name) {
   const script = cliScriptName(name);
   const nodeDir = dirname(process.execPath);
-  return [
+  const fixed = [
     join(nodeDir, "node_modules", "npm", "bin", script),
     join(nodeDir, "..", "lib", "node_modules", "npm", "bin", script),
   ];
+  const fromPath = pathDerivedCandidate(name, script);
+  return fromPath === null ? fixed : [...fixed, fromPath];
+}
+
+/**
+ * #1268: THE THIRD LAYOUT. Debian and Ubuntu package npm at `/usr/share/nodejs/npm/bin/`, nowhere near
+ * `node`, and put `/usr/bin/npm` and `/usr/bin/npx` on PATH as symlinks straight to the CLI scripts. So
+ * the executable on PATH, symlinks resolved, IS the script (Debian) or sits in the script's directory
+ * (the upstream tarball's `bin/npx` wrapper). Tried LAST so the two fixed layouts keep their order on
+ * the platforms they were measured on; `null` when nothing named `name` is on PATH, so the candidate
+ * list never carries a path that cannot exist. Found by the first `npm ci` on the agents host.
+ * @param {"npx" | "npm"} name
+ * @param {string} script
+ * @returns {string | null}
+ */
+function pathDerivedCandidate(name, script) {
+  for (const dir of (process.env.PATH ?? "").split(delimiter)) {
+    if (dir === "") continue;
+    const executable = join(dir, name);
+    if (!existsSync(executable)) continue;
+    const real = realpathSync(executable);
+    return real.endsWith(script) ? real : join(dirname(real), script);
+  }
+  return null;
 }
 
 /**
