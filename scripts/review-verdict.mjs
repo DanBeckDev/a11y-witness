@@ -57,6 +57,27 @@ const OPENER = /\b(?:Review|Re-read)\s+(?:of|at)\b/i;
 const HEAD = /`([0-9a-f]{7,40})`/i;
 const AUTHOR = /\bby\s+`?([A-Za-z][\w-]*)`?/;
 
+/**
+ * #1324: EACH FIELD PREFERS THE CONVENTION'S OWN SPELLING, AND FALLS BACK TO THE FIRST MATCH ABOVE.
+ *
+ * `**Review of #1301 (ci run \`34764381448\`) at \`b2fa1fa6\`, prompted by ceo, by worker-x: convinced.**`
+ * read as head `34764381448` and author `ceo`. The run id fails closed (no such head); the author fails OPEN,
+ * because a clock asking "is this verdict from someone other than the PR's author" sees `ceo` on worker-x's
+ * own verdict. So the head is the sha after `at`/`of`, and the author is the `by <name>` a colon closes.
+ * The fallbacks keep a line written outside the convention readable, and absent still returns `null`.
+ */
+const HEAD_AFTER_AT = /\b(?:at|of)\s+`([0-9a-f]{7,40})`/i;
+const AUTHOR_IN_CONVENTION = /,\s*by\s+`?([A-Za-z][\w-]*)`?:/;
+
+/** @param {string} line @param {RegExp[]} patterns @returns {string | null} the first pattern's capture that matches */
+function firstCapture(line, patterns) {
+  for (const pattern of patterns) {
+    const m = pattern.exec(line);
+    if (m) return m[1];
+  }
+  return null;
+}
+
 /** @param {string} text @returns {string | null} the first line that opens like a verdict */
 function openerLine(text) {
   return text.split("\n").find((line) => OPENER.test(line)) ?? null;
@@ -84,8 +105,8 @@ function openerLine(text) {
 export function reviewVerdict(body) {
   const text = typeof body === "string" ? body : "";
   const opener = openerLine(text);
-  const head = opener ? (HEAD.exec(opener)?.[1] ?? null) : null;
-  const author = opener ? (AUTHOR.exec(opener)?.[1] ?? null) : null;
+  const head = opener ? firstCapture(opener, [HEAD_AFTER_AT, HEAD]) : null;
+  const author = opener ? firstCapture(opener, [AUTHOR_IN_CONVENTION, AUTHOR]) : null;
   const m = WORDS.exec(text);
   if (m) {
     const word = m[0].toLowerCase().replace(/\s+/g, " ");
