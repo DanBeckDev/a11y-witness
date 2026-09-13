@@ -335,15 +335,33 @@ test("#1255: an UNCONFIRMED focus log is cantTell -- undetermined, never a clean
     "and the reason must say the evidence is missing, not that the page exposed nothing");
 });
 
+// THE CONFIRMED SHAPE, AS `focusEventVerdict` WRITES IT -- not hand-built. worker-capture's finding on
+// #1270: my first control passed `{checked: true, events: 0, log: []}`, which is a shape assembled to
+// suit the assertion. `capture-pure.mjs`'s producer has exactly three returns, and the confirmed one is
+// always `{asked, checked, events: events.length, log, truncated}` -- the 11 confirmed captures in
+// `runs/` all carry exactly those five keys. A fixture that omits `truncated` and invents its own key
+// set asserts a distinction the real captures may not get.
+const confirmed = (log: { type: string; id: number; name: string; atMs: number }[]) =>
+  ({ asked: true, checked: true, events: log.length, log, truncated: false });
+
 test("#1255 POSITIVE CONTROL: a CONFIRMED empty log is inapplicable -- the oracle ran and found none", () => {
   // Without this, the test above is satisfied by a reader that answers cantTell for every capture, which
   // is the same defect one level up: a verdict that cannot move with its input.
   const outcome = find(criterionOutcomes({
-    capture: focusCapture({ asked: true, checked: true, events: 0, log: [] }), findings: [] }), "2.4.7");
+    capture: focusCapture(confirmed([])), findings: [] }), "2.4.7");
   assert.equal(outcome.outcome, "inapplicable");
   assert.notEqual(outcome.reason,
     find(criterionOutcomes({ capture: focusCapture(UNCONFIRMED), findings: [] }), "2.4.7").reason,
     "THE PAIR IS THE POINT: the two absences must not arrive as the same sentence");
+});
+
+test("#1255: a CONFIRMED log with events is APPLICABLE, so the confirmed branch discriminates", () => {
+  // The other half of the control above: empty and non-empty must not both read `inapplicable`. Built
+  // from the producer's own shape, so `events` and `log.length` agree the way a real capture makes them.
+  const log = [{ type: "focusin", id: 1, name: "Book", atMs: 10 },
+    { type: "focusout", id: 1, name: "Book", atMs: 15 }];
+  assert.equal(find(criterionOutcomes({ capture: focusCapture(confirmed(log)), findings: [] }), "2.4.7")
+    .outcome, "passed", "the oracle ran, events occurred, and no F55 was found -- a real zero");
 });
 
 test("#1255: focusEvents missing entirely is cantTell too -- absent and unconfirmed are both 'cannot say'", () => {
