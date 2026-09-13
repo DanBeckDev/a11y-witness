@@ -145,17 +145,22 @@ person about to type `publish-for-real` is the one whose judgement the release i
 5. **Everything the reading surfaces is filed, not fixed in place.** Fixing as you go destroys the record
    of what a first reader actually met, which is the one thing no internal test can produce a second time.
 
-**Most recent rehearsal:** 2026-09-09, run
-[34364673899](https://github.com/DanBeckDev/a11ign-v1-rehearsal/actions/runs/34364673899), against
-`a11y-witness@8849f92d` (the commit `DanBeckDev/a11y-witness@main` resolved to at the time).
-<!-- REHEARSAL:COMMIT 8849f92df9903660315d0cdc9037e7e04276eece -->
+**Most recent rehearsal:** 2026-09-13, runs
+[34774183433](https://github.com/DanBeckDev/a11ign-v1-rehearsal/actions/runs/34774183433) and
+[34774692947](https://github.com/DanBeckDev/a11ign-v1-rehearsal/actions/runs/34774692947), against
+`a11y-witness@bc1ebb51` (the commit `DanBeckDev/a11y-witness@main` resolved to for the second run; the first
+resolved to `b6653743`, its ancestor, and the two transcripts are byte-identical). Reading and ruling:
+[#915](https://github.com/DanBeckDev/a11y-witness/issues/915#issuecomment-5655298464).
+<!-- REHEARSAL:COMMIT bc1ebb5189bd5fc92a4e750cf40894d9cc60c152 -->
 <!-- The marker above is what `npm run release:rehearsal-check` reads -- checked by
      `rehearsal-currency-gate.test.ts` against `check-rehearsal-currency.mjs`'s own regex, so a rewording
      of the prose above can never silently stop the gate from finding the commit it names. Update BOTH the
      prose and the marker together when a fresh rehearsal runs. NOTHING checks that the two agree: this
      comment once named a `rehearsal-currency.test.ts` check for it, and that file holds no such test
      (checked 2026-09-13, #1291). -->
-Full reading: [#324](https://github.com/DanBeckDev/a11y-witness/issues/324). It produced **five** filed
+The first rehearsal (2026-09-09, run
+[34364673899](https://github.com/DanBeckDev/a11ign-v1-rehearsal/actions/runs/34364673899), against
+`a11y-witness@8849f92d`; full reading [#324](https://github.com/DanBeckDev/a11y-witness/issues/324)) produced **five** filed
 defects, every one surviving a fully green internal suite — the argument for why this gate exists rather
 than a good idea:
 
@@ -177,7 +182,7 @@ names a newer commit here.
 
 ## NOT verified
 
-- **This release, if anything the rehearsal above exercised has changed since `8849f92d`.** A rehearsal
+- **This release, if anything the rehearsal above exercised has changed since `bc1ebb51`.** A rehearsal
   does not extend forward by assumption to whatever HEAD has become since. `npm run release:rehearsal-check`
   is in `release:gate:ci` and REFUSES when the marker above is not an ancestor of the commit being released,
   or when an exercised document or published package has changed since it, printing the paths — a command
