@@ -24,7 +24,7 @@ import { execFileSync } from "node:child_process";
 // #1219: PURE, and deliberately in its own module -- see that file's header. Importing it here costs
 // nothing; importing THIS file from a test costs a `token` requirement the acceptance job cannot meet.
 import { statusContradictions, statusCensus } from "./board-status-health.mjs";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
@@ -450,15 +450,24 @@ export function writeBoardSnapshot({
  * @param {() => T} mutate the actual board-mutating call
  * @param {{ run?: typeof defaultRun, fetchReady?: typeof fetchReadyIssueNumbers,
  *   writeFile?: (path: string, data: string) => void, mkdir?: (path: string) => void, now?: () => Date,
- *   log?: (line: string) => void, excludeIssueNumber?: number | null }} [deps]
+ *   log?: (line: string) => void, exists?: (path: string) => boolean,
+ *   excludeIssueNumber?: number | null }} [deps]
  * @returns {T}
  */
 export function withBoardSnapshot(mutate, deps = {}) {
-  const { log = (line) => process.stdout.write(`${line}\n`), ...snapshotDeps } = deps;
+  const { log = (line) => process.stdout.write(`${line}\n`), exists = existsSync, ...snapshotDeps } = deps;
   const now = snapshotDeps.now ?? (() => new Date());
   const at = now();
   const held = processSnapshot;
-  if (held !== null && at.getTime() - held.takenAt.getTime() < SNAPSHOT_MAX_AGE_MS) {
+  // #852 REUSE RE-READS THE DISK RATHER THAN TRUSTING A REMEMBERED PATH.
+  //
+  // worker-judge's blocker on #1281, driven: the snapshot was written, `rm -rf runs/` took it, and the
+  // next mutation proceeded with nothing behind it. `runs/` is gitignored, so `git clean -xdf` removes
+  // it too, and `rm -rf runs/` appears three times in this repo's own comments as a scenario worth
+  // defending a corpus from. WITHOUT THIS CHECK THE GUARANTEE MOVES FROM MUTATION TIME TO SWEEP TIME --
+  // true of a process's first mutation and false of every reused one, which is not what #399 promises.
+  if (held !== null && exists(held.path)
+    && at.getTime() - held.takenAt.getTime() < SNAPSHOT_MAX_AGE_MS) {
     log(`board-snapshot: reusing ${held.path}, taken ${describeAge(at, held.takenAt)} before this `
       + "mutation -- one sweep per process (#852)");
     return mutate();
@@ -474,8 +483,10 @@ export function withBoardSnapshot(mutate, deps = {}) {
  * @param {Date} at @param {Date} takenAt
  */
 function describeAge(at, takenAt) {
-  const seconds = Math.round((at.getTime() - takenAt.getTime()) / 1000);
-  return `${seconds}s`;
+  // SUB-SECOND AGES IN MILLISECONDS: rounding two quick mutations to `0s` reads as "no time passed"
+  // rather than "under a second", and the age is the field a reader checks against the change it covers.
+  const ms = at.getTime() - takenAt.getTime();
+  return ms < 1000 ? `${ms}ms` : `${Math.round(ms / 1000)}s`;
 }
 
 /**
