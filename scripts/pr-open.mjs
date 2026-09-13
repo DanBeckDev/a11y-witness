@@ -114,9 +114,14 @@ function usage() {
  * @param {{ mode: string, branch: string, head: string, message: string }} at
  */
 export function sendFailureLine({ mode, branch, head, message }) {
+  // ONE PHRASE, NOT A TEMPLATE WITH A HOLE. `Branch `detached at abc123` at `abc123`` prints the sha
+  // twice and reads as a branch literally named "detached at ..." -- the first fix for the detached
+  // case produced exactly that, which is why the whole clause is chosen rather than the field filled.
+  const where = branch.startsWith("detached at ") ? `Detached at \`${head}\``
+    : `Branch \`${branch}\` at \`${head}\``;
   return `pr-open: the body passed and the acceptance ran, but \`gh pr ${mode}\` FAILED -- nothing was `
-    + `created. Branch \`${branch}\` at \`${head}\`; retry the same command unchanged once the cause `
-    + `below is gone.\n  ${message.split("\n")[0]}`;
+    + `created. ${where}; retry the same command unchanged once the cause below is gone.`
+    + `\n  ${message.split("\n")[0]}`;
 }
 
 /**
