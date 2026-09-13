@@ -451,7 +451,8 @@ export function moveProjectStatus(issueNumber, statusName,
   try {
     snapshot(() => run("gh", ["project", "item-edit", String(PROJECT_NUMBER), "--owner", PROJECT_OWNER,
       "--url", url, "--field", "Status", "--value", statusName]),
-      { run, log, excludeIssueNumber: issueNumber });
+      // #1275: the snapshot covers the one item this edit touches, not the whole board.
+      { run, log, excludeIssueNumber: issueNumber, touches: issueNumber });
     return { moved: true };
   } catch (error) {
     const message = /** @type {Error} */ (error).message;
