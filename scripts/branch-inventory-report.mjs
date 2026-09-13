@@ -16,7 +16,8 @@ import { realpathSync } from "node:fs";
 import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 import { REPO } from "./repo-identity.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
-import { branchFacts, renderInventory, rowNumberFromBranch, sessionFromLabels } from "./branch-inventory.mjs";
+import { branchFacts, renderInventory, rowNumberFromBranch, sessionFromLabels, reconcile }
+  from "./branch-inventory.mjs";
 
 /** @type {(cmd: string, args: string[]) => string} */
 const MAX_BUFFER = 64 * 1024 * 1024; // a paginated listing is megabytes; the 1 MB default is an ENOBUFS
@@ -110,8 +111,24 @@ export function timelineFor(number, { run = defaultRun } = {}) {
   }
 }
 
+/**
+ * The counts alone, cheaply -- one git read plus one REST call. Taken at the START and again at the END
+ * of a sweep, because the sweep itself takes about a minute and branches land during it.
+ */
+export function countsNow({ run = defaultRun } = {}) {
+  const open = openPrHeads({ run });
+  const all = branchesWithTips({ run });
+  const noOpenPr = all.filter((b) => !open.has(b.branch));
+  const ahead = noOpenPr.map((b) => aheadOf(b.branch, { run }));
+  const unmerged = ahead.filter((n) => n > 0);
+  return { candidates: all.length, noOpenPR: noOpenPr.length,
+    merged: ahead.length - unmerged.length, unmerged: unmerged.length,
+    commits: unmerged.reduce((a, b) => a + b, 0) };
+}
+
 /** The whole inventory: the four facts for every branch with no open PR and commits main lacks. */
 export function inventory({ run = defaultRun } = {}) {
+  const start = countsNow({ run });
   const open = openPrHeads({ run });
   const noOpenPr = branchesWithTips({ run }).filter((b) => !open.has(b.branch));
   const withAhead = noOpenPr.map((b) => ({ ...b, ahead: aheadOf(b.branch, { run }) }));
@@ -122,10 +139,13 @@ export function inventory({ run = defaultRun } = {}) {
   for (const [number, row] of rows) {
     if (row !== null && sessionFromLabels(row.labels) === null) timelines.set(number, timelineFor(number, { run }));
   }
+  // THE SECOND READ, and `reconcile` is what compares them. #623: "the count at the end reconciles with
+  // the count at the start, or the difference is explained" -- a sum inside one read cannot do that, and
+  // printing one under the word `reconcile` is what worker-judge refused on #1273.
+  const end = countsNow({ run });
   return {
-    counts: { candidates: branchesWithTips({ run }).length, noOpenPR: noOpenPr.length,
-      merged: withAhead.length - unmerged.length, unmerged: unmerged.length,
-      commits: unmerged.reduce((n, b) => n + b.ahead, 0) },
+    counts: end,
+    reconciliation: reconcile(start, end),
     facts: unmerged.map((b) => branchFacts({ ...b,
       row: rows.get(rowNumberFromBranch(b.branch)) ?? null,
       timeline: timelines.get(rowNumberFromBranch(b.branch)) ?? [] })),
@@ -134,13 +154,18 @@ export function inventory({ run = defaultRun } = {}) {
 
 function main() {
   refuseUnknownFlags([], { entry: import.meta.url, command: "npm run branches:inventory" });
-  const { counts, facts } = inventory();
+  const { counts, reconciliation, facts } = inventory();
+  const drift = Object.entries(reconciliation.drift).filter(([, n]) => n !== 0)
+    .map(([k, n]) => `${k} ${n > 0 ? "+" : ""}${n}`).join(", ");
   process.stdout.write(`Read ${new Date().toISOString()} from origin after a fetch.\n\n`
     + `branches on origin (excluding main): ${counts.candidates}\n`
     + `  with no OPEN PR:                   ${counts.noOpenPR}\n`
     + `    merged (0 commits main lacks):   ${counts.merged}\n`
     + `    UNMERGED:                        ${counts.unmerged} carrying ${counts.commits} commits\n`
-    + `    reconcile: ${counts.merged} + ${counts.unmerged} = ${counts.merged + counts.unmerged}\n\n`
+    + `    partition: ${counts.merged} + ${counts.unmerged} = ${counts.merged + counts.unmerged}`
+    + `${reconciliation.endBalanced ? "" : "  <- DOES NOT BALANCE"}\n`
+    + `    reconcile (two reads, start vs end of this sweep): `
+    + `${drift === "" ? "no drift -- nothing landed while this ran" : drift}\n\n`
     + `${renderInventory(facts)}\n`);
 }
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) main();
