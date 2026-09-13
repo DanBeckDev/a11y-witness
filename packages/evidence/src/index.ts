@@ -184,6 +184,20 @@ export interface CaptureInteraction {
    * accessibility tree as a model feature). Present only alongside `postSubmitFields`, from the same probe.
    */
   postSubmitNames?: string[];
+  /**
+   * Where the examination ENDED because an activation took the browser off the page's site (#1363) —
+   * recorded by the worker, which reads the browser's URL after every activation and stops there. Absent
+   * means no activation left the site, or the capture predates the check; `leftSite()` in `left-site.ts`
+   * derives the same fact from an older capture's own announcements.
+   */
+  leftSite?: {
+    control: string;
+    kind: string | null;
+    phase: "sweep" | "focus" | "configuredForm" | "routeChange";
+    from: string;
+    to: string | null;
+    evidence: string;
+  };
 }
 
 /** What a screen reader announced, plus capture metadata. `task` is request
@@ -282,5 +296,9 @@ export {
   parseAnnouncement, nameOf, announces, annotateCapture, CONTAINER_ROLES, CONTROL_ROLES,
 } from "./announcement.js";
 export type { Channel, ParsedAnnouncement, ParsedObject } from "./announcement.js";
+
+/** Where the examination ended, when an activation took the browser off the page's site (#1363). */
+export { announcesANewWindow, leftSite, leftSiteReason, withinTheSite } from "./left-site.js";
+export type { LeftSite, ProbePhase, SiteBoundCapture } from "./left-site.js";
 
 /** Whether the capture examined enough of a channel to support a finding on it. */

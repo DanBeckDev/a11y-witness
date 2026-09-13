@@ -57,6 +57,12 @@ export interface RunResult {
    * tally of zeroes — a fabricated "0 untested" would be worse than the omission it replaced.
    */
   outcomes?: { criterion: string; outcome: string; reason: string }[];
+  /**
+   * Where the examination ENDED because an activation took the browser off the page's site (#1363). Nothing
+   * after it was examined and no finding describes it. Absent on results whose activations stayed on the
+   * page, and on results written before the check existed.
+   */
+  leftSite?: { control: string; to: string | null; source: "recorded" | "derived" } | null;
 }
 
 /** Ordered worst-first, so a threshold can be "this severity or worse". */
@@ -228,6 +234,41 @@ function blockerCountLine(label: string, findings: readonly RunFinding[]): strin
   return `**${label}:** ${blockers === 0 ? "none" : blockers}${others}`;
 }
 
+/**
+ * The Action's log lines -- EXPORTED so a test drives the real wording (#1363).
+ *
+ * When the examination ended because an activation left the site, that is said FIRST. Rehearsal 2's log read
+ * `a11ign: 1 finding(s) (1 serious)` about a finding observed on youtube.com, and a reader of that line alone
+ * would have filed a 2.4.2 bug against the W3C.
+ */
+export function logLines(result: RunResult, failOn: FailOn): string[] {
+  const { findings } = result.verdict;
+  const counts = findings.reduce<Record<string, number>>((acc, f) => {
+    acc[f.severity] = (acc[f.severity] ?? 0) + 1;
+    return acc;
+  }, {});
+  const breakdown = Object.entries(counts).map(([s, n]) => `${n} ${s}`).join(", ") || "none";
+  const left = result.leftSite;
+  const lines: string[] = [];
+  if (left) {
+    lines.push(`a11ign: examination ENDED -- left the site at ${JSON.stringify(left.control)}`
+      + `${left.to ? ` (to ${left.to})` : ""}; everything after it was NOT EXAMINED`);
+  }
+  lines.push(`a11ign: ${findings.length} finding(s) (${breakdown})${left ? " in what was examined" : ""}; `
+    + `fail-on=${failOn}`);
+  return lines;
+}
+
+/** The summary's warning when the examination ended early (#1363), above everything it did find. */
+function leftSiteLead(left: NonNullable<RunResult["leftSite"]>): string[] {
+  return [
+    `> **The examination ended early.** Activating ${JSON.stringify(left.control)} took the browser off this `
+      + `site${left.to ? ` (to ${left.to})` : ""}. Nothing observed after that point is reported as this page's, `
+      + "and the sweeps and probes that would have run after it were not examined.",
+    "",
+  ];
+}
+
 export function renderSummary(result: RunResult, options: SummaryOptions = {}): string {
   const taskQuestion = options.taskQuestion ?? DEFAULT_TASK_QUESTION;
   const isTaskClaim = options.isTaskClaim ?? false;
@@ -263,6 +304,7 @@ export function renderSummary(result: RunResult, options: SummaryOptions = {}): 
     );
     return lines.join("\n");
   }
+  if (result.leftSite) lines.push(...leftSiteLead(result.leftSite));
   lines.push(
     "## a11ign — what a screen reader actually experienced",
     "",
