@@ -262,3 +262,21 @@ chat widget's frame before the first probe on 6 of 6 collapsed captures of #951'
 focus is now returned to the top document when it sits inside a frame nothing of ours put it there
 (`focusRestore` mark, `observed.headings.focusRestored`). A sweep that still starts inside a frame is marked
 incomplete (`heldBy`). Had #972 missed the window it would have been 18.
+
+## 17 → 18 (2026-09-13): the capture stops where an activation leaves the page's site
+
+Rehearsal 2 (#915) ran the documented page and task, `https://www.w3.org/WAI` and "Learn about web
+accessibility". The form-field sweep's first field was the W3C's embedded YouTube player, the task word matched
+it, and activating it replaced the tab with youtube.com. Every probe after that read Google's page, and the
+capture filed it under w3.org's key.
+
+**#1363 changes what a capture *does*, which is #972's reason for riding 17.** The probe no longer activates a
+control announced inside a frame or embedded object. After every activation it asks whether the browser is still
+on the page's origin, or whether a new window or tab opened. When it is not, the capture records
+`interaction.leftSite` and ends: nothing more is pressed, the sweep stops with what it read, and the later probes
+are skipped and marked with the reason.
+
+**A v17 capture whose probe pressed an embed holds another site's evidence under this page's key.** Served beside
+v18 captures, it would be wrong data kept valid rather than merely a mixed corpus: `ceo`'s ruling for the bump on
+#1376. The recapture rides orchestrator's #914 fleet batch, and the deploy uses `--allow-protocol-change` there
+and nowhere else. The Action path never reads the capture cache, so rehearsal 3 is unaffected.
