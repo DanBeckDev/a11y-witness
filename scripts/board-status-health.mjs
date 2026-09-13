@@ -39,14 +39,24 @@
  * @param {{ done?: string, live?: string[] }} [vocabulary] the Status names, injected so this file
  *   states no board's column names as fact -- a renamed column must fail LOUDLY at the caller, not
  *   silently reclassify every row here.
- * @returns {{ closedButLive: BoardItem[], openButDone: BoardItem[] }}
+ * @returns {{ closedButLive: BoardItem[], openButDone: BoardItem[], closedUnboarded: BoardItem[] }}
  */
 export function statusContradictions(items, { done = "Done", live = undefined } = {}) {
   const closedButLive = items.filter((i) =>
     i.state === "CLOSED" && i.status !== null && i.status !== done
     && (live === undefined || live.includes(i.status)));
   const openButDone = items.filter((i) => i.state === "OPEN" && i.status === done);
-  return { closedButLive, openButDone };
+  // #1228: A THIRD OUTCOME, never folded into either. `i.status !== null` above is right for the
+  // OFFENDER question -- a row nobody boarded is not the same defect as one boarded at the wrong column
+  // -- but "not that defect" became "not reported at all": during #1224 three such rows existed while
+  // this reported 41, and the truth was 44. Two sessions predicted 44 and 41 from one board and both
+  // were right about different questions.
+  //
+  // SEPARATE BECAUSE THE REMEDIES DIFFER. A row at a live Status needs its Status corrected; a row with
+  // none needs BOARDING, or a decision that it should not be on the board at all. One list with two
+  // remedies is the exemption-table-as-a-list defect, so this is a third list rather than a wider filter.
+  const closedUnboarded = items.filter((i) => i.state === "CLOSED" && i.status === null);
+  return { closedButLive, openButDone, closedUnboarded };
 }
 
 /**
