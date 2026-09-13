@@ -91,6 +91,7 @@
 // one `gh issue create` actually reads, which is `refuseUnknownFlags`'s whole job everywhere else in this
 // tree, applied to a wrapped external tool instead of to this file's own flags.
 import { execFileSync } from "node:child_process";
+import { fleetOrLabAcceptance } from "./acceptance-commands.mjs";
 import { readFileSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
@@ -732,7 +733,18 @@ function laneLabelsOrRefusal(body, loadLanesConfig) {
       + "malformed) -- refusing to guess which lane this row belongs to. Nothing was filed." };
   }
   const regionFiles = /** @type {string[]} */ (declaredRegionFiles(body));
-  return { ok: true, laneLabels: laneLabelsFor(regionFiles, lanes) };
+  const laneLabels = laneLabelsFor(regionFiles, lanes);
+  // #1241: THE ACCEPTANCE ANSWERS WHAT THE REGION CANNOT. `laneLabelsFor` derives a lane from PATHS, so a
+  // row whose deliverable is not a commit carries none -- #1042 and #1234 both reached `ready`/`lane:any`
+  // with an acceptance naming a specific session, and an engineer had to read the body to find out the
+  // row was not theirs. Twice. A command that reaches the fleet or the lab names its owner directly.
+  //
+  // ADDED, never substituted: a row can have BOTH paths and a fleet acceptance (a code half plus a run
+  // against real boxes), and dropping the path lane would route it away from the engineer who must write
+  // the code. The two lanes answer different questions and a row may need both answers.
+  const fleetReason = fleetOrLabAcceptance(body);
+  if (fleetReason && !laneLabels.includes("lane:orchestrator")) laneLabels.push("lane:orchestrator");
+  return { ok: true, laneLabels };
 }
 
 /**
