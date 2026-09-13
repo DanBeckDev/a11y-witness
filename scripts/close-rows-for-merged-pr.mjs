@@ -96,6 +96,30 @@ import { READY_LABEL, CLAIM_LABEL, STARTED_LABEL } from "./claim-labels.mjs";
 export const EXIT = { DONE: 0, COULD_NOT_CLOSE: 1, CANNOT_ASK: 2, STATUS_NOT_MOVED: 3 };
 
 /**
+ * THE EXIT BOTH CLOSE-ROWS PATHS TAKE, PURE (#1299). A row that could not be closed outranks a closed row whose
+ * Status did not move, and BOTH are named, never counted. `STATUS_NOT_MOVED` is its own code because "closed,
+ * but the board still shows it live" is a different fact from "not closed", with a different repair.
+ *
+ * ONE DECISION FOR BOTH PATHS, and the dispatch path's `main()` calls it: `worker-capture`'s review of #1357
+ * showed the dispatch path's exit 3 lived only in `main()`, where reverting it to `DONE` left the suite green.
+ *
+ * @param {{ failed: number[], unsettled: number[] }} outcome
+ * @param {string} prefix the log prefix -- `CLOSE-ROWS` for the immediate path, `SWEEP` for the backstop
+ * @returns {{ code: number, lines: string[] }}
+ */
+export function closeRowsExit({ failed, unsettled }, prefix) {
+  const lines = [];
+  if (failed.length) lines.push(`${prefix}: could not close ${failed.length}: ${failed.join(" ")}`);
+  if (unsettled.length) {
+    lines.push(`${prefix}: closed, but Status NOT moved for ${unsettled.length}: `
+      + `${unsettled.map((n) => `#${n}`).join(" ")} -- the board still shows them at a live Status`);
+  }
+  if (failed.length) return { code: EXIT.COULD_NOT_CLOSE, lines };
+  if (unsettled.length) return { code: EXIT.STATUS_NOT_MOVED, lines };
+  return { code: EXIT.DONE, lines };
+}
+
+/**
  * WHAT TO DO WITH EACH ROW THE MERGED PR DECLARED -- the whole decision, as one pure function.
  *
  * Separated from the API calls so the four outcomes can be driven directly. A job whose reporting is
@@ -288,18 +312,9 @@ function main() {
     process.exit(EXIT.DONE);
   }
 
-  const { failed, unsettled } = applyClosurePlan(plan, { prNumber: number, sha, repo });
-
-  if (failed.length > 0) {
-    console.error(`CLOSE-ROWS: could not close ${failed.length}: ${failed.join(" ")}`);
-    process.exit(EXIT.COULD_NOT_CLOSE);
-  }
-  if (unsettled.length > 0) {
-    console.error(`CLOSE-ROWS: closed, but Status NOT moved for ${unsettled.length}: `
-      + `${unsettled.map((n) => `#${n}`).join(" ")} -- the board still shows them at a live Status`);
-    process.exit(EXIT.STATUS_NOT_MOVED);
-  }
-  process.exit(EXIT.DONE);
+  const { code, lines } = closeRowsExit(applyClosurePlan(plan, { prNumber: number, sha, repo }), "CLOSE-ROWS");
+  for (const line of lines) console.error(line);
+  process.exit(code);
 }
 
 // The entry guard `merge-guard.mjs` uses: a bare `file://` + argv[1] comparison misreads a path with a

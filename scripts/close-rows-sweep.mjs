@@ -59,7 +59,7 @@ import { pathToFileURL } from "node:url";
 import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-flags.mjs";
 // #1227: `settleClosedStatus` is imported rather than re-derived, for the reason this file's own header
 // gives about `stripClaimLabels`: a second copy of that decision is the "fact stated twice" shape.
-import { closurePlan, stripClaimLabels } from "./close-rows-for-merged-pr.mjs";
+import { closurePlan, stripClaimLabels, closeRowsExit } from "./close-rows-for-merged-pr.mjs";
 import { settleClosedStatus } from "./settle-closed-status.mjs";
 import { moveProjectStatus } from "./row-claim.mjs";
 
@@ -172,22 +172,13 @@ export function closeOnePr(number, repo, { gh_ = gh, strip = stripClaimLabels,
 }
 
 /**
- * THE EXIT, PURE (#1299). A row that could not be closed outranks a closed row whose Status did not move, and
- * BOTH are named, never counted. `STATUS_NOT_MOVED` is its own code because "closed, but the board still shows
- * it live" is a different fact from "not closed", with a different repair.
+ * The sweep's exit: the SAME decision the immediate path takes (`closeRowsExit`), with the sweep's log prefix.
+ * Imported rather than restated, for the reason this file's header gives about `closurePlan` (#1299).
  * @param {{ failed: number[], unsettled: number[] }} outcome
  * @returns {{ code: number, lines: string[] }}
  */
-export function sweepExit({ failed, unsettled }) {
-  const lines = [];
-  if (failed.length) lines.push(`SWEEP: could not close ${failed.length}: ${failed.join(" ")}`);
-  if (unsettled.length) {
-    lines.push(`SWEEP: closed, but Status NOT moved for ${unsettled.length}: `
-      + `${unsettled.map((n) => `#${n}`).join(" ")} -- the board still shows them at a live Status`);
-  }
-  if (failed.length) return { code: EXIT.COULD_NOT_CLOSE, lines };
-  if (unsettled.length) return { code: EXIT.STATUS_NOT_MOVED, lines };
-  return { code: EXIT.DONE, lines };
+export function sweepExit(outcome) {
+  return closeRowsExit(outcome, "SWEEP");
 }
 
 function main() {
