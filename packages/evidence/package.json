@@ -1,6 +1,6 @@
 {
   "name": "@a11ign/evidence",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "description": "The shared evidence contract for screen-reader accessibility captures: wire types, pure verification predicates, and the WCAG 2.2 AA criteria list. Zero dependencies, no I/O.",
   "license": "Apache-2.0",
   "type": "module",

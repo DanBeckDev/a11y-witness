@@ -31,6 +31,12 @@ patches, four as minors and **three as no release at all**. All fourteen are maj
 A 40-line refactor of `capture-core.mjs` that `evidence:check` reports as SAME is a **patch**, however
 large the diff.
 
+**Before 1.0, breaking is a minor (#1396).** While every public package is 0.x, a change the table calls
+major is released as `minor`, which is semver's own rule for 0.x. A never-published package (0.0.0) has
+exactly `minor` as its highest pending bump, so the first publish is 0.1.0. `changeset-zero-major.test.ts`
+refuses both breaches from the real files. Measured in release dry run 34776105178: two pending `major`
+entries over 0.1.0 manifests would have published 1.0.0.
+
 ## Config choices worth knowing
 
 - **`"linked": []`** — every package versions independently, which is the payoff ADR 0004's boundaries
@@ -54,7 +60,8 @@ report, and `passed` in the acceptance report. Both are read back; neither is a 
 failure that prevents is promoting a model because you believe it is good, which is exactly the state of
 mind in which the belief is wrong.
 
-Then it writes the changeset at **major**, with the provenance filled in from the training report — the
+Then it writes the changeset at the breaking level, **minor** while every public package is 0.x and **major**
+from 1.0, with the provenance filled in from the training report — the
 records, the floor and its source, the encoder, and every per-subtype threshold. ADR 0007 requires that
 provenance "because 'which model scored this' is the question a disputed finding turns on", and until this
 existed it was a human remembering to type it.

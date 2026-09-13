@@ -1,11 +1,12 @@
 ---
-"@a11ign/scorer": major
+"@a11ign/scorer": minor
 ---
 
 Retrained scorer weights (`candidate`).
 
-**Major, and not because the API changed — because the weights ARE the API.** A consumer's build can go
-from passing to failing with no code change on their side, which is breaking however small the diff looks.
+**Minor, because no public package has reached 1.0 — the weights ARE the API all the same.** A consumer's
+build can go from passing to failing with no code change on their side. Under 0.x that ships as a minor, and
+from 1.0 every retrain is a major.
 
 Provenance, so a disputed finding can be traced to the model that produced it:
 
