@@ -147,7 +147,7 @@ feature, it is a claim this project cannot yet make.
 No single model handles every WCAG criterion well, so a generative pass drafts findings from the transcript and two layers refine them:
 
 - **Deterministic rules** (always on, [`packages/judge/src/rules.ts`](./packages/judge/src/rules.ts)) own the *absence-of-name* criteria — an image announced with no alternative text (1.1.1), a control announced as a bare role with no accessible name (4.1.2). These are facts, not judgement calls, so a rule catches them exactly, for free, with no false positives.
-- **A discriminative gate** (opt-in, [`packages/judge/src/verify-gate.ts`](./packages/judge/src/verify-gate.ts)) re-scores the *semantic* findings — vague link text (2.4.4), non-descriptive headings (2.4.6) — with a small encoder (DeBERTa-v3 NLI, ONNX) via [transformers.js](https://github.com/huggingface/transformers.js). A discriminative model *scores* a candidate rather than *generating* one, so it cannot invent a finding, which removes the over-flagging small generative models show on clean pages.
+- **A discriminative gate** (opt-in, [`packages/judge/src/verify-gate.ts`](./packages/judge/src/verify-gate.ts)) re-scores the *semantic* findings — vague link text (2.4.4), non-descriptive headings (2.4.6) — with a small encoder (DeBERTa-v3 NLI, ONNX) via [transformers.js](https://github.com/huggingface/transformers.js). This gate is off unless you enable it, and the default `local` judge does not use it: that judge is the trained scorer over a frozen MiniLM encoder described in [Part 3](#part-3-the-accessibility-model-we-are-building). A discriminative model *scores* a candidate rather than *generating* one, so it cannot invent a finding, which removes the over-flagging small generative models show on clean pages.
 
 The model call itself is one seam (`ask()` in [`packages/judge/src/judge.ts`](./packages/judge/src/judge.ts)):
 
@@ -170,19 +170,31 @@ jobs:
   a11y:
     runs-on: windows-2022          # NVDA needs Windows; GitHub hosts these
     permissions:
+      contents: read
       pull-requests: write         # for the PR comment below; omit it and the report still runs, only quieter
     steps:
       - uses: actions/checkout@v4
       - uses: DanBeckDev/a11y-witness@main
+        # Pin it: @main moves under you. Use the full commit SHA if your CI must not change.
+        id: a11ign
         with:
           url: https://example.com/contact
           task: Send an enquiry
+      # Keep the evidence: the full result, including the transcript behind every finding. Guarded on the
+      # output existing, so a run that failed does not also fail the upload.
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.a11ign.outputs.result-json != ''
+        with:
+          name: a11ign-result
+          path: ${{ steps.a11ign.outputs.result-json }}
+          if-no-files-found: warn
 ```
 
-That is the whole thing. **No API key and no account** — `judge-backend` defaults to `local`, this
-project's own trained scorer, which ships in the repo and never sends your page anywhere. Findings appear as
-a PR comment; `fail-on` decides whether *findings* fail the build, and defaults to `never` so adding it
-cannot break your pipeline on day one. `.github/workflows/action-smoke.yml` runs exactly this shape
+**That is the job, not yet a workflow file.** Put it in `.github/workflows/a11ign.yml` under two more lines, `name: a11ign` and a trigger such as `on: [pull_request, workflow_dispatch]`; the whole runnable file, trigger included, is at the top of [the Action guide](./docs/github-action.md).
+
+**No API key and no account** — `judge-backend` defaults to `local`, this
+project's own trained scorer, which ships in the repo and never sends your page anywhere. On a pull request, findings appear as a PR comment. On any other run (started by hand, or by a push) there is no comment: the log shows a one-line count, the report is in the run's job summary, and the full result is the `a11ign-result` artifact the upload step saves. `fail-on` decides whether *findings* fail the build, and defaults to `never` so adding it
+cannot break your pipeline on day one. `.github/workflows/action-smoke.yml` runs this shape
 against two W3C pages on every push, as a consumer would.
 
 **→ [Try it against your own page](./docs/try-it.md)** — the shortest honest path to a real run, what to
@@ -408,7 +420,7 @@ Deliberately **not** a general-purpose language model. The project already produ
 
 That model can *score* a candidate finding but cannot invent one, which is the property that matters: a generator that hallucinates a violation destroys the trust the whole project depends on. The division of labour stays as it is — deterministic rules keep the exact absence cases, the scorer takes the judgment calls, and the explanation is rendered from captured evidence and a fixed WCAG template.
 
-It runs through the `applyGate` seam in [`packages/judge/src/verify-gate.ts`](./packages/judge/src/verify-gate.ts). **This is no longer future tense — it shipped and is the default**, and it cleared the pre-registered bar to get there: a criterion's findings are the scorer's only once it meets the holdout bar for that criterion with **zero false positives on the clean paired pages**. Held-out acceptance is currently 80 true positives, 0 false positives, 0 false negatives across the 6 criteria the shipped model scores today, out of 16 it has a head for (`packages/scorer/models/screenreader-scorer/acceptance-report.json`).
+It runs through the `applyGate` seam in [`packages/judge/src/verify-gate.ts`](./packages/judge/src/verify-gate.ts). **This is no longer future tense — it shipped and is the default**, and it cleared the pre-registered bar to get there: a criterion's findings are the scorer's only once it meets the holdout bar for that criterion with **zero false positives on the clean paired pages**. Held-out acceptance is currently 80 true positives, 0 false positives, 0 false negatives across the 6 criteria the shipped model scores today, out of 16 it has a head for (`packages/scorer/models/screenreader-scorer/acceptance-report.json`). The summary line a run prints ("This layer covers N criteria") counts something different: every criterion the layer covers, deterministic rules and scorer heads together, overlapping, so its number is larger than this one.
 
 Where a deterministic rule already decides a subtype, the rule wins and the scorer is suppressed for it — so the exact cases stay exact and the model only carries the judgment calls.
 
