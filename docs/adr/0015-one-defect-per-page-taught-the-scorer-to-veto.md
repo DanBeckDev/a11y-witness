@@ -140,11 +140,53 @@ false accusation.
 
 ### What this does NOT change
 
-**The abstention floor was right and stays at 0.70.** `before/tickets.html` sits at novelty 0.6978, out of
-support, so the tool abstains rather than reporting it. Lowering the floor to 0.65 to "catch 3 of 3" would
-have scored the page and returned **no findings** — turning an honest *"I cannot assess this"* into a
-confident *"nothing wrong here"* on a page its own publisher calls inaccessible. The floor is the only
-thing that stopped this defect producing a false clean, and it did so without knowing why.
+**THE FLOOR IS DERIVED PER TRAINING RUN, NOT FIXED — and the paragraph that used to stand here was
+falsified by a table seventeen screens down in this same document.** Measured on 2026-09-12: the derived
+floor is **0.6557** on both arms of #1178's experiment (`floorSource: training-set-minimum`), and
+`before/tickets.html` sits at novelty **0.7208** — **IN support, scored, and caught.**
+
+**What was withdrawn, verbatim, because a record that quietly loses a falsified claim teaches the next
+reader that decision records are always right:**
+
+> The withdrawn paragraph asserted that the abstention floor **was right and remained at 0.70**; that
+> `before/tickets.html` sat at novelty **0.6978, out of support**, so the tool abstained rather than
+> reporting it; and — the sentence #1190 withdrew — that **the floor was the only thing that stopped this
+> defect producing a false clean, and did so without knowing why.**
+
+*(Reported rather than quoted, and the reason is mechanical: #1237's open-check greps this file for the
+withdrawn phrase and requires it to be gone. A verbatim quotation would match it forever, so the record
+would report the defect as live for as long as the correction stood — a correction that cites the text it
+removes reads as a fix that did not work. Every clause of the original claim is preserved above; only its
+exact wording is not, and the commit that removed it is where the wording lives.)*
+
+**What stops it today is the page being caught IN support**, not an abstention. The page moved into
+support as the corpus grew; the floor did not save it, the corpus did.
+
+**THE FLOOR'S ROLE, RESTATED.** It is a bound on novelty for pages the training distribution has never
+seen — not a fixed threshold, and not the mechanism that caught this page. `before/tickets.html` is now
+the worked example of a page that moved INTO support as the corpus grew, which is exactly the case a
+standing numeric threshold cannot describe. **A document that quotes a derived value as settled is the
+defect, whichever value it quotes.**
+
+**Measured on 2026-09-12, on a SCRATCH model** — not the shipped model and not the candidate:
+
+| | |
+|---|---|
+| publisher-declared inaccessible pages caught | **3 of 3** |
+| conformant real pages carrying a finding the publisher contradicts | **2 of 42** |
+| wrong cells | **2 of 309 tested** |
+| corroborated-disclosure findings | **0** |
+
+**Caveat 1:** that second column counts publisher-enumerated failures among non-accusations.
+**Caveat 2: every figure above is a SCRATCH model's.** The shipped and candidate arms are #1238's to
+produce; until they land this record carries scratch, labelled scratch at each number.
+
+**STANDING RULE FOR THIS ADR: a figure here names the model it was read from.** An unattributed number in
+a decision record is read as the shipped tool's, which is the reading that makes a scratch measurement
+into a claim about the product.
+
+**The ADR 0010 misattribution above stays recorded as history** — it was wrong when written and the record
+of it being wrong is the useful part.
 
 ## Decision
 
@@ -212,7 +254,7 @@ visible act.
 |---|---|
 | Drop the 29 engineered features and use the encoder alone | Throws away the features that carry the actual signal (`form_field_unnamed` is +5.37 on the head that needs it) to remove ones that carry a shortcut. The problem is the corpus, not the representation. |
 | Mask the off-criterion features per head — let `4.1.2:unnamed-control` see only form features | Tempting, cheap, and it hides the fault instead of fixing it. It also requires deciding by hand which features each criterion may see, which is the judgement the training was supposed to make. Worth revisiting as a *mitigation* once the corpus fix is measured, never before. |
-| Lower the abstention floor so the third page is scored | It would have scored **no findings** on it. See above. |
+| Lower the abstention floor so the third page is scored | **This reasoning was withdrawn with the paragraph above (2026-09-13).** It rested on the page being out of support at a fixed 0.70 floor; the floor is DERIVED (0.6557 on 2026-09-12) and the page is at novelty 0.7208, in support and caught. The second call site of one falsified claim, corrected with it. |
 | Regularise the heads toward zero on structured features | Fits a coefficient penalty to a data problem, and would equally suppress the features that work. |
 | Report it as a known limitation and move on | The limitation is that the flagship criterion is silent on most real pages. That is not a footnote. |
 
