@@ -83,6 +83,13 @@ export function rstestCoverageArgs(options) {
 }
 
 /**
+ * `root` itself or a path BENEATH it -- never a sibling that shares the prefix (reviewer on #1403: `/repo-other/x.mjs`
+ * starts with `/repo` and is not inside it). The boundary is a path separator.
+ * @param {string} filePath @param {string} root
+ */
+const isInside = (filePath, root) => filePath.startsWith(root.endsWith(sep) ? root : `${root}${sep}`);
+
+/**
  * Every repo script a child ran, from `NODE_V8_COVERAGE`'s raw files, as the provider's entries. Only `file:` URLs
  * under `root` and outside `node_modules`; a query string (`?fresh-import=...`) is not part of the path.
  * @param {string} rawDir @param {string} root
@@ -96,7 +103,7 @@ export function childCoverageEntries(rawDir, root) {
     for (const script of /** @type {{ url: string, functions: unknown[] }[]} */ (result)) {
       if (!script.url.startsWith("file:")) continue;
       const filePath = fileURLToPath(script.url.split("?")[0]);
-      if (!filePath.startsWith(root) || filePath.includes(`${sep}node_modules${sep}`)) continue;
+      if (!isInside(filePath, root) || filePath.includes(`${sep}node_modules${sep}`)) continue;
       entries.push({ ...script, url: pathToFileURL(filePath).href, filePath });
     }
   }
