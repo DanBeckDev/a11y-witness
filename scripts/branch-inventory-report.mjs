@@ -6,7 +6,8 @@
 // row's acceptance runs in a job with no token (#1009). This file reads git and `gh` and therefore does
 // carry that requirement.
 //
-// READ-ONLY BY CONSTRUCTION: every git command here is a read (`for-each-ref`, `rev-list`, `log`) and
+// READ-ONLY ON ORIGIN BY CONSTRUCTION: every git command here is a read (`for-each-ref`, `rev-list`, `log`)
+// except `git fetch --prune origin`, which writes only this checkout's remote-tracking refs (#1282), and
 // every `gh` call is a `list`/`view`. #623 is explicit that deleting is NOT in scope -- a branch is
 // deleted by its owner having said so on the row, or it is kept -- so this tool has no closing path at
 // all rather than a guarded one.
@@ -32,8 +33,18 @@ const defaultRun = (cmd, args) =>
  * open-check recorded that `refs/remotes/origin/HEAD` has a short name of `origin`, so a grep for
  * `^HEAD$` never matches it, `origin/origin` is not a revision, and the error goes to stderr while the
  * line is counted anyway. A phantom in the population and a visible error that changed no number.
+ *
+ * PRUNED FIRST, #1282. A remote-tracking ref is a local cache, not a fact about the remote, and `git fetch`
+ * without `--prune` never removes one. Measured 2026-09-13T12:40Z: 208 refs read here, 202 after
+ * `git fetch --prune`, and the six were branches already deleted on origin. The returned list looks the
+ * same either way, which is why the test pins the argv rather than the answer.
+ *
+ * THE FETCH LIVES HERE, NOT IN A CALLER, because both counts and the facts sweep read through this
+ * function: the end-of-sweep count in `inventory` then sees what landed or left DURING the sweep, rather
+ * than re-reading the cache the start fetched.
  */
 export function branchesWithTips({ run = defaultRun } = {}) {
+  run("git", ["fetch", "--prune", "origin"]);
   const out = run("git", ["for-each-ref", "--format=%(refname:lstrip=3)\t%(objectname:short)\t%(committerdate:iso-strict)",
     "refs/remotes/origin", "--exclude=refs/remotes/origin/HEAD"]);
   return out.split("\n").filter((l) => l.trim() !== "").map((line) => {
@@ -157,7 +168,7 @@ function main() {
   const { counts, reconciliation, facts } = inventory();
   const drift = Object.entries(reconciliation.drift).filter(([, n]) => n !== 0)
     .map(([k, n]) => `${k} ${n > 0 ? "+" : ""}${n}`).join(", ");
-  process.stdout.write(`Read ${new Date().toISOString()} from origin after a fetch.\n\n`
+  process.stdout.write(`Read ${new Date().toISOString()} from origin after \`git fetch --prune origin\`, so deleted branches are not counted.\n\n`
     + `branches on origin (excluding main): ${counts.candidates}\n`
     + `  with no OPEN PR:                   ${counts.noOpenPR}\n`
     + `    merged (0 commits main lacks):   ${counts.merged}\n`
