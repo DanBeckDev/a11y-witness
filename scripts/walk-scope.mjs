@@ -28,6 +28,10 @@
 // module imported ABOVE this one happens before the observer is installed and is not seen.
 // `declared-walk-scope.test.ts` pins the ordering.
 import { createRequire, syncBuiltinESMExports } from "node:module";
+// ESM, deliberately (#1349): the check registers with the runner that is RUNNING. Under rstest the resolve hook
+// redirects an ESM `node:test` to rstest's hooks, and does not redirect `require` -- measured, an `after` from
+// `require("node:test")` never fired under rstest, so every declarer passed with its check never run.
+import { after } from "node:test";
 import { fileURLToPath } from "node:url";
 import { basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 // The declaration's parser lives apart, so the selector can read declarations without installing this.
@@ -95,17 +99,28 @@ export const WHOLE_REPOSITORY = "(the whole repository)";
 // what `runs/` holds is verified only for what it read there.
 // ---------------------------------------------------------------------------------------------------------
 
-/** @type {Set<string>} */
-let observedReads = new Set();
+/**
+ * ONE OBSERVER PER PROCESS, not per copy of this module (#1349). Under rstest a test file and its imports are
+ * bundled, so the copy `--import` loads BEFORE the bundle and the copy inside the bundle are two instances. Only
+ * the preloaded one installs before a test binds a built-in -- measured, a named `openSync`, `readdir`,
+ * `spawnSync` or `fs/promises` `readFile` was unseen otherwise, while `readFileSync` was seen. So both copies
+ * share this state, only the first installs, and the second reuses the first's UNWRAPPED `fs` functions: its
+ * own lookups would otherwise be recorded as the guard's reads.
+ * @type {{ observedReads: Set<string>, installed: boolean, originals?: Record<string, any> }}
+ */
+const STATE = /** @type {any} */ (globalThis)[Symbol.for("a11y-witness.walk-scope")] ??= {
+  observedReads: new Set(), installed: false };
 
 /** @param {string} how */
 const unbounded = (how) => `${WHOLE_REPOSITORY} -- ${how}`;
 
 // Captured BEFORE `install()` wraps them, so the observer's own lookups are never counted as the guard's.
-const realpathOriginal = fs.realpathSync.native;
-const existsOriginal = fs.existsSync;
-const statOriginal = fs.statSync;
-const readFileOriginal = fs.readFileSync;
+// The first copy captures them; a second copy, loaded after the wrappers exist, takes the first copy's.
+STATE.originals ??= { realpath: fs.realpathSync.native, exists: fs.existsSync, stat: fs.statSync, readFile: fs.readFileSync };
+const realpathOriginal = STATE.originals.realpath;
+const existsOriginal = STATE.originals.exists;
+const statOriginal = STATE.originals.stat;
+const readFileOriginal = STATE.originals.readFile;
 
 /** @param {string} path @param {string} dir */
 const isInside = (path, dir) => {
@@ -179,13 +194,13 @@ const baseOf = (cwd) => resolve(process.cwd(),
 /** A path the process opened, statted, copied or tested. The root itself is no population. */
 function recordRead(/** @type {unknown} */ target, base = process.cwd()) {
   const path = repoPath(target, base);
-  if (path) observedReads.add(path);
+  if (path) STATE.observedReads.add(path);
 }
 
 /** A directory the process LISTED. Listing the root is walking the whole repository. */
 function recordListing(/** @type {unknown} */ target, base = process.cwd()) {
   const path = repoPath(target, base);
-  if (path !== null) observedReads.add(path === "" ? unbounded("listed the repository root") : path);
+  if (path !== null) STATE.observedReads.add(path === "" ? unbounded("listed the repository root") : path);
 }
 
 const GLOB_SYNTAX = /[*?[\]{}()!]/;
@@ -313,12 +328,12 @@ function recordGit(args, options) {
   if (repoPath(git.where, git.where) === null) {
     // Run somewhere else -- a fixture repository in a temp directory -- it reads nothing here, unless
     // something points it back.
-    if (pointedBackHere(git, options)) observedReads.add(unbounded(`git ${git.subcommand}, pointed back at this checkout`));
+    if (pointedBackHere(git, options)) STATE.observedReads.add(unbounded(`git ${git.subcommand}, pointed back at this checkout`));
     return;
   }
   if (git.subcommand === undefined || POPULATION_FREE_GIT.has(git.subcommand)) return;
   const pathspecs = gitPathspecs(git.subcommand, git.rest);
-  if (pathspecs === null) { observedReads.add(unbounded(`git ${git.subcommand}`)); return; }
+  if (pathspecs === null) { STATE.observedReads.add(unbounded(`git ${git.subcommand}`)); return; }
   if (pathspecs.length === 0) recordListing(".", git.where);
   for (const spec of pathspecs) recordGlob(spec, { cwd: git.where });
 }
@@ -331,7 +346,7 @@ const SHELL_SYNTAX = /[|&;<>()$`\\"'*?[\]{}~!#\n]/;
 function recordCommandLine(command, options) {
   const line = String(command).trim();
   if (/^git\s/.test(line) && !SHELL_SYNTAX.test(line)) recordGit(line.split(/\s+/).slice(1), options);
-  else observedReads.add(unbounded(`a shell ran \`${line.slice(0, 60)}\``));
+  else STATE.observedReads.add(unbounded(`a shell ran \`${line.slice(0, 60)}\``));
 }
 
 /** @param {unknown} file @param {unknown[]} rest the arguments after `file`, in whichever overload was used */
@@ -341,10 +356,11 @@ function recordSpawn(file, rest) {
     rest.find((r) => r !== null && typeof r === "object" && !Array.isArray(r)));
   if (options?.shell) recordCommandLine([file, ...args].join(" "), options);
   else if (basename(String(file)) === "git") recordGit(args, options);
-  else observedReads.add(unbounded(`a child process, \`${basename(String(file))}\`, whose reads are not visible here`));
+  else STATE.observedReads.add(unbounded(`a child process, \`${basename(String(file))}\`, whose reads are not visible here`));
 }
 
-const OBSERVED = Symbol("walk-scope: this function records before it calls through");
+// REGISTERED, so a wrapper installed by one copy of this module is recognised by the other (#1349).
+const OBSERVED = Symbol.for("a11y-witness.walk-scope: this function records before it calls through");
 
 /** Is `fn` one of this module's wrappers? The exhaustiveness test asks this of every function it finds. */
 export function isObserved(/** @type {unknown} */ fn) {
@@ -447,6 +463,9 @@ export const NOT_WRAPPED = Object.freeze({
       "threadCpuUsage", "umask", "unref", "uptime"].map((name) => [name, "takes no path"])),
     chdir: "moves where a RELATIVE path resolves from; every read is resolved against the cwd when it is made",
     emit: "an emitter's own `emit`, which a test runner installs on `process`; takes no path",
+    // #1349: present only in a process FORKED with an IPC channel -- rstest's `forks` pool runs each test file so.
+    ...Object.fromEntries(["send", "_send", "disconnect", "_disconnect"].map((name) => [name,
+      "IPC to the parent that forked this process: passes a message, takes no path"])),
   }),
   "worker_threads": Object.freeze({
     ...Object.fromEntries(["BroadcastChannel", "MessageChannel", "MessagePort", "getEnvironmentData",
@@ -487,12 +506,12 @@ export const DECLARER_BUILTINS = Object.freeze({
 });
 
 /** @param {string} how */
-const whole = (how) => () => { observedReads.add(unbounded(how)); };
+const whole = (how) => () => { STATE.observedReads.add(unbounded(how)); };
 
 /** Where `findPackageJSON` walked: from its start up to the manifest it found -- all of that directory. */
 function recordPackageLookup(/** @type {unknown} */ found) {
   if (typeof found === "string") recordRead(dirname(found));
-  else observedReads.add(unbounded("findPackageJSON found no manifest, having walked to the root"));
+  else STATE.observedReads.add(unbounded("findPackageJSON found no manifest, having walked to the root"));
 }
 
 /** What a CommonJS `require`/`require.resolve` resolved to -- or, for a relative request that failed, where it looked. */
@@ -516,7 +535,7 @@ function installBeyondFs() {
   for (const name of ["binding", "_linkedBinding"]) wrap(process, name, whole(`process.${name}, Node's raw internals`));
   wrap(process, "getBuiltinModule", ([id]) => {
     const name = String(id).replace(/^node:/, "");
-    if (!Object.hasOwn(DECLARER_BUILTINS, name)) observedReads.add(unbounded(`getBuiltinModule("${name}"), not allowlisted`));
+    if (!Object.hasOwn(DECLARER_BUILTINS, name)) STATE.observedReads.add(unbounded(`getBuiltinModule("${name}"), not allowlisted`));
   });
   wrap(moduleApi, "_resolveFilename", () => {}, recordResolution);
   wrap(moduleApi, "findPackageJSON", () => {}, (_args, found) => recordPackageLookup(found));
@@ -543,7 +562,7 @@ function install() {
   const { Worker } = workerThreads;
   workerThreads.Worker = class ObservedWorker extends Worker {
     constructor(/** @type {any[]} */ ...args) {
-      observedReads.add(unbounded("a worker thread, whose reads are not visible here"));
+      STATE.observedReads.add(unbounded("a worker thread, whose reads are not visible here"));
       super(...args);
     }
   };
@@ -553,11 +572,14 @@ function install() {
   // `node:fs/promises` too, whose exports are `fs.promises`.
   syncBuiltinESMExports();
 }
-install();
+if (!STATE.installed) {
+  STATE.installed = true;
+  install();
+}
 
 /** Every repo-relative path read since this module was imported. */
 export function readsSoFar() {
-  return [...observedReads].sort();
+  return [...STATE.observedReads].sort();
 }
 
 /**
@@ -567,14 +589,14 @@ export function readsSoFar() {
  * @returns {Promise<string[]>}
  */
 export async function readsDuring(run) {
-  const outer = observedReads;
-  observedReads = new Set();
+  const outer = STATE.observedReads;
+  STATE.observedReads = new Set();
   try {
     await run();
-    return [...observedReads].sort();
+    return [...STATE.observedReads].sort();
   } finally {
-    for (const path of observedReads) outer.add(path);
-    observedReads = outer;
+    for (const path of STATE.observedReads) outer.add(path);
+    STATE.observedReads = outer;
   }
 }
 
@@ -593,6 +615,17 @@ export function readsOutsideScope(reads, scope, ownFiles) {
 }
 
 /**
+ * Paths a TEST RUNNER reads on a test file's behalf, which are the runner's and not the guard's population
+ * (#1349). rstest looks for `__snapshots__/<file>.snap` beside every test file it runs, so a declarer whose
+ * scope does not contain its own directory failed its check on that probe alone.
+ * @param {string} testPath absolute
+ * @returns {string[]} repo-relative
+ */
+export function runnerOwnedPaths(testPath) {
+  return [relative(REPO_ROOT, join(dirname(testPath), "__snapshots__", `${basename(testPath)}.snap`))];
+}
+
+/**
  * Register the guard's own check: once every test in the file has run, anything it read outside its
  * declared scope fails the file.
  *
@@ -603,7 +636,6 @@ export function readsOutsideScope(reads, scope, ownFiles) {
  * @param {string} testUrl the declaring guard's `import.meta.url`
  */
 export async function declareWalkScope(testUrl) {
-  const { after } = nodeTest;
   const testPath = fileURLToPath(testUrl);
   const scope = parseWalkScope(fs.readFileSync(testPath, "utf8"));
   if (scope === null) {
@@ -621,6 +653,7 @@ export async function declareWalkScope(testUrl) {
     const packages = packageIndex(REPO_ROOT, knownPackages(REPO_ROOT));
     const own = new Set([...sourceClosure(testPath, REPO_ROOT, packages)]
       .map((absolute) => relative(REPO_ROOT, absolute)));
+    for (const path of runnerOwnedPaths(testPath)) own.add(path);
     const outside = readsOutsideScope(reads, scope, own);
     if (outside.length > 0) {
       throw new Error(`${relative(REPO_ROOT, testPath)} declares WALK_SCOPE ${JSON.stringify(scope)} and read `
