@@ -18,7 +18,7 @@
 // never another `*.test.ts` (that is the defect this row exists to end, one level further in).
 //
 //   node scripts/assert-glob-not-empty.mjs <glob...> [--min=N]                 -- check only
-//   node scripts/assert-glob-not-empty.mjs <glob...> [--min=N] --run [--runner=tsx|rstest] [--test-concurrency=N]
+//   node scripts/assert-glob-not-empty.mjs <glob...> [--min=N] [--drop-empty] --run [--runner=tsx|rstest] [--test-concurrency=N]
 //
 // Each glob given is resolved independently and must match at least `--min` files (default 1 -- "not
 // vacuous", never "exactly this many"). A directory rename, a package restructure, or #66's tree-wide
@@ -53,6 +53,42 @@ export function underFloor(patterns, min, glob = globSync) {
     .filter(({ matched }) => matched < min);
 }
 
+/**
+ * #1319: SPLIT PATTERNS INTO THOSE THAT MATCH SOMETHING AND THOSE THAT MATCH NOTHING, with `underFloor`'s own
+ * predicate, so `--drop-empty` is not a second copy of the floor.
+ *
+ * For a caller whose patterns come from a list of PACKAGES rather than from typing: CI's broad branch passes one glob per
+ * implicated package, and a package can legitimately have no tests. `nvda-speech` has no `src` at all, and #1469's
+ * first two CI runs were refused on exactly that glob, where `tsx --test` had passed it silently.
+ * @param {string[]} patterns
+ * @param {(pattern: string) => string[]} [glob]
+ * @returns {{ kept: string[], dropped: string[] }}
+ */
+export function partitionEmpty(patterns, glob = globSync) {
+  const dropped = underFloor(patterns, 1, glob).map(({ pattern }) => pattern);
+  return { kept: patterns.filter((pattern) => !dropped.includes(pattern)), dropped };
+}
+
+/**
+ * #1319: `--drop-empty`. NAMES every dropped pattern, never skips one silently, and REFUSES when every pattern is empty:
+ * dropping all of them would run nothing and pass. Returns the patterns to check and run, or null after refusing.
+ * @param {string[]} patterns
+ * @returns {string[] | null}
+ */
+function dropEmptyPatterns(patterns) {
+  const { kept, dropped } = partitionEmpty(patterns);
+  for (const pattern of dropped) {
+    process.stderr.write(`assert-glob-not-empty: ${pattern}  matched 0 -- dropped (--drop-empty), nothing to run for it\n`);
+  }
+  if (kept.length === 0) {
+    process.stderr.write("REFUSING: every glob matched nothing -- --drop-empty drops an empty glob, never all of them, "
+      + "because running nothing would pass.\n");
+    process.exitCode = 1;
+    return null;
+  }
+  return kept;
+}
+
 /** #1319: the runners `--run` can execute. `tsx` is the default, so a caller that names none is unchanged. */
 export const RUNNERS = Object.freeze(["tsx", "rstest"]);
 
@@ -74,6 +110,13 @@ export const RSTEST_CONFIG = fileURLToPath(new URL("./rstest/rstest.config.mjs",
  * @returns {string[]} the arguments for `npx`
  */
 export function runnerInvocation({ runner, patterns, concurrency }) {
+  // AN EMPTY PATTERN LIST NEVER REACHES A RUNNER. `rstest run` with no `--include` falls back to the config's include,
+  // and `tsx --test` with no file uses its default glob: either way, the WHOLE suite. Measured 2026-09-13 22:49Z, when a
+  // mutation of `--drop-empty` let an empty list through and 92 rstest workers loaded the shared host to 64.
+  if (patterns.length === 0) {
+    throw new Error("assert-glob-not-empty: no pattern to run -- refusing, because a runner given no pattern runs the "
+      + "whole suite rather than nothing.");
+  }
   if (runner === "tsx") {
     return ["tsx", "--test", ...(concurrency ? [`--test-concurrency=${concurrency}`] : []), ...patterns];
   }
@@ -86,10 +129,10 @@ export function runnerInvocation({ runner, patterns, concurrency }) {
 }
 
 function main() {
-  refuseUnknownFlags(["--min", "--run", "--runner", "--test-concurrency"],
+  refuseUnknownFlags(["--min", "--drop-empty", "--run", "--runner", "--test-concurrency"],
     { entry: import.meta.url, command: "node scripts/assert-glob-not-empty.mjs" });
-  const patterns = process.argv.slice(2).filter((arg) => !arg.startsWith("--"));
-  if (!patterns.length) {
+  const given = process.argv.slice(2).filter((arg) => !arg.startsWith("--"));
+  if (!given.length) {
     process.stderr.write("assert-glob-not-empty: no glob pattern given -- nothing to check.\n");
     process.exitCode = 2;
     return;
@@ -101,6 +144,8 @@ function main() {
     process.exitCode = 2;
     return;
   }
+  const patterns = process.argv.includes("--drop-empty") ? dropEmptyPatterns(given) : given;
+  if (patterns === null) return;
   const min = Number(flagValue(process.argv, "min") ?? "1");
   const offenders = underFloor(patterns, min);
   if (offenders.length) {

@@ -179,7 +179,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           # #1319: both branches go through the floor to rstest. Each glob or file becomes its own `--include`, so rstest
-          # runs exactly these, and a glob or selected path that matches nothing is refused before rstest starts.
+          # runs exactly these, and a selected path that matches nothing is refused before rstest starts. The broad branch
+          # passes one glob per PACKAGE, and a package can have no tests (nvda-speech has no src), so it names and drops an
+          # empty package glob with --drop-empty. It still refuses if every glob is empty.
           if [ "${{ steps.select.outputs.broad }}" = "true" ]; then
             globs=()
             for pkg in ${{ inputs.test-packages }}; do
@@ -191,7 +193,7 @@ jobs:
               echo "loudly rather than silently running nothing."
               exit 1
             fi
-            node scripts/assert-glob-not-empty.mjs "${globs[@]}" --min=1 --run --runner=rstest
+            node scripts/assert-glob-not-empty.mjs "${globs[@]}" --min=1 --drop-empty --run --runner=rstest
           else
             files=(${{ steps.select.outputs.testFiles }})
             if [ "${#files[@]}" -eq 0 ]; then
