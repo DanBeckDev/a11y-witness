@@ -476,10 +476,22 @@ function quotedLiterals(source) {
 export function pathStringReferences(changedFile, testFiles, repoRoot) {
   const found = [];
   for (const testFile of testFiles) {
-    const source = stripComments(readFileSync(join(repoRoot, testFile), "utf8"));
-    if (quotedLiterals(source).some((lit) => lit.includes(changedFile))) found.push(testFile);
+    if (literalsOf(join(repoRoot, testFile)).some((lit) => lit.includes(changedFile))) found.push(testFile);
   }
   return found;
+}
+
+/** @type {Map<string, string[]>} one comment-stripped read per test file, however many changed files ask */
+const LITERALS = new Map();
+
+/** @param {string} absolutePath @returns {string[]} */
+function literalsOf(absolutePath) {
+  let literals = LITERALS.get(absolutePath);
+  if (!literals) {
+    literals = quotedLiterals(stripComments(readFileSync(absolutePath, "utf8")));
+    LITERALS.set(absolutePath, literals);
+  }
+  return literals;
 }
 
 /**
@@ -511,7 +523,7 @@ function buildReverseIndex(testFiles, closureOf, repoRoot) {
  *
  * @param {string} file repo-relative
  * @param {{ reverse: Map<string, Set<string>>, testFiles: string[], testPackages: string[],
- *   referencesPath: (file: string, testFiles: string[]) => string[] }} ctx
+ *   referenceCandidates: string[], referencesPath: (file: string, testFiles: string[]) => string[] }} ctx
  * @returns {{ selectedBy: string[], fallbackPackages: string[] }}
  */
 function classifyOneFile(file, ctx) {
@@ -534,8 +546,14 @@ function classifyOneFile(file, ctx) {
       : { selectedBy: [], fallbackPackages: ctx.testPackages };
   }
 
-  // #A1c: anything else non-package, non-broad (a hook, a non-ci.yml workflow) -- BY PATH STRING.
-  const referencedBy = ctx.referencesPath(file, ctx.testFiles);
+  // #A1c: anything else non-package, non-broad (a hook, a non-ci.yml workflow, a document) -- BY PATH STRING.
+  //
+  // #1358: SEARCHED ACROSS `referenceCandidates`, NOT ONLY THE IMPLICATED PACKAGES' TESTS. A test that reads a
+  // file by path lives in whatever package owns the claim it checks, and nothing about the changed file
+  // implicates that package. Measured on #1353's diff (README.md, two docs, a workflow, one lab test): only
+  // `lab` was implicated, so `documented-criteria.test.ts` in `judge` -- which reads README.md and
+  // action.yml by name -- was never a candidate, did not run on the PR, and turned main red at 16:10:46Z.
+  const referencedBy = ctx.referencesPath(file, ctx.referenceCandidates);
   return referencedBy.length > 0
     ? { selectedBy: referencedBy, fallbackPackages: [] }
     : { selectedBy: [], fallbackPackages: ctx.testPackages };
@@ -551,7 +569,8 @@ function classifyOneFile(file, ctx) {
  *
  * @param {string[]} changedFiles repo-relative
  * @param {{ closureOf: (testFile: string) => Set<string>, testFiles: string[], repoRoot: string,
- *   testPackages?: string[], referencesPath?: (file: string, testFiles: string[]) => string[] }} options
+ *   testPackages?: string[], referenceCandidates?: string[],
+ *   referencesPath?: (file: string, testFiles: string[]) => string[] }} options
  *   `closureOf` -- injected so the caller builds it once per test file rather than this function
  *   re-walking the same test file once per changed source line. `testFiles` -- every candidate test file
  *   (repo-relative), the population `closureOf` and `referencesPath` may report against. `testPackages`
@@ -559,11 +578,12 @@ function classifyOneFile(file, ctx) {
  *   `scripts/*.mjs` or hook/workflow file with no reference anywhere; defaults to `[]` so an existing
  *   caller testing only `packages/*\/src/` files is unaffected. `referencesPath` -- injected the same way
  *   `closureOf` is, so a unit test never touches disk unless it deliberately wants to; defaults to the
- *   real `pathStringReferences`.
+ *   real `pathStringReferences`. `referenceCandidates` -- #1358: the population a BY-PATH-STRING file is
+ *   searched across; `main` passes every test file in the repository, and it defaults to `testFiles`.
  * @returns {{ selectedTests: string[], fallbackPackages: string[], uncoveredFiles: string[] }}
  */
 export function selectTests(changedFiles, options) {
-  const { closureOf, testFiles, repoRoot, testPackages = [],
+  const { closureOf, testFiles, repoRoot, testPackages = [], referenceCandidates = testFiles,
     referencesPath = (file, candidates) => pathStringReferences(file, candidates, repoRoot) } = options;
   const reverse = buildReverseIndex(testFiles, closureOf, repoRoot);
 
@@ -572,7 +592,7 @@ export function selectTests(changedFiles, options) {
   /** @type {string[]} */
   const uncoveredFiles = [];
   for (const file of changedFiles) {
-    const verdict = classifyOneFile(file, { reverse, testFiles, testPackages, referencesPath });
+    const verdict = classifyOneFile(file, { reverse, testFiles, testPackages, referenceCandidates, referencesPath });
     for (const t of verdict.selectedBy) selected.add(t);
     if (verdict.selectedBy.length === 0) {
       for (const pkg of verdict.fallbackPackages) fallbackPackages.add(pkg);
@@ -668,6 +688,29 @@ function writeOutputs(result) {
 // file LEFT -- and eight other readers were still asking bare, one of them a lane-check bypass.
 
 
+/**
+ * THE SELECTION `main` REPORTS FOR A NON-BROAD DIFF, exported so a test drives the wiring `main` uses rather
+ * than a hand-assembled copy of it. #1358, measured by mutation: with `main` no longer passing
+ * `referenceCandidates`, every test that called `selectTests` directly stayed green while the CLI selected
+ * nothing again.
+ *
+ * @param {string[]} files repo-relative
+ * @param {{ repoRoot: string, allPackages: string[], testPackages: string[] }} scope
+ */
+export function selectionFor(files, { repoRoot, allPackages, testPackages }) {
+  const packages = packageIndex(repoRoot, allPackages);
+  const testFiles = discoverTestFiles(repoRoot, testPackages);
+  const closureOf = (/** @type {string} */ testFile) =>
+    sourceClosure(join(repoRoot, testFile), repoRoot, packages);
+  // EVERY test file in the repository, not `testFiles` -- that one is scoped to the implicated packages,
+  // and a guard in `packages/worker-fleet` governs a file added to `packages/judge`. Measured at ~0.7s
+  // for all 453 test files, which is why the whole population is affordable to walk here. #1358: the same
+  // population is where a document's by-path readers are searched for.
+  const everyTestFile = discoverTestFiles(repoRoot, allPackages);
+  const result = selectTests(files, { closureOf, testFiles, repoRoot, testPackages, referenceCandidates: everyTestFile });
+  return { result, closureOf, everyTestFile };
+}
+
 async function main() {
   refuseUnknownFlags(["--base", "--repo"], { entry: import.meta.url, command: "select-changed-tests" });
   const repoRoot = flagValue(process.argv, "repo") ?? process.cwd();
@@ -696,15 +739,7 @@ async function main() {
     return;
   }
 
-  const packages = packageIndex(repoRoot, allPackages);
-  const testFiles = discoverTestFiles(repoRoot, testPackages);
-  const closureOf = (/** @type {string} */ testFile) =>
-    sourceClosure(join(repoRoot, testFile), repoRoot, packages);
-  const result = selectTests(files, { closureOf, testFiles, repoRoot, testPackages });
-  // EVERY test file in the repository, not `testFiles` -- that one is scoped to the implicated packages,
-  // and a guard in `packages/worker-fleet` governs a file added to `packages/judge`. Measured at ~0.7s
-  // for all 453 test files, which is why the whole population is affordable to walk here.
-  const everyTestFile = discoverTestFiles(repoRoot, allPackages);
+  const { result, closureOf, everyTestFile } = selectionFor(files, { repoRoot, allPackages, testPackages });
   const everyGuard = alwaysRunTests(everyTestFile, { closureOf, repoRoot });
   const { kept: alwaysRun, narrowed } = narrowByDeclaredScope(everyGuard, files,
     { readSource: (rel) => readFileSync(join(repoRoot, rel), "utf8") });
