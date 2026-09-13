@@ -417,12 +417,18 @@ export const PR_SEARCH_LIMIT = 500;
 /**
  * @param {"created" | "merged" | "closed"} qualifier
  * @param {string} since ISO date/time, used verbatim as a GitHub search qualifier value
+ * @param {((args: string[]) => string) | undefined} run the `gh` call, REQUIRED (#1407): `conflictMetrics` hands in
+ *   the live one, a test hands in recorded listings. A defaulted one is a live `gh pr list` from a test suite.
  * @returns {any[]}
  */
-function prsBy(qualifier, since) {
+function prsBy(qualifier, since, run) {
+  if (typeof run !== "function") {
+    throw new Error(`board-data: prsBy("${qualifier}") needs a run -- it is required, because a defaulted one is `
+      + "a live `gh pr list` (#1407: conflict-metrics.test.ts reached it on every local run).");
+  }
   const fields = "number,title,createdAt,mergedAt,closedAt,mergeCommit,files";
   const search = `${qualifier}:>=${since}`;
-  const all = JSON.parse(gh(["pr", "list", "--repo", REPO, "--state", "all", "--search", search,
+  const all = JSON.parse(run(["pr", "list", "--repo", REPO, "--state", "all", "--search", search,
     "--limit", String(PR_SEARCH_LIMIT), "--json", fields]));
   if (all.length >= PR_SEARCH_LIMIT) {
     throw new Error(`board-data: the PR search "${search}" returned ${all.length} rows against a limit of `
@@ -432,18 +438,19 @@ function prsBy(qualifier, since) {
   return all;
 }
 
-/** PRs OPENED in the window, by `createdAt`. @param {string} since */
-export function prsOpened(since) { return prsBy("created", since); }
+/** PRs OPENED in the window, by `createdAt`. @param {string} since @param {{run?: (args: string[]) => string}} [deps] */
+export function prsOpened(since, { run } = {}) { return prsBy("created", since, run); }
 
-/** PRs MERGED in the window, by `mergedAt`. @param {string} since */
-export function prsMerged(since) { return prsBy("merged", since); }
+/** PRs MERGED in the window, by `mergedAt`. @param {string} since @param {{run?: (args: string[]) => string}} [deps] */
+export function prsMerged(since, { run } = {}) { return prsBy("merged", since, run); }
 
 /** PRs CLOSED WITHOUT MERGING in the window -- `closed:>=` also returns merged PRs (GitHub sets
  * `closedAt` on a merge too), so this filters to the ones a merge date does not explain.
  * @param {string} since
+ * @param {{run?: (args: string[]) => string}} [deps]
  */
-export function prsClosedUnmerged(since) {
-  return prsBy("closed", since).filter((/** @type {any} */ pr) => !pr.mergedAt);
+export function prsClosedUnmerged(since, { run } = {}) {
+  return prsBy("closed", since, run).filter((/** @type {any} */ pr) => !pr.mergedAt);
 }
 
 /**
@@ -535,12 +542,16 @@ export function mergedPRNeededReconciliation(pr) {
  * THE FOUR FIGURES #466 EXISTS FOR, in one call. Every count states the window it was read over; the
  * conflict count separates "did not need to reconcile" from "could not tell" rather than folding an
  * uninspectable PR into a clean zero.
+ *
+ * #1407: the `gh` listing is handed in as `run`, and it is REQUIRED. `conflictMetrics` below hands in the live one;
+ * a test hands in recorded listings, so the whole composition runs without reaching GitHub.
  * @param {string} since
+ * @param {{run?: (args: string[]) => string}} [deps]
  */
-export function conflictMetrics(since) {
-  const opened = prsOpened(since);
-  const merged = prsMerged(since);
-  const closedUnmerged = prsClosedUnmerged(since);
+export function composeConflictMetrics(since, { run } = {}) {
+  const opened = prsOpened(since, { run });
+  const merged = prsMerged(since, { run });
+  const closedUnmerged = prsClosedUnmerged(since, { run });
   const lifetimeMinutes = mergeLifetimeMinutes(merged);
   const reconciliation = merged.map((pr) => mergedPRNeededReconciliation(pr));
   const population = new Map([...opened, ...merged, ...closedUnmerged]
@@ -563,6 +574,15 @@ export function conflictMetrics(since) {
       of: merged.length, unresolvable: reconciliation.filter((r) => r === null).length },
     hotspotFiles: hotspotFiles([...population.values()]),
   };
+}
+
+/**
+ * The LIVE entry, the one `board-report.mjs` calls for every edition: the composition above, reading GitHub
+ * through `gh`. No test calls it (#1407).
+ * @param {string} since
+ */
+export function conflictMetrics(since) {
+  return composeConflictMetrics(since, { run: gh });
 }
 
 /** Refuse to publish anything assembled from a read set that is not `main`'s.
