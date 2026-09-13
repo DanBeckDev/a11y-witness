@@ -193,6 +193,13 @@ function main() {
     process.exitCode = 2;
     return;
   }
+  // #1344: BEFORE checkBody, because checkBody RUNS the Acceptance -- in this working tree, whatever --head says.
+  const headRefused = headTreeRefusal(mode, rest);
+  if (headRefused) {
+    process.stderr.write(`${headRefused}\n`);
+    process.exitCode = 1;
+    return;
+  }
   const result = checkBody(body);
   for (const line of result.lines) process.stdout.write(`${line}\n`);
   if (!result.ok) {
@@ -202,6 +209,54 @@ function main() {
     return;
   }
   if (!sendToGitHub(mode, rest)) process.exitCode = 1;
+}
+
+/**
+ * #1344: THE ACCEPTANCE RUNS IN THIS WORKING TREE, SO THE TREE MUST BE THE HEAD BEING OPENED.
+ *
+ * `checkBody` runs each Acceptance command with no `cwd`, in whatever directory `pr-open` was started, and
+ * `--head` is read only to arm. So `create --head B` from a tree on another branch printed
+ * `ACCEPTANCE: RAN ... -> pass` for a branch it never tested. Measured 2026-09-13 by `orchestrator`: the same
+ * command and body gave 51 tests from #1313's worktree and "# tests 43 / # pass 43" from the primary, and #1343
+ * was created on the second.
+ *
+ * Pure over an injected `git`, and it refuses rather than guesses: a checkout on another branch, a detached
+ * HEAD, an unreadable ref, or a tree whose HEAD is not `origin/B`'s commit (behind it, or ahead of it with
+ * commits GitHub does not have) each name both sides. `null` when there is nothing to compare: `edit`, or a
+ * `create` with no `--head`, where `gh` itself opens the checked-out branch.
+ *
+ * `origin/B` is the local remote-tracking ref, as fresh as the last fetch or push from this checkout; a push
+ * made elsewhere since then reads as a mismatch, which refuses, never as a match.
+ *
+ * @param {string} mode
+ * @param {string[]} rest the args handed to `gh pr <mode>`
+ * @param {{ git?: (args: string[]) => string }} [deps]
+ * @returns {string | null} the refusal, or null when the tree under test is the head being sent
+ */
+export function headTreeRefusal(mode, rest, { git = defaultGit } = {}) {
+  if (mode !== "create") return null;
+  const head = flagAfter(rest, "--head");
+  if (head === null) return null;
+  /** @type {(args: string[]) => string | null} */
+  const read = (args) => { try { return git(args) || null; } catch { return null; } };
+  const nothingRan = "Nothing ran and nothing was sent (#1344).";
+  const branch = read(["rev-parse", "--abbrev-ref", "HEAD"]);
+  if (branch !== head) {
+    const where = branch === null ? "a checkout git could not read"
+      : branch === "HEAD" ? `a detached HEAD at \`${read(["rev-parse", "--short", "HEAD"]) ?? "(unknown)"}\``
+        : `\`${branch}\``;
+    return `pr-open: REFUSED -- --head \`${head}\` but this working tree is on ${where}. The Acceptance runs in `
+      + `this tree, so it would report a pass for a branch it never tested. Run pr-open from a worktree on `
+      + `\`${head}\`. ${nothingRan}`;
+  }
+  const local = read(["rev-parse", "HEAD"]);
+  const remote = read(["rev-parse", `refs/remotes/origin/${head}`]);
+  if (local === null || remote === null || local !== remote) {
+    return `pr-open: REFUSED -- this tree is on \`${head}\` at \`${local ?? "(unreadable)"}\`, but \`origin/${head}\` `
+      + `is \`${remote ?? "(unreadable -- push the branch first)"}\`. The Acceptance would test a tree that is not `
+      + `the head GitHub opens; push or pull until they are the same commit. ${nothingRan}`;
+  }
+  return null;
 }
 
 /**
