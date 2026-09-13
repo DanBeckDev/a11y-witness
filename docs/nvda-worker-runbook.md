@@ -621,8 +621,26 @@ Two related facts worth not rediscovering:
 - **`utmctl exec` and `file pull` need the guest's logged-on session.** They fail before auto-logon
   completes and work afterwards, which is one cause for two symptoms — not a broken guest agent. If
   `exec` is silent, the guest has not finished logging on; wait rather than diagnose.
-- **`server.log` persists on the guest.** You cannot pull it while the worker is down (see above), so
-  read it *after* it recovers — the record of the death is still there.
+- **`server.log` persists on the guest**, and it is the record of a worker's death — still there after
+  it comes back, which is the only way to read a fault that killed it.
+  - **On the bare-metal fleet, pull it while the worker is down: `npm run fleet:logs`.** Ansible reaches
+    the box over SSH whether or not the worker process is running, and `collect-logs.yml` takes
+    `server.log`, one rotation back, and NVDA's two logs into `runs/worker-logs/`. **`/diagnostics`
+    cannot serve this case** — it is an endpoint ON the worker, so it answers only when the worker does.
+  - **On a UTM guest you cannot**, for the reason in the bullet above: `file pull` needs the logged-on
+    session. Read `server.log` after the worker recovers instead.
+
+  **This bullet used to deny the fleet case outright, with no such split** (#1226) — a flat statement
+  that the log could not be pulled from a worker that was down. That was true of `utmctl file pull` and
+  written as a fact about the world: a correct claim about one mechanism, stated unscoped, under a
+  heading an operator reads *while triaging the case it is wrong about*. Its `(see above)` made it look
+  scoped to a careful reader and asserted to a fast one, and once #1216 wired `fleet:logs` the
+  repository held both the claim and a command disproving it.
+
+  *(Paraphrased rather than quoted, deliberately: #1226's own open-check greps for that sentence, and
+  a verbatim quotation here would match it forever — a correction that cites the text it removes keeps
+  the count at one and reads as a fix that did not work. The technique is `worker-capture`'s, from
+  #1217, and this check caught me walking into the trap two hours after reviewing it.)*
 
 ## Diagnosing a guest without `utmctl exec`
 
