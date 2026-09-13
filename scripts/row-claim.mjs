@@ -1190,7 +1190,8 @@ function renderStatus(issueNumber, title, status, { body, recorded }) {
  *
  * READ-ONLY IS THE WHOLE CONSTRAINT, AND IT IS HELD BY CONSTRUCTION RATHER THAN BY ASSERTION -- said here
  * so the next reader does not go looking for the test. `fileOverlapReason` is pure over two lists;
- * `lookupOpenPrFiles` is one `gh pr list --json number,files`. Neither writes, and neither can: there is
+ * `lookupOpenPrFiles` is one `gh pr list --json number,changedFiles,files`, paging REST only for a PR whose list
+ * is short of its count (#1419). Neither writes, and neither can: there is
  * no write path in this function's import closure to assert the absence of. This is the READ standing in for the write, which
  * is the thing #1054 exists because it was not.
  *
@@ -1199,7 +1200,8 @@ function renderStatus(issueNumber, title, status, { body, recorded }) {
  * as a clean one. That conflation is the defect this file's own `startability` refuses one level up.
  *
  * @param {string[] | null} myFiles this row's declared Region, or null when it could not be read
- * @param {{ number: number, files: string[] }[] | null} otherPrFiles every other open PR, or null
+ * @param {{ number: number, files: string[], changedFiles: number }[] | null} otherPrFiles every other open PR, its
+ *   files and its count (#1419), or null
  * @returns {string[]} lines to print -- NEVER empty. Three states, three sentences: refused,
  *   could-not-ask, clear. It said "empty only when B4 genuinely found no overlap" until #1085's review,
  *   which is the shape this repo records most: a doc line two lines above the function, stating what the
@@ -1240,7 +1242,7 @@ export function b4Lines(myFiles, otherPrFiles) {
  * @param {number} issueNumber
  * @param {{ write?: (s: string) => void,
  *   mine?: (n: number) => string[] | null,
- *   others?: () => { number: number, files: string[] }[] | null }} [deps]
+ *   others?: () => { number: number, files: string[], changedFiles: number }[] | null }} [deps]
  */
 export function reportB4(issueNumber, deps = {}) {
   const write = deps.write ?? ((/** @type {string} */ text) => process.stdout.write(text));
