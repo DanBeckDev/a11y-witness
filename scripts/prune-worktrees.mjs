@@ -66,8 +66,9 @@
 export const ACTIVITY_WINDOW_MS = 10 * 60 * 1000; // 10 minutes: survives a stash-then-checkout gap; still sweeps
                                             // a truly abandoned tree well within an hour of prune runs
 import { execFileSync } from "node:child_process";
-import { existsSync, lstatSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { createHash } from "node:crypto";
+import { existsSync, lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { join, relative } from "node:path";
 import { sandboxGitEnv } from "./git-env.mjs";
 
 /** @type {(cmd: string, args: string[], opts: { cwd: string }) => string} */
@@ -333,9 +334,131 @@ export function isWorkingTreeClean(worktreePath, { run = defaultRun } = {}) {
 }
 
 /**
+ * #1373: THE RECORDS A WORKTREE HOLDS THAT GIT CANNOT SEE, AND A COMPARISON THAT MUST NOT PASS ON NOTHING.
+ *
+ * `runs/` is gitignored, so `git status` reads a worktree full of board snapshots as CLEAN, and `git worktree
+ * remove` -- WITHOUT `--force` -- deletes them with the directory. Reproduced on #1373 at `57cbddc4`: this tool
+ * and `row-claim decline` each removed a fixture worktree holding three `runs/` files the primary did not
+ * have, and the three were gone. The row's own instance was an operator's chain in which `cp` failed, both
+ * `sha256sum` reads failed, and `"" = ""` authorised the delete of the only copies.
+ *
+ * So a worktree whose `runs/` holds files is removable only when EVERY file sits at the same relative path in
+ * the primary checkout with the same sha256, and each way of passing on nothing refuses instead:
+ *   - a hash that is EMPTY (a failed read, a missing file) never matches, not even another empty one;
+ *   - a non-empty `runs/` that lists ZERO files is a failed listing, not "nothing to lose";
+ *   - no primary to compare against is a refusal, not a pass;
+ *   - the verified count must equal the listed count.
+ * A worktree with no `runs/` files is untouched by all of this and removed exactly as before.
+ */
+export const RECORDS_DIR = "runs";
+
+/** @param {string} file @returns {string} the file's sha256, hex; THROWS when it cannot be read */
+export function sha256OfFile(file) {
+  return createHash("sha256").update(readFileSync(file)).digest("hex");
+}
+
+/**
+ * Every non-directory entry under `<root>/runs/`, as a path relative to `root`, sorted. `[]` when there is no
+ * `runs/` -- which `unverifiedRecords` checks against the directory itself before believing it.
+ * @param {string} root
+ * @returns {string[]}
+ */
+export function listRecordFiles(root) {
+  const dir = join(root, RECORDS_DIR);
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { recursive: true, withFileTypes: true })
+    .filter((entry) => !entry.isDirectory())
+    .map((entry) => relative(root, join(entry.parentPath, entry.name)))
+    .sort();
+}
+
+/**
+ * The primary checkout of the repository `worktreePath` belongs to -- `git worktree list` always names it
+ * first. `null` when git cannot say, which `unverifiedRecords` refuses on whenever there is anything to verify.
+ * @param {string} worktreePath
+ * @param {{ run?: typeof defaultRun }} [deps]
+ * @returns {string | null}
+ */
+export function primaryWorktreeOf(worktreePath, { run = defaultRun } = {}) {
+  try {
+    const porcelain = run("git", ["-C", worktreePath, "worktree", "list", "--porcelain"], { cwd: worktreePath });
+    return parseWorktreeList(porcelain)[0]?.path ?? null;
+  } catch {
+    return null; // "could not find the primary" -- a refusal downstream, never a pass
+  }
+}
+
+/**
+ * A hash, or `""` for a file that is absent or unreadable -- with the failure kept for the refusal to name.
+ * @param {(file: string) => string} hash
+ * @param {string} file
+ * @param {string[]} failures
+ */
+function hashOrEmpty(hash, file, failures) {
+  if (!existsSync(file)) return "";
+  try {
+    return hash(file);
+  } catch (error) {
+    failures.push(`${file} (${/** @type {Error} */ (error).message})`);
+    return "";
+  }
+}
+
+/**
+ * @param {string} worktreePath
+ * @param {(root: string) => string[]} list
+ * @returns {{ files: string[] } | { reason: string }}
+ */
+function listedRecords(worktreePath, list) {
+  const dir = join(worktreePath, RECORDS_DIR);
+  let files;
+  try {
+    files = list(worktreePath);
+  } catch (error) {
+    return { reason: `${dir} could not be listed (${/** @type {Error} */ (error).message}) -- refusing to remove ${worktreePath}` };
+  }
+  if (files.length === 0 && existsSync(dir) && readdirSync(dir).length > 0) {
+    return { reason: `${dir} is not empty but ZERO files were listed -- an empty listing of a non-empty directory `
+      + `is a failed read, never "nothing to lose"; refusing to remove ${worktreePath}` };
+  }
+  return { files };
+}
+
+/**
+ * #1373: whether `worktreePath`'s `runs/` records forbid removing it -- see `RECORDS_DIR`'s header.
+ * @param {string} worktreePath
+ * @param {string | null} primaryPath
+ * @param {{ hash?: (file: string) => string, list?: (root: string) => string[] }} [deps]
+ * @returns {{ refused: false, listed: number } | { refused: true, reason: string }}
+ */
+export function unverifiedRecords(worktreePath, primaryPath, { hash = sha256OfFile, list = listRecordFiles } = {}) {
+  const listing = listedRecords(worktreePath, list);
+  if ("reason" in listing) return { refused: true, reason: listing.reason };
+  const listed = listing.files;
+  if (listed.length === 0) return { refused: false, listed: 0 };
+  if (primaryPath === null) {
+    return { refused: true, reason: `${worktreePath} holds ${listed.length} ${RECORDS_DIR}/ file(s) and no primary `
+      + "checkout could be found to verify them against -- refusing to remove it" };
+  }
+  /** @type {string[]} */
+  const failures = [];
+  const verified = listed.filter((file) => {
+    const here = hashOrEmpty(hash, join(worktreePath, file), failures);
+    const there = hashOrEmpty(hash, join(primaryPath, file), failures);
+    return here !== "" && there !== "" && here === there;
+  });
+  if (verified.length === listed.length) return { refused: false, listed: listed.length };
+  const unverified = listed.filter((file) => !verified.includes(file));
+  return { refused: true, reason: `${worktreePath} holds ${unverified.length} of ${listed.length} ${RECORDS_DIR}/ `
+    + `file(s) not present, with a matching NON-EMPTY sha256, in the primary checkout ${primaryPath} -- refusing `
+    + `to remove it: ${unverified.join(", ")}${failures.length > 0 ? `; unreadable: ${failures.join("; ")}` : ""}` };
+}
+
+/**
  * @typedef {{ path: string, branch: string | null }} ReportedWorktree
  * @typedef {{
  *   removed: ReportedWorktree[],
+ *   records: (ReportedWorktree & { reason: string })[],
  *   dirty: ReportedWorktree[],
  *   cherryPicked: ReportedWorktree[],
  *   inconclusive: ReportedWorktree[],
@@ -534,16 +657,18 @@ const VERDICT_BUCKET = {
  *
  * @param {string} repoRoot the repository whose `git worktree list` is authoritative
  * @param {{ run?: typeof defaultRun, remove?: (path: string, deps: { run: typeof defaultRun }) => void,
- *   now?: number, dryRun?: boolean }} [deps] `dryRun` skips the removal and nothing else -- same walk,
- *   same predicate, same buckets, so the listing is the tool's own answer rather than a second one.
+ *   now?: number, dryRun?: boolean, hash?: (file: string) => string }} [deps] `dryRun` skips the removal
+ *   and nothing else -- same walk, same predicate, same buckets, so the listing is the tool's own answer
+ *   rather than a second one. `hash` reads a `runs/` record's sha256 (#1373).
  * @returns {PruneReport}
  */
-export function pruneWorktrees(repoRoot, { run = defaultRun, remove, now = Date.now(), dryRun = false } = {}) {
+export function pruneWorktrees(repoRoot, { run = defaultRun, remove, now = Date.now(), dryRun = false, hash } = {}) {
   const porcelain = run("git", ["worktree", "list", "--porcelain"], { cwd: repoRoot });
   const entries = parseWorktreeList(porcelain);
+  const primaryPath = entries.find((entry) => isPrimaryWorktree(entry.path))?.path ?? null;
   /** @type {PruneReport} */
   const report = {
-    removed: [], dirty: [], cherryPicked: [], inconclusive: [], active: [], skippedPrimary: null,
+    removed: [], records: [], dirty: [], cherryPicked: [], inconclusive: [], active: [], skippedPrimary: null,
   };
   const doRemove = remove ?? ((path, { run: r }) => {
     r("git", ["worktree", "remove", path], { cwd: repoRoot });
@@ -558,6 +683,12 @@ export function pruneWorktrees(repoRoot, { run = defaultRun, remove, now = Date.
     const assessment = assessWorktree(repoRoot, entry, { run, now });
     const verdict = classify(assessment);
     if (verdict === "remove") {
+      // #1373: merged and clean is a fact about what GIT tracks; the gitignored records go with the directory.
+      const held = unverifiedRecords(entry.path, primaryPath, { hash });
+      if (held.refused) {
+        report.records.push({ ...reported, reason: held.reason });
+        continue;
+      }
       // `dryRun` SKIPS THE REMOVAL AND NOTHING ELSE -- same walk, same predicate, same buckets. The
       // listing has to come from the tool that owns the decision, because the alternative was measured:
       // a hand-rolled re-implementation of this predicate reported 99 of 114 worktrees "unmerged" on a
@@ -587,8 +718,12 @@ function pushSection(lines, entries, header) {
   for (const e of entries) lines.push(`  ${e.path}  (${e.branch ?? "detached"})`);
 }
 
-/** @param {PruneReport} report */
-function formatReport(report, dryRun = false) {
+/**
+ * What `main()` prints. EXPORTED for #1373's test: a fixture cannot be made to look inactive through argv,
+ * because the CLI's own `git status` rewrites the index `recentGitActivity` dates it by.
+ * @param {PruneReport} report
+ */
+export function formatReport(report, dryRun = false) {
   // WOULD REMOVE versus REMOVED, never the same word. A listing that says "removed" is indistinguishable
   // from a run that removed, and the whole purpose of the dry run is that a session can read the list one
   // cycle before its directory disappears.
@@ -597,6 +732,11 @@ function formatReport(report, dryRun = false) {
       + "remove them, and announce the list one cycle first so no session loses its working directory:"
     : `removed ${report.removed.length} worktree(s):`];
   for (const r of report.removed) lines.push(`  ${r.path}  (${r.branch ?? "detached"})`);
+  if (report.records.length > 0) {
+    lines.push(`refused ${report.records.length} worktree(s) holding ${RECORDS_DIR}/ records not verified in the `
+      + "primary checkout (#1373) -- nothing removed:");
+    for (const r of report.records) lines.push(`  ${r.path}  (${r.branch ?? "detached"}): ${r.reason}`);
+  }
   pushSection(lines, report.dirty,
     `refused ${report.dirty.length} DIRTY worktree(s) -- uncommitted or unmerged work, named, nothing removed:`);
   pushSection(lines, report.active,
