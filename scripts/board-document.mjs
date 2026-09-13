@@ -955,7 +955,9 @@ export function requireSummaryIsFresh(publishing, summary, today) {
 
 /** @param {boolean} publishing */
 function requireSummary(publishing) {
-  const today = new Date().toISOString().slice(0, 10);
+  // The edition's day in LONDON (#1302), the same day the summary check warns about and the Discussion is
+  // titled by -- a UTC slice here asked for yesterday's summary between 00:00 and 01:00 London in summer.
+  const today = editionDay();
   const summary = summaryFor(today);
   if (publishing && !summary) {
     console.error(`REFUSING to render: no executive summary for ${today}.\n\n`
@@ -1159,7 +1161,7 @@ function renderPdfEdition(stamped, { outFlag, release }) {
   const outDir = outFlag
     ?? path.join(process.env.HOME ?? ROOT, "Documents", "a11y-witness-board-reports");
   mkdirSync(outDir, { recursive: true });
-  const stem = `a11ign-board-${new Date().toISOString().slice(0, 10)}`;
+  const stem = `a11ign-board-${editionDay()}`;
   // THE INTERMEDIATE HTML DOES NOT GO WHERE THE CHAIRMAN LOOKS. It is Chrome's input, not a
   // deliverable, and "one file per date" means one file: a folder holding two files per day, one of
   // which opens as unstyled markup, is a folder somebody has to learn to read past.
@@ -1233,8 +1235,8 @@ export function londonNowHHMM() {
 
 /** @param {string} pdf */
 function publishToDraftRelease(pdf) {
-  const tag = `board/${new Date().toISOString().slice(0, 10)}`;
-  const title = `Board report — ${new Date().toISOString().slice(0, 10)}`;
+  const tag = `board/${editionDay()}`;
+  const title = `Board report — ${editionDay()}`;
   const notes = "The daily board document. Generated from GitHub and git; every figure carries its "
     + "source, and anything unmeasured says so rather than being estimated. The GitHub issue edition is "
     + "the data trail.";
