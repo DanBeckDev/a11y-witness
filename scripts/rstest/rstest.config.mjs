@@ -19,24 +19,33 @@
  *   against 63.9 s without it, because the build is under 1% of the run (#1315), so it stays off here. The chairman
  *   asked for it in CI, where `reusable-build-test.yml` persists it with `actions/cache`, prints HIT or MISS, and fails
  *   the job when a run leaves it empty. rstest writes it under `node_modules/.cache/rstest-<project-name>`.
+ * - **Workers capped at half the host's cores locally, rstest's default in CI (#1319, ceo's ruling).** The `agents` host
+ *   runs eight sessions and two reviewers, and a whole-suite run at one worker per core is a write to a shared resource.
+ *   Measured 2026-09-13 22:49Z: a mutation handed rstest an empty include, it ran the whole suite with 92 worker
+ *   processes, and the load average reached 64.65. A GitHub runner is not shared, so CI keeps rstest's own default.
  * - **No coverage block here.** Coverage is step 4 of the adoption, not this one.
  */
 import { defineConfig } from "@rstest/core";
 import { fileURLToPath } from "node:url";
+import { availableParallelism } from "node:os";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const registerHook = fileURLToPath(new URL("./register-node-test-alias.mjs", import.meta.url));
 const walkScope = fileURLToPath(new URL("../walk-scope.mjs", import.meta.url));
 
 /**
- * #1319: rstest's build cache is on exactly when `CI` names a CI run. GitHub Actions sets `CI=true`. An unset, empty or
- * `false` value is a local run, where #1315 measured no benefit.
+ * #1319: whether `CI` names a CI run. GitHub Actions sets `CI=true`. An unset, empty or `false` value is a local run.
+ * It decides two settings below: the build cache (on in CI, where #1315 measured no benefit locally) and the worker cap
+ * (off in CI, on locally, where the host is shared).
  * @param {Record<string, string | undefined>} env
  * @returns {boolean}
  */
-function buildCacheInCi(env) {
+function isCi(env) {
   return env.CI !== undefined && env.CI !== "" && env.CI !== "false";
 }
+
+/** #1319: half the host's cores, at least one -- the most a local run may take of a host other sessions share. */
+const LOCAL_WORKER_CAP = Math.max(1, Math.floor(availableParallelism() / 2));
 
 export default defineConfig({
   root,
@@ -50,7 +59,8 @@ export default defineConfig({
   // The shared state is #1349's; this line is the half that lives here. Measured across all 550 files at
   // 021563f6, before #1349: the preload changed no result. The only differences were three live GitHub tests
   // refused by an exhausted GraphQL budget during that run.
-  pool: { type: "forks", execArgv: ["--import", registerHook, "--import", walkScope] },
+  pool: { type: "forks", execArgv: ["--import", registerHook, "--import", walkScope],
+    ...(isCi(process.env) ? {} : { maxWorkers: LOCAL_WORKER_CAP }) },
   // The shim reads rstest's collecting runtime from globalThis rather than importing a second copy of it.
   globals: true,
   // node:test has no default timeout. rstest defaults `testTimeout` to 5_000 and `hookTimeout` to 10_000, and
@@ -58,5 +68,5 @@ export default defineConfig({
   // three tests timed out on the spike's first run.
   testTimeout: 0,
   hookTimeout: 0,
-  performance: { buildCache: buildCacheInCi(process.env) },
+  performance: { buildCache: isCi(process.env) },
 });
