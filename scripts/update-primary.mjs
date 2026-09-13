@@ -17,6 +17,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
 import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 import { npmCliInvocation } from "./npm-cli-executable.mjs";
+import { changedFiles } from "./changed-files.mjs";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 
@@ -75,28 +76,29 @@ export const LOCKFILE = "package-lock.json";
  * A HEAD that did not move asks nothing: there is no range, and a `git diff` of a commit against itself
  * would be a question whose answer is empty by construction.
  *
- * `--no-renames`, as `scripts/changed-files.mjs` asks (#939): with rename detection a lockfile moved away
- * would be listed only under its new path. It is spelled here rather than imported because the helper spawns
- * git itself, and this function asks through the injected `run` its tests drive.
+ * ASKED THROUGH `scripts/changed-files.mjs`, the one place this repository asks git which paths a range
+ * touched (#939), so a lockfile moved away is listed under the path it left. `changed` is that helper,
+ * injected so a test can answer for git.
  *
- * It reads the output as a LIST OF PATHS and looks for the lockfile by name, rather than treating any
+ * It reads the answer as a LIST OF PATHS and looks for the lockfile by name, rather than treating any
  * output as "changed", so that a `run` answering something unexpected cannot install by accident.
  *
- * @param {(args: string[]) => string} run @param {string} before @param {string} after
+ * @param {(range: string[], pathspec: string[]) => string[]} changed @param {string} before @param {string} after
  */
-export function lockfileMoved(run, before, after) {
+export function lockfileMoved(changed, before, after) {
   if (before === after) return false;
-  const paths = run(["diff", "--name-only", "--no-renames", before, after, "--", LOCKFILE]).split("\n");
-  return paths.map((path) => path.trim()).includes(LOCKFILE);
+  return changed([before, after], [LOCKFILE]).includes(LOCKFILE);
 }
 
 /**
  * @param {string} [root]
  * @param {(args: string[]) => string} [run]
  * @param {(root: string, args: string[]) => void} [npmAt] runs npm in `root`; throws on a non-zero exit
+ * @param {(range: string[], pathspec: string[]) => string[]} [changed] the paths a range touched
  */
 export function updatePrimary(root = REPO, run = (args) =>
-  execFileSync("git", args, { cwd: root, env: sandboxGitEnv(), encoding: "utf8" }), npmAt = runNpm) {
+  execFileSync("git", args, { cwd: root, env: sandboxGitEnv(), encoding: "utf8" }), npmAt = runNpm,
+changed = (range, pathspec) => changedFiles(range, { repoRoot: root, pathspec })) {
   if (!isPrimaryWorktree(root)) {
     throw new Error(`${root} is not the primary checkout (its .git is a linked worktree's, not a real `
       + "directory) — this script only ever updates the primary. Use plain `git pull`/`git fetch` here.");
@@ -110,7 +112,7 @@ export function updatePrimary(root = REPO, run = (args) =>
   moveLocalMain(run, sha);
   // INSTALL BEFORE BUILD: the build compiles against `node_modules`, so building first would compile the
   // new source against the old dependencies and fail on exactly the module the install was about to add.
-  if (lockfileMoved(run, before, sha)) installAt(root, npmAt);
+  if (lockfileMoved(changed, before, sha)) installAt(root, npmAt);
   buildAt(root, npmAt);
   return sha;
 }
