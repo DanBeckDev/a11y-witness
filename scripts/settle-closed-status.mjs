@@ -24,14 +24,20 @@
  * @param {{ moveStatus: (n: number, status: string) =>
  *   ({ moved: true } | { moved: false, reason: string, notOnBoard: boolean }),
  *   log?: (line: string) => void }} deps
+ * @returns {boolean} whether the row's Status is SETTLED -- moved, or not on the board so there is none to
+ *   move. `false` is a refused move, and a caller that discards it reports a repair that did not happen:
+ *   both close-rows paths exited 0 with no Status moved until #1299 read this answer.
  */
 export function settleClosedStatus(n, { moveStatus, log = console.log }) {
   const result = moveStatus(n, "Done");
   if (result.moved) {
     log(`CLOSE-ROWS: #${n} Status -> Done.`);
-  } else if (result.notOnBoard) {
-    log(`CLOSE-ROWS: #${n} is not on the Project -- no Status to move.`);
-  } else {
-    log(`CLOSE-ROWS: #${n} CLOSED but Status NOT moved -- ${result.reason}`);
+    return true;
   }
+  if (result.notOnBoard) {
+    log(`CLOSE-ROWS: #${n} is not on the Project -- no Status to move.`);
+    return true;
+  }
+  log(`CLOSE-ROWS: #${n} CLOSED but Status NOT moved -- ${result.reason}`);
+  return false;
 }
