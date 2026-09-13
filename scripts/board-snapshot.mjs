@@ -27,6 +27,9 @@
 // ready-issue list, and the account's GraphQL budget ran out twice on 2026-09-13. The full sweep stays for an
 // unscoped call, for this file's CLI and for `ready-label-audit.mjs` -- which is where #1219/#1228's census
 // still prints.
+//
+// The scoped half lives in `board-snapshot-scope.mjs`, pure of `gh`, so the row's acceptance can run in a job with no
+// token. The one `gh` call it needs is made here, in `withBoardSnapshot`.
 import { execFileSync } from "node:child_process";
 // #1219: PURE, and deliberately in its own module -- see that file's header. Importing it here costs
 // nothing; importing THIS file from a test costs a `token` requirement the acceptance job cannot meet.
@@ -37,10 +40,13 @@ import { pathToFileURL } from "node:url";
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { REPO } from "./repo-identity.mjs";
 import { READY_LABEL } from "./claim-labels.mjs";
+// #1275: the scoped half, PURE OF `gh` -- see that file's header. The constants live there and are re-exported above,
+// because a constant that file imported from here would carry this file's `token` into its closure.
+import { PROJECT_OWNER, PROJECT_NUMBER, SNAPSHOT_DIR, snapshotStamp, graphqlErrors, describeGraphqlErrors,
+  graphqlErrorFromFailedRun, persistSnapshot, touchedIssues, snapshotRoute, withScopedSnapshot, forgetScopedSnapshots }
+  from "./board-snapshot-scope.mjs";
 
-export const PROJECT_OWNER = REPO.split("/")[0];
-export const PROJECT_NUMBER = 2;
-export const SNAPSHOT_DIR = "runs/board-snapshots";
+export { PROJECT_OWNER, PROJECT_NUMBER, SNAPSHOT_DIR, snapshotStamp } from "./board-snapshot-scope.mjs";
 
 /**
  * #852: ONE SWEEP PER PROCESS, AND THE BOUND IS WHAT MAKES THAT SAYABLE.
@@ -69,13 +75,6 @@ export const SNAPSHOT_MAX_AGE_MS = 5 * 60 * 1000;
 /** @type {{ path: string, takenAt: Date } | null} The snapshot this process has already taken. */
 let processSnapshot = null;
 
-/**
- * #1275: the SCOPED snapshots this process has taken, by the issue each one covers. Kept apart from
- * `processSnapshot` because a scoped file describes its own items and must never license a mutation of another.
- * @type {Map<number, { path: string, takenAt: Date }>}
- */
-const scopedSnapshots = new Map();
-
 /** @type {(cmd: string, args: string[]) => string} */
 const defaultRun = (cmd, args) => execFileSync(cmd, args, { encoding: "utf8" });
 
@@ -103,78 +102,7 @@ const ITEMS_QUERY = `
   }
 `;
 
-/**
- * #1275: ONE ISSUE'S ITEM ON THIS PROJECT, AND THE PROJECT ITSELF, IN ONE REQUEST.
- *
- * `user.projectV2` is asked for although only its presence is read. CI's token cannot read the user-owned
- * Project (#546), and the close path classifies that refusal by GraphQL's own
- * `NOT_FOUND (user.projectV2): Could not resolve to a ProjectV2 with the number N` (`settle-closed-status.mjs`'s
- * `refusalCause`). Measured live 2026-09-13 with project 999: exit 1, `data.user.projectV2: null`, and exactly
- * that error, while `repository.issue` still answered. What a token that cannot see the Project gets back for
- * `projectItems` ALONE is not measured -- this host's token can read it -- so the Project is named in the request,
- * where its refusal is already classified, rather than inferred from an item list.
- *
- * `totalCount` is asked for so a list shorter than its own count refuses rather than reads as "not on the board".
- */
-export const TOUCHED_ITEM_QUERY = `
-  query($owner: String!, $name: String!, $project: Int!, $issue: Int!) {
-    user(login: $owner) { projectV2(number: $project) { id } }
-    repository(owner: $owner, name: $name) {
-      issue(number: $issue) {
-        number title state
-        projectItems(first: 10) {
-          totalCount
-          nodes {
-            id
-            project { number }
-            fieldValueByName(name: "Status") { ... on ProjectV2ItemFieldSingleSelectValue { name } }
-          }
-        }
-      }
-    }
-  }
-`;
-
-/**
- * @typedef {{ itemId: string, number: number | null, title: string | null, status: string | null,
- *   state: string | null }} BoardItem
- *
- * #1219: `state` was NOT fetched until this row, and that is why the health check could never have
- * asked whether a CLOSED row advertises live work. It is not that the check was one-directional --
- * the field that would answer the other direction was never requested, so the question could not be
- * asked at all. A filter on a field nobody fetched, in the instrument watching for exactly this.
- */
-
-/**
- * @typedef {{ type: string, message: string, path: string | null }} GraphqlError
- */
-
-/**
- * Extracts GraphQL's own `errors` array from a parsed response, if present -- #555. `type`/`message`/
- * `path` are the three fields that distinguish FOUR different causes (no permission, wrong project id,
- * user-vs-org shape, a query the schema rejects) which otherwise all read as the identical, unactionable
- * "could not read Project N items" -- #546 sat three hours on exactly that sentence.
- *
- * Returns `null` for an absent, non-array, or empty `errors` field -- so a caller can `if (errors)` rather
- * than checking `.length` itself at every call site.
- *
- * @param {unknown} parsed
- * @returns {GraphqlError[] | null}
- */
-function graphqlErrors(parsed) {
-  const errors = /** @type {any} */ (parsed)?.errors;
-  if (!Array.isArray(errors) || errors.length === 0) return null;
-  return errors.map((/** @type {any} */ e) => ({
-    type: typeof e?.type === "string" ? e.type : "UNKNOWN",
-    message: typeof e?.message === "string" ? e.message : JSON.stringify(e).slice(0, 200),
-    path: Array.isArray(e?.path) ? e.path.join(".") : null,
-  }));
-}
-
-/** One `type: message (path)` line per error, joined -- the string every refusal below actually prints. */
-function describeGraphqlErrors(/** @type {GraphqlError[]} */ errors) {
-  return errors.map((e) => `${e.type}${e.path ? ` (${e.path})` : ""}: ${e.message}`).join("; ");
-}
+/** @typedef {import("./board-snapshot-scope.mjs").BoardItem} BoardItem */
 
 /**
  * One page of `gh api graphql`'s response, parsed into `BoardItem[]` plus pagination state. THROWS on any
@@ -239,137 +167,6 @@ function parsePage(raw) {
     hasNextPage: itemsNode.pageInfo.hasNextPage === true,
     endCursor: typeof itemsNode.pageInfo.endCursor === "string" ? itemsNode.pageInfo.endCursor : null,
   };
-}
-
-/**
- * `execFileSync` throws on a non-zero exit, but `gh api graphql` still writes the full response body --
- * `errors` included -- to stdout first, and Node's thrown error carries it verbatim on `.stdout` (a plain
- * string, since `defaultRun` passes `encoding: "utf8"`). Measured directly: a request naming a repository
- * that does not resolve exits 1 with `{"data":{...},"bad":null},"errors":[{"type":"NOT_FOUND",...}]}` on
- * `.stdout`. So a non-zero exit does not mean the API's own answer is lost -- only that nobody had read it
- * yet. Returns `null` (never throws) for anything that is not a parseable GraphQL error body, so the
- * caller can fall back to the plain exit failure honestly rather than inventing a cause.
- * @param {unknown} failure the thrown value from a failed `run()` call
- * @returns {string | null}
- */
-function graphqlErrorFromFailedRun(failure) {
-  const stdout = /** @type {any} */ (failure)?.stdout;
-  if (typeof stdout !== "string" || stdout.length === 0) return null;
-  /** @type {unknown} */
-  let parsed;
-  try {
-    parsed = JSON.parse(stdout);
-  } catch {
-    return null;
-  }
-  const errors = graphqlErrors(parsed);
-  return errors ? describeGraphqlErrors(errors) : null;
-}
-
-/**
- * #1275: one touched issue's raw response, parsed, with GraphQL's own `errors` refused before `data` is trusted
- * -- a 200 can carry both (#555), and so can the non-zero exit's stdout.
- * @param {string} raw @param {number} issueNumber
- * @returns {unknown}
- */
-function parseTouchedResponse(raw, issueNumber) {
-  /** @type {unknown} */
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (cause) {
-    throw new Error(`board-snapshot: gh's response for #${issueNumber} was not JSON -- refusing to guess. `
-      + `First 200 chars: ${raw.slice(0, 200)}`, { cause });
-  }
-  const errors = graphqlErrors(parsed);
-  if (errors) {
-    throw new Error(`board-snapshot: could not read Project ${PROJECT_NUMBER}'s item for #${issueNumber} -- `
-      + "GraphQL returned an error alongside its response, and a partial answer is not a snapshot. "
-      + describeGraphqlErrors(errors));
-  }
-  return parsed;
-}
-
-/**
- * #1275: the `repository.issue` node of one touched issue's response, its `projectItems` complete. THROWS on
- * anything else, with `parsePage`'s discipline (#555): `errors` beside `data` is refused before `data` is
- * trusted, and the answer must be about the issue that was asked for.
- * @param {string} raw @param {number} issueNumber
- * @returns {any}
- */
-function touchedIssue(raw, issueNumber) {
-  const parsed = parseTouchedResponse(raw, issueNumber);
-  const data = /** @type {any} */ (parsed)?.data;
-  const issue = data?.repository?.issue;
-  const itemsNode = issue?.projectItems;
-  if (typeof data?.user?.projectV2?.id !== "string" || issue?.number !== issueNumber
-    || !Array.isArray(itemsNode?.nodes) || typeof itemsNode.totalCount !== "number") {
-    throw new Error(`board-snapshot: gh's response for #${issueNumber} did not have the shape `
-      + "data.user.projectV2 + data.repository.issue.projectItems for that issue -- refusing to guess. "
-      + `Got: ${JSON.stringify(parsed).slice(0, 300)}`);
-  }
-  if (itemsNode.nodes.length < itemsNode.totalCount) {
-    throw new Error(`board-snapshot: #${issueNumber}'s project items came back ${itemsNode.nodes.length} of `
-      + `${itemsNode.totalCount} -- refusing to read a partial list as "not on the board".`);
-  }
-  return issue;
-}
-
-/**
- * #1275: one touched issue's item on this Project, or `null` when the issue is not on it. `null` is a recorded
- * outcome, not a refusal: the mutation still runs, and `gh` names the row as not on the board, which
- * `moveProjectStatus` already reads as `notOnBoard`.
- * @param {string} raw @param {number} issueNumber
- * @returns {BoardItem | null}
- */
-function parseTouchedItem(raw, issueNumber) {
-  const issue = touchedIssue(raw, issueNumber);
-  const node = issue.projectItems.nodes.find((/** @type {any} */ n) => n?.project?.number === PROJECT_NUMBER);
-  if (node === undefined) return null;
-  if (typeof node?.id !== "string") {
-    throw new Error(`board-snapshot: #${issueNumber}'s item has no id -- refusing to guess. `
-      + `Got: ${JSON.stringify(node).slice(0, 300)}`);
-  }
-  return {
-    itemId: node.id,
-    number: issue.number,
-    title: typeof issue.title === "string" ? issue.title : null,
-    status: typeof node.fieldValueByName?.name === "string" ? node.fieldValueByName.name : null,
-    state: typeof issue.state === "string" ? issue.state : null,
-  };
-}
-
-/**
- * #1275: THE ITEMS A MUTATION TOUCHES, ONE REQUEST EACH, AND NOTHING ELSE ON THE BOARD. No #747 floor here: that
- * floor exists because `fieldValues` is narrowed to a budget shared with the other items in a 100-item page, and
- * a single issue's `fieldValueByName` shares its request with nothing. `gh` failing THROWS, quoting GraphQL's own
- * error when the failed process printed one (#555).
- * @param {number[]} issueNumbers
- * @param {{ run?: typeof defaultRun }} [deps]
- * @returns {{ items: BoardItem[], notOnBoard: number[] }}
- */
-export function fetchTouchedItems(issueNumbers, { run = defaultRun } = {}) {
-  const name = REPO.split("/")[1];
-  /** @type {BoardItem[]} */
-  const items = [];
-  /** @type {number[]} */
-  const notOnBoard = [];
-  for (const issue of issueNumbers) {
-    /** @type {string} */
-    let raw;
-    try {
-      raw = run("gh", ["api", "graphql", "-f", `query=${TOUCHED_ITEM_QUERY}`, "-f", `owner=${PROJECT_OWNER}`,
-        "-f", `name=${name}`, "-F", `project=${PROJECT_NUMBER}`, "-F", `issue=${issue}`]);
-    } catch (cause) {
-      const graphqlDetail = graphqlErrorFromFailedRun(cause);
-      throw new Error(`board-snapshot: could not read Project ${PROJECT_NUMBER}'s item for #${issue} -- refusing `
-        + `to mutate without a snapshot. ${graphqlDetail ?? /** @type {Error} */ (cause).message}`, { cause });
-    }
-    const item = parseTouchedItem(raw, issue);
-    if (item) items.push(item);
-    else notOnBoard.push(issue);
-  }
-  return { items, notOnBoard };
 }
 
 /**
@@ -535,16 +332,6 @@ export function fetchBoardItems({ run = defaultRun, fetchReady = fetchReadyIssue
 }
 
 /**
- * A filesystem-safe stamp for a snapshot filename, derived from a real timestamp so two snapshots taken
- * seconds apart never collide and a reader can sort them by name.
- * @param {Date} date
- * @returns {string}
- */
-export function snapshotStamp(date) {
-  return date.toISOString().replace(/[:.]/g, "-");
-}
-
-/**
  * Fetches every board item and writes it to `runs/board-snapshots/<stamp>.json`, PRINTING the path --
  * whether via the returned value (callers) or `console.log` (the CLI below) -- because an unprinted backup
  * is one nobody can find under pressure. THROWS, rather than swallowing, if the fetch or the write fails:
@@ -582,53 +369,6 @@ export function writeBoardSnapshot({
 }
 
 /**
- * Writes a snapshot, or THROWS the refusal every caller relies on: no snapshot on disk, no mutation (#399).
- * @param {string} path @param {object} snapshot
- * @param {{ writeFile: (path: string, data: string) => void, mkdir: (path: string) => void }} io
- */
-function persistSnapshot(path, snapshot, { writeFile, mkdir }) {
-  try {
-    mkdir(SNAPSHOT_DIR);
-    writeFile(path, JSON.stringify(snapshot, null, 2));
-  } catch (cause) {
-    throw new Error(`board-snapshot: could not write the snapshot to ${path} -- refusing to proceed with `
-      + `an unsnapshotted board mutation. ${/** @type {Error} */ (cause).message}`, { cause });
-  }
-}
-
-/**
- * #1275: the items `issueNumbers` name, written to `runs/board-snapshots/<stamp>-issue-<n>.json` -- the issue in
- * the name so two moves a millisecond apart never overwrite each other. THROWS if the read or the write fails,
- * exactly as `writeBoardSnapshot` does: the guarantee is #399's, scoped to the write it covers.
- * @param {number[]} issueNumbers
- * @param {{ run?: typeof defaultRun, writeFile?: (path: string, data: string) => void,
- *   mkdir?: (path: string) => void, now?: () => Date }} [deps]
- * @returns {string} the path written
- */
-export function writeScopedSnapshot(issueNumbers, {
-  run = defaultRun,
-  writeFile = (path, data) => writeFileSync(path, data, "utf8"),
-  mkdir = (path) => mkdirSync(path, { recursive: true }),
-  now = () => new Date(),
-} = {}) {
-  const { items, notOnBoard } = fetchTouchedItems(issueNumbers, { run });
-  const takenAt = now();
-  const path = `${SNAPSHOT_DIR}/${snapshotStamp(takenAt)}-issue-${issueNumbers.join("-")}.json`;
-  persistSnapshot(path, {
-    takenAt: takenAt.toISOString(),
-    // SAYS WHAT IT IS, as #852's file does: a reader must not take a scoped file for the board.
-    takenBefore: `the board mutation of #${issueNumbers.join(", #")} -- SCOPED to the item(s) that mutation `
-      + "touches, not the whole board (#1275). A later mutation of the same item(s) in this process within "
-      + `${SNAPSHOT_MAX_AGE_MS / 1000}s reuses it; a mutation of any other item takes its own`,
-    scope: { issues: issueNumbers },
-    project: { owner: PROJECT_OWNER, number: PROJECT_NUMBER },
-    items,
-    notOnBoard,
-  }, { writeFile, mkdir });
-  return path;
-}
-
-/**
  * Wrap a board-mutating call so it can only run once a real snapshot has been written. `mutate` is never
  * invoked if `writeBoardSnapshot` throws -- that is the whole guarantee this file exists to give, and
  * `board-snapshot.test.ts`'s mutation check proves it by making the write fail and asserting `mutate` was
@@ -653,11 +393,7 @@ export function writeScopedSnapshot(issueNumbers, {
  */
 export function withBoardSnapshot(mutate, deps = {}) {
   const { log = (line) => process.stdout.write(`${line}\n`), exists = existsSync, touches, ...snapshotDeps } = deps;
-  const issues = touches === undefined ? null : [touches].flat();
-  if (issues !== null && (issues.length === 0 || !issues.every((issue) => Number.isInteger(issue)))) {
-    throw new Error(`board-snapshot: \`touches\` must name the issue(s) this mutation changes, got `
-      + `${JSON.stringify(touches)} -- refusing to guess what it touches. Nothing was mutated.`);
-  }
+  const issues = touchedIssues(touches);
   const now = snapshotDeps.now ?? (() => new Date());
   const at = now();
   /** @param {{ path: string, takenAt: Date } | null | undefined} snapshot */
@@ -671,44 +407,23 @@ export function withBoardSnapshot(mutate, deps = {}) {
   // it too, and `rm -rf runs/` appears three times in this repo's own comments as a scenario worth
   // defending a corpus from. WITHOUT THIS CHECK THE GUARANTEE MOVES FROM MUTATION TIME TO SWEEP TIME --
   // true of a process's first mutation and false of every reused one, which is not what #399 promises.
-  if (held !== null && stillValid(held)) {
-    log(`board-snapshot: reusing ${held.path}, taken ${describeAge(at, held.takenAt)} before this `
+  const route = snapshotRoute({ touchedIssues: issues, fullSnapshotValid: held !== null && stillValid(held) });
+  if (route === "reuse-full") {
+    const reused = /** @type {{ path: string, takenAt: Date }} */ (held);
+    log(`board-snapshot: reusing ${reused.path}, taken ${describeAge(at, reused.takenAt)} before this `
       + "mutation -- one sweep per process (#852)");
     return mutate();
   }
-  if (issues !== null) {
-    const { run, writeFile, mkdir } = snapshotDeps;
-    return withScopedSnapshot(mutate, issues, { log, stillValid, at, now, run, writeFile, mkdir });
+  if (route === "scoped") {
+    const { run = defaultRun, writeFile, mkdir } = snapshotDeps;
+    // #1275: THE ONE `gh` CALL THE SCOPED HALF NEEDS, made here so `board-snapshot-scope.mjs` never names `gh` and
+    // its test can run in a job with no token.
+    return withScopedSnapshot(mutate, /** @type {number[]} */ (issues), { request: (args) => run("gh", args), log, at,
+      now, maxAgeMs: SNAPSHOT_MAX_AGE_MS, stillValid, writeFile, mkdir });
   }
   const path = writeBoardSnapshot({ ...snapshotDeps, now });
   processSnapshot = { path, takenAt: at };
   log(`board-snapshot: wrote ${path} before mutating`);
-  return mutate();
-}
-
-/**
- * #1275: the scoped half of `withBoardSnapshot`. Reuses this process's snapshot of EVERY touched issue while each
- * is on disk and inside the bound -- the #852 disk re-read, applied per item -- and otherwise reads and writes
- * just those items.
- * @template T
- * @param {() => T} mutate @param {number[]} issues
- * @param {{ log: (line: string) => void, at: Date, now: () => Date,
- *   stillValid: (snapshot: { path: string, takenAt: Date } | undefined) => boolean, run?: typeof defaultRun,
- *   writeFile?: (path: string, data: string) => void, mkdir?: (path: string) => void }} context
- * @returns {T}
- */
-function withScopedSnapshot(mutate, issues, { log, at, now, stillValid, run, writeFile, mkdir }) {
-  const held = issues.map((issue) => scopedSnapshots.get(issue));
-  if (held.every((snapshot) => stillValid(snapshot))) {
-    const paths = [...new Set(held.map((snapshot) => /** @type {{ path: string }} */ (snapshot).path))];
-    log(`board-snapshot: reusing ${paths.join(", ")} for #${issues.join(", #")}, taken before an earlier `
-      + "mutation of the same item(s) in this process (#1275)");
-    return mutate();
-  }
-  const path = writeScopedSnapshot(issues, { run, writeFile, mkdir, now });
-  for (const issue of issues) scopedSnapshots.set(issue, { path, takenAt: at });
-  log(`board-snapshot: wrote ${path} before mutating #${issues.join(", #")} -- scoped to the item(s) this `
-    + "mutation touches, not the whole board (#1275)");
   return mutate();
 }
 
@@ -730,7 +445,7 @@ function describeAge(at, takenAt) {
  */
 export function forgetProcessSnapshot() {
   processSnapshot = null;
-  scopedSnapshots.clear();
+  forgetScopedSnapshots();
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
