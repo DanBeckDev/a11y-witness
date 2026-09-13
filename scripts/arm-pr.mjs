@@ -15,7 +15,7 @@
 // whose expectations are scraped out of the source it tests is this repository's own recorded defect.
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
-import { realpathSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { armabilityOf } from "./pr-hold-state.mjs";
 import { extractClosesDeclaration } from "./acceptance-commands.mjs";
@@ -82,29 +82,28 @@ export function sessionLabelsOf(rowLabels) {
  * @returns {string[]}
  */
 /**
- * #1000/#913: THE FIVE SESSIONS THAT EXIST. Four `session:*` labels are RETIRED BY DESCRIPTION rather than
- * deleted -- `dispatcher`, `worker-audit`, `worker-contracts`, `worker-config` -- because deleting one
- * strips it from the merged PRs that carry it as attribution, and eleven of thirteen are read by
- * `attributionFor` (`claim-provenance.mjs`) to return the `worker` verdict. A record of the past is never
- * renamed, and GitHub has no deletion that spares history.
+ * #1000/#913, #1453: THE SESSIONS THAT EXIST, READ FROM `docs/roles/sessions.json` -- `ceo`'s file, never typed here.
  *
- * **So four live labels carry a retired meaning, and the only thing keeping them retired is that nobody
- * applies them.** That is a rule nobody enforces, which in this repository is a rule that has already
- * drifted: `sessionLabelsOf` copies WHATEVER `session:*` label a row carries onto the closing PR, and a row
- * hand-labelled `session:dispatcher` tomorrow would put a retired label on a merged PR with nothing saying
- * so.
+ * Four `session:*` labels are RETIRED BY DESCRIPTION rather than deleted -- `dispatcher`, `worker-audit`,
+ * `worker-contracts`, `worker-config` -- because deleting one strips it from the merged PRs that carry it as
+ * attribution, which `attributionFor` (`claim-provenance.mjs`) reads. A record of the past is never renamed. So the
+ * labels that exist are not the live set, and neither is `docs/roles/README.md`'s roster, which records every role this
+ * org has had.
  *
- * A LITERAL HERE, DELIBERATELY, AND PINNED FROM THE TEST. `docs/roles/README.md`'s roster is not the source
- * -- measured: it names eleven agents including every retired one, because it is a record of the roles this
- * org has had. No file holds "who is live" today, so the list lives in ONE place with #913 named, and
- * `arm-pr.test.ts` pins these two sets against the `session:*` labels that actually exist: disjoint, and
- * together covering all nine. A sixth session added next month fails there rather than silently
- * attributing to nothing.
+ * #1453: THIS WAS A LITERAL, AND IT PREDATED THE THIRD ENGINEER. `worker-tooling` started at 19:13Z, and every PR whose
+ * row carried `session:worker-tooling` armed with a RED `arm` check: "session:worker-tooling is not a session this
+ * repository knows". The list now lives in one file with an owner, and `arm-pr.test.ts` pins that these two exports
+ * EQUAL the file's and that this file declares no session-name array.
+ *
+ * A label is refused when its session is absent from `live`; `retired` only chooses the sentence the refusal uses
+ * (#1020).
  */
-export const LIVE_SESSIONS = ["ceo", "product-manager", "orchestrator", "worker-capture", "worker-judge"];
+const SESSIONS = /** @type {{ live: { name: string }[], retired: { name: string }[] }} */ (
+  JSON.parse(readFileSync(new URL("../docs/roles/sessions.json", import.meta.url), "utf8")));
+export const LIVE_SESSIONS = SESSIONS.live.map((s) => s.name);
 
-/** Retired 2026-09-10 by the Org Reset (#913), kept as labels because merged PRs carry them. */
-export const RETIRED_SESSIONS = ["dispatcher", "worker-audit", "worker-config", "worker-contracts"];
+/** Retired 2026-09-10 by the Org Reset (#913), kept as labels because merged PRs carry them. Read from the same file. */
+export const RETIRED_SESSIONS = SESSIONS.retired.map((s) => s.name);
 
 /**
  * Pure: which of these labels name a session that is not live, AND WHICH KIND OF NOT-LIVE -- retired by
@@ -177,7 +176,7 @@ export function labelArmedPr({ number, repo, prBody, run = defaultRun }) {
         + "PRs carry it as attribution, but nothing new may be given it"
       : `${label} is not a session this repository knows`)).join("; ");
     console.error(`arm-pr: REFUSING to label #${number} -- ${why}.\n`
-      + `  The five live sessions are ${LIVE_SESSIONS.join(", ")}.\n`
+      + `  The ${LIVE_SESSIONS.length} live sessions (docs/roles/sessions.json) are ${LIVE_SESSIONS.join(", ")}.\n`
       + `  Fix the ROW's own label first: \`gh issue edit <row> --remove-label ${notLive[0].label} `
       + "--add-label session:<a live session>`, then re-run this.");
     // RETURNED, NEVER `process.exitCode` FROM IN HERE: setting the exit code inside a library function
