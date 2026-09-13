@@ -56,6 +56,25 @@ staged=$(git diff --cached --name-only --diff-filter=ACMR)
 [ -z "$staged" ] && exit 0
 count=$(printf '%s\n' "$staged" | wc -l | tr -d ' ')
 
+# #1314: THE REFUSAL'S OWN FIRST REMEDY MUST PASS. It says "Commit explicit paths instead: git commit path/one
+# path/two", and that commit read the same staged mtimes and was refused identically whenever the stale files
+# WERE the ones named (measured 2026-09-13: #1303's two-file fix, 37 minutes old, got through only with
+# A11Y_COMMIT_ALL=1). A guard whose remedy is refused teaches the override.
+#
+# `git commit <paths>` (the default --only form) builds a TEMPORARY index holding HEAD plus exactly the named
+# paths and hands this hook GIT_INDEX_FILE=.git/next-index-<pid>.lock. Plain `git commit`, `-a` and `-i`
+# hand it .git/index or .git/index.lock, whose staged set can carry swept-in files. Measured on git 2.53.0 in
+# a sandbox: with a swept-in file already staged, `git commit named.txt` showed this hook only named.txt and
+# left the swept file staged and uncommitted. So every file in a next-index commit was named on the command
+# line, and staleness -- a guess at "not the committer's own" -- has nothing left to guess about. The breadth
+# check below still applies. The index file's name is git's implementation, not its documented interface,
+# which is why pre-commit-hook.test.ts drives a REAL git commit through this hook rather than setting the
+# variable by hand: a git that names it differently fails those tests instead of silently refusing again.
+named_paths_only=0
+case "$(basename "${GIT_INDEX_FILE:-}")" in
+  next-index-*.lock) named_paths_only=1 ;;
+esac
+
 stale=""
 while IFS= read -r f; do
   [ -f "$f" ] || continue
@@ -74,7 +93,7 @@ while IFS= read -r f; do
   [ "$age_min" -ge "$STALE_MIN" ] && stale="$stale  $f (last touched ${age_min}m ago)"$'\n'
 done <<< "$staged"
 
-if [ -n "$stale" ]; then
+if [ -n "$stale" ] && [ "$named_paths_only" = 0 ]; then
   echo "pre-commit: refusing — staged files nobody has touched in ${STALE_MIN}m+:" >&2
   printf '%s' "$stale" >&2
   echo "In a shared checkout that usually means another agent's in-flight work got swept in." >&2
