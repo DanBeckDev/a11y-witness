@@ -29,15 +29,16 @@
  * `status` for a child that never ran (`ENOENT`: `pid` 0, no signal) AND for a child it started and then
  * KILLED -- `ENOBUFS` when output passed `maxBuffer` (#1244's own failure), `ETIMEDOUT` past `timeout`. A
  * killed child has a real `pid`, a `signal`, and possibly stderr worth its last line; only the first case
- * is "never started". The SIGNAL is what separates them in every shape measured, so "never started" needs a
- * code and no signal, and a killed child names its code as WHY. (`pid` 0 also marks ENOENT, but no measured
- * shape has a code, no signal and a real pid, so a clause on it would be untestable.)
+ * is "never started". The PID is what separates them: only a spawn that never ran has pid 0. The signal does
+ * NOT -- a child that TRAPS Node's SIGTERM exits with a status, and its error carries a code, a status and no
+ * signal (worker-judge, second blocker: I had called that shape unmeasured when I had only not written it).
+ * A stopped child names its code as WHY, whether it died of the signal or exited on it.
  */
 
 /**
  * The fields of a Node spawn error this reads. Everything is optional: the input is whatever was caught.
  * @typedef {{ message?: string, status?: number | null, signal?: string | null, code?: string,
- *             stderr?: string | Buffer | null }} SpawnError
+ *             pid?: number, stderr?: string | Buffer | null }} SpawnError
  */
 
 /**
@@ -49,11 +50,11 @@
 export function describeSpawnFailure(error, { inherited }) {
   const failure = /** @type {SpawnError} */ (error ?? {});
   const argv = firstLine(failure.message) ?? "a spawned command failed with no message";
-  if (failure.code && !failure.signal) {
+  if (failure.code && !failure.pid) {
     return `${argv} -- the command never started (${failure.code})`;
   }
   const why = failure.code ? ` (${failure.code})` : "";
-  const outcome = failure.signal ? `killed by ${failure.signal}${why}` : `exited ${failure.status ?? "without a status"}`;
+  const outcome = failure.signal ? `killed by ${failure.signal}${why}` : `exited ${failure.status ?? "without a status"}${why}`;
   return inherited
     ? `${argv} -- ${outcome}; its stderr is above`
     : `${argv} -- ${outcome}: ${lastStderrLine(failure.stderr)}`;
