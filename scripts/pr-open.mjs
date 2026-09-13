@@ -120,6 +120,18 @@ export function sendFailureLine({ mode, branch, head, message }) {
 }
 
 /**
+ * The branch, or `detached at <sha>` when there is none. `git rev-parse --abbrev-ref HEAD` returns the
+ * literal string `HEAD` on a detached checkout, so the line named a branch that does not exist and told
+ * the reader to retry from it. **`gh pr create` fails on a detached HEAD by construction**, so the one
+ * shape where this message is guaranteed to be read is the shape where that field was wrong.
+ * @param {(args: string[], fallback: string) => string} fact
+ */
+function branchName(fact) {
+  const name = fact(["rev-parse", "--abbrev-ref", "HEAD"], "(unknown)");
+  return name === "HEAD" ? `detached at ${fact(["rev-parse", "--short", "HEAD"], "(unknown)")}` : name;
+}
+
+/**
  * The spawn, with its deps injected so the failure path has a test. `head` and `branch` are read only
  * when something has already gone wrong, so the happy path pays nothing for them.
  * @param {string} mode
@@ -132,8 +144,15 @@ export function sendToGitHub(mode, rest, { run = defaultGh, git = defaultGit, er
     run(["pr", mode, ...rest]);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    err(`${sendFailureLine({ mode, branch: git(["rev-parse", "--abbrev-ref", "HEAD"]),
-      head: git(["rev-parse", "--short", "HEAD"]), message })}\n`);
+    // AN ERROR HANDLER THAT CAN ITSELF ERROR IS THE ONE PLACE A THROW COSTS THE MOST (worker-capture,
+    // #1283). Both reads sat here unguarded, so a failing `git` -- a GIT_DIR pointing elsewhere, a stale
+    // gitdir file, the CLI run from outside the checkout -- replaced this message with a raw throw that
+    // carries git's error and LOSES gh's cause entirely. Worse than the 24-line dump it replaced, which
+    // at least contained the answer.
+    /** @type {(args: string[], fallback: string) => string} */
+    const fact = (args, fallback) => { try { return git(args) || fallback; } catch { return fallback; } };
+    err(`${sendFailureLine({ mode, branch: branchName(fact), head: fact(["rev-parse", "--short", "HEAD"],
+      "(unknown)"), message })}\n`);
     return false;
   }
   for (const args of armAfterCreate(mode, rest)) run(args.slice(1));
