@@ -12,10 +12,17 @@
 //
 // THE OWNER IS DERIVED AND ITS SOURCE IS CARRIED, never guessed. `git` records who pushed a branch nowhere
 // this repository can read -- every commit is authored by the one account, which is why the incident that
-// produced #1128 could happen at all. So the owner comes from the ROW the branch names, and a branch that
-// names no row, or names one with no `session:` label, is **unknown** rather than attributed to the prefix
-// it happens to carry. `lead/`, `dispatcher/` and `pm/` are RETIRED roles (org shape, 2026-09-10): a
-// prefix can say which role pushed it and cannot produce a session that is able to answer today.
+// produced #1128 could happen at all. So the owner comes from the ROW the branch names: a live `session:`
+// label first, then the claim history of a closed row.
+//
+// A BRANCH THAT NAMES NO ROW IS GROUPED BY ITS PREFIX AND RANKED BELOW EVERY OWNER WHO CAN ANSWER.
+// `lead/`, `dispatcher/` and `pm/` are RETIRED roles (org shape, 2026-09-10), so the prefix says which
+// role pushed it and produces nobody who can answer today. This sentence used to say such a branch is
+// "unknown rather than attributed to the prefix", and the code did not do that -- worker-judge drove it
+// on #1273 and `lead/foo` came back as a named group sorted among the live sessions by size, so a retired
+// role with 14 branches outranked a live session with 9. **Grouping by the prefix is more useful than
+// UNKNOWN and the ORDER is what has to carry the distinction**: live owners, then retired roles, then
+// unknown. `source` is the key that decides the rank, never the owner string.
 
 /** A trailing `-<digits>` is the row the branch was cut for. `null` when the name carries none. */
 export function rowNumberFromBranch(branch) {
@@ -112,6 +119,13 @@ export function branchFacts({ branch, ahead, lastCommit, row, timeline = [] }) {
  * land and are created during a sweep, so a difference is expected -- what must not happen is a total that
  * changed quietly. `balanced` is the arithmetic; `drift` is what moved between the two reads.
  *
+ * TWO READS, AND THAT IS THE WHOLE POINT. `merged + unmerged === noOpenPR` inside ONE read is a PARTITION
+ * check -- it says the two buckets cover the population without overlapping, which is worth printing and
+ * is not reconciliation. It cannot see drift, because both numbers come from the same moment. The report
+ * used to print a one-read sum under the word `reconcile` while this function had no caller at all;
+ * worker-judge found it on #1273, and it is the exported-writer-with-no-caller shape made worse by output
+ * that claims the missing thing was done.
+ *
  * @param {{ candidates: number, noOpenPR: number, merged: number, unmerged: number }} start
  * @param {{ candidates: number, noOpenPR: number, merged: number, unmerged: number }} end
  */
@@ -139,10 +153,14 @@ export function groupByOwner(facts) {
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(f);
   }
-  const named = [...groups.entries()].filter(([k]) => !k.startsWith("UNKNOWN"))
-    .sort((a, b) => b[1].length - a[1].length);
-  const unknown = [...groups.entries()].filter(([k]) => k.startsWith("UNKNOWN"));
-  return [...named, ...unknown];
+  // RANK BY SOURCE, NOT BY SIZE ALONE. A group's rank is the best evidence any of its branches carries:
+  // an owner who can answer outranks a retired role, and a retired role outranks nobody at all. Within a
+  // rank, the biggest group first. Keying on the owner STRING was the defect: `lead (retired role)` sorted
+  // among the live sessions, so 14 branches nobody can answer for came above 9 that somebody can.
+  const RANK = { "row-label": 0, "claim-history": 0, "retired-role": 1, unknown: 2 };
+  const rankOf = (rows) => Math.min(...rows.map((r) => RANK[r.source] ?? RANK.unknown));
+  return [...groups.entries()]
+    .sort((a, b) => rankOf(a[1]) - rankOf(b[1]) || b[1].length - a[1].length);
 }
 
 /** One markdown table per owner, every branch on its own line with all four facts. */
