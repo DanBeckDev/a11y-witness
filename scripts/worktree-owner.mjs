@@ -1,5 +1,6 @@
 // command: print which session stamped a worktree, so a session can tell whose tree it is standing in
-//          before it moves HEAD -- `npm run worktree:whose [-- <path>]`
+//          before it moves HEAD -- `npm run worktree:whose [-- <path>]`, and stamp the tree you
+//          just made with `npm run worktree:stamp [-- <path>]`
 //
 // #1128: WHOSE WORKTREE IS THIS? The question the incident needed answered and nothing could.
 //
@@ -11,6 +12,13 @@
 // `git worktree list` shows the worktree, never who is using it. A detached checkout leaves the other
 // session's files intact and correct for a DIFFERENT commit, so their next command answers honestly
 // about the wrong tree, and `21` and `16` are both plausible counts.
+//
+// THE TREES THAT ALREADY EXIST ARE OUT OF SCOPE, and saying so is the point rather than an omission.
+// A stamp is written by whoever MAKES a worktree; the 17 that predate this row were made by sessions
+// that are no longer running, and nothing can recover who made them -- `git worktree list` never
+// recorded it, which is the whole incident. They answer UNSTAMPED, and that is the honest answer rather
+// than a gap: a stamp invented for them now would name whoever ran the sweep. One is adopted
+// deliberately, by the session that knows it owns it, with `npm run worktree:stamp -- <path>`.
 //
 // ADVISORY, NOT ENFORCING, and that is the choice rather than the cheap option. A stamp answers "whose
 // tree is this"; it does not answer "is anyone using it", and those are different questions -- the
@@ -71,14 +79,41 @@ export function whoseWorktree(worktree, asking, { owner = worktreeOwner } = {}) 
     + "commit, and their next command answers honestly about the wrong tree.";
 }
 
-/** `npm run worktree:whose [-- <path>]` -- defaults to the tree you are standing in. */
+/**
+ * `npm run worktree:whose [-- <path>]` reads; `npm run worktree:stamp [-- <path>]` writes. Both default
+ * to the tree you are standing in.
+ */
 function main() {
-  // NO FLAGS AT ALL, and the guard still runs: this command takes one positional path, so a typo'd
-  // `--path=...` would otherwise be skipped by the `??` and answer confidently about the tree the caller
-  // is standing in -- the exact "ignored flag runs the default and reports success" shape #453 is about.
-  refuseUnknownFlags([], { entry: import.meta.url, command: "npm run worktree:whose -- <path>" });
-  const target = process.argv[2] ?? process.cwd();
-  const asking = process.env.A11Y_SESSION ?? "(no A11Y_SESSION set)";
+  // ONE KNOWN FLAG, and the guard still runs for the reason #453 names: a typo'd `--stamp` falls through
+  // to the READ, which prints a perfectly good answer and writes nothing -- the mode most likely to be
+  // mistyped is the one that changes something.
+  refuseUnknownFlags(["--stamp"], { entry: import.meta.url, command: "npm run worktree:whose -- <path>" });
+  const args = process.argv.slice(2);
+  const target = args.find((a) => !a.startsWith("--")) ?? process.cwd();
+  const session = process.env.A11Y_SESSION;
+  if (args.includes("--stamp")) return stamp(target, session);
+  const asking = session ?? "(no A11Y_SESSION set)";
   process.stdout.write(`${whoseWorktree(target, asking)}\n`);
+}
+
+/**
+ * The writer, reached from `--stamp`. Extracted so `main` stays one level of abstraction, and because
+ * the refusal below is the interesting half rather than the write.
+ *
+ * @param {string} target @param {string | undefined} session
+ */
+function stamp(target, session) {
+  // A STAMP NAMING NOBODY IS WORSE THAN NO STAMP. Writing "(no A11Y_SESSION set)" would turn the honest
+  // UNSTAMPED answer into a confident wrong one, and the next reader could not tell them apart -- the
+  // substitution this whole file refuses, arriving through its own writer.
+  if (!session) {
+    process.stderr.write("worktree:stamp: A11Y_SESSION is not set, so there is no owner to record. "
+      + "Refusing rather than stamping a placeholder -- UNSTAMPED is a true answer and "
+      + "`(no A11Y_SESSION set)` would read as an owner.\n");
+    process.exitCode = 2;
+    return;
+  }
+  stampWorktree(target, session);
+  process.stdout.write(`${target}: stamped ${session}.\n`);
 }
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) main();

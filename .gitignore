@@ -118,3 +118,8 @@ packages/control/ansible/inventory.yml
 # sessions' working directories, and `git add -A` sweeping another agent's files is the incident the
 # pre-commit hook exists to catch.
 .metadata_never_index
+
+# The worktree owner stamp (#1128) -- metadata about WHOSE tree this is, never work.
+# Untracked-but-visible would make every stamped tree read dirty to `git status --porcelain`, which is
+# exactly what `prune-worktrees.mjs`'s isWorkingTreeClean asks before reporting a tree safe to delete.
+.a11y-owner
