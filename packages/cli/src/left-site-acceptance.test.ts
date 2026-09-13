@@ -6,10 +6,10 @@
 // `a11ign-result.json` files are committed verbatim under `fixtures/`.
 //
 // WHAT CAN BE DRIVEN FROM AN ARTIFACT, and what cannot: the Action's JSON carries the capture's transcript,
-// structure and interaction, so the CLI's own cut (`examineWithinTheSite`), the rules layer (`ruleFindings`),
-// the conformance scope (`conformanceFor`), the log line and the summary run on it for real. The trained
-// scorer's half of the verdict needs its model runtime, and the capture's diagnostics were never uploaded, so
-// neither is re-run here.
+// structure and interaction, so the CLI's own cut (`examineWithinTheSite`), the rules layer (`ruleFindings`), the
+// per-criterion outcomes (`criterionOutcomes`), the conformance scope (`conformanceFor`), the log line and the
+// summary run on it for real. The trained scorer's half of the verdict needs its model runtime, and the capture's
+// diagnostics were never uploaded, so neither is re-run here.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -17,7 +17,9 @@ import { readFileSync } from "node:fs";
 import { leftSite, withinTheSite } from "@a11ign/evidence";
 import { stripComments } from "@a11ign/evidence/source-text";
 import { oracleCounts } from "@a11ign/evidence/verify";
+import { sweepOutcomes, truncatedSweeps } from "@a11ign/evidence/conformance";
 import { ruleFindings } from "@a11ign/judge/rules";
+import { criterionOutcomes } from "@a11ign/judge/outcomes";
 import { conformanceFor, examineWithinTheSite, type CaptureResponse } from "./cli.js";
 import { logLines, renderSummary, type RunResult } from "./action/summary.js";
 
@@ -46,7 +48,18 @@ function rulesOn(capture: CaptureResponse) {
   } as Parameters<typeof ruleFindings>[0]);
 }
 
+/** The per-criterion outcomes as `runWitness` computes them, with the rules layer's findings standing in for the verdict. */
+function outcomesOn(capture: CaptureResponse, notExamined: { control: string; channels: readonly string[] } | null) {
+  return criterionOutcomes({
+    capture, findings: rulesOn(capture), abstained: false,
+    truncatedSweeps: truncatedSweeps(sweepOutcomes((capture as { diagnostics?: unknown[] }).diagnostics ?? [])),
+    completeness: oracleCounts(capture).completeness, notExamined,
+  } as Parameters<typeof criterionOutcomes>[0]);
+}
+
 const mentionsYouTube = (finding: unknown): boolean => /you ?tube/i.test(JSON.stringify(finding));
+const outcomeOf = (outcomes: { criterion: string; outcome: string; reason: string }[], criterion: string) =>
+  outcomes.find((o) => o.criterion === criterion)!;
 
 for (const run of RUNS) {
   test(`#1363 ACCEPTANCE (run ${run}): the excursion is found, at the embedded player`, () => {
@@ -81,6 +94,23 @@ for (const run of RUNS) {
     assert.ok(notExamined.includes("links"));
   });
 
+  test(`#1363 ACCEPTANCE (run ${run}): a criterion whose evidence was cut is NOT EXAMINED -- never empty, never examined in full`, () => {
+    const { left, notExamined, examined } = examineWithinTheSite(captureOf(resultOf(run)));
+    const reported = outcomesOn(examined, { control: left!.control, channels: notExamined });
+    for (const criterion of ["2.4.4", "3.3.2", "2.4.2", "2.1.1", "1.1.1", "4.1.2"]) {
+      const outcome = outcomeOf(reported, criterion);
+      assert.equal(outcome.outcome, "cantTell", `${criterion}: ${outcome.reason}`);
+      assert.ok(outcome.reason.includes(`left the site at ${JSON.stringify(EMBED)}`), `${criterion} names where it ended`);
+    }
+    assert.ok(!outcomeOf(reported, "1.4.2").reason.includes("left the site"),
+      "a criterion read before any probe -- the DOM's media census -- is not withdrawn by the excursion");
+    // THE CONTROL, and the defect it guards: the same cut capture WITHOUT the not-examined record reads its removed
+    // channels as EMPTY -- worker-judge's reading of `5ef1a854` on #1376, a page of 42 links "exposing none".
+    const unmarked = outcomesOn(examined, null);
+    assert.equal(outcomeOf(unmarked, "2.4.4").outcome, "inapplicable");
+    assert.equal(outcomeOf(unmarked, "1.1.1").outcome, "passed");
+  });
+
   test(`#1363 ACCEPTANCE (run ${run}): Requirement 2 says where the examination ended`, () => {
     const capture = captureOf(resultOf(run));
     const left = leftSite(capture)!;
@@ -93,22 +123,25 @@ for (const run of RUNS) {
     assert.doesNotMatch(fullPages.establishes, /examined in full/);
   });
 
-  test(`#1363 ACCEPTANCE (run ${run}): the one-line log and the summary say so`, () => {
+  test(`#1363 ACCEPTANCE (run ${run}): the one-line log and the summary say so, over the cut pipeline's own findings`, () => {
     const result = resultOf(run);
     // TODAY'S LINE, from the artifact as it was published: the control for the wording below.
     assert.deepEqual(logLines(result, "never"), ["a11ign: 1 finding(s) (1 serious); fail-on=never"]);
 
-    const capture = captureOf(result);
-    const left = leftSite(capture)!;
+    // The findings come from the CUT capture, not from a filter on the word "YouTube": a post-excursion finding
+    // that never names YouTube would pass such a filter (worker-judge's should-fix on #1376).
+    const { left, examined } = examineWithinTheSite(captureOf(result));
+    const findings = rulesOn(examined);
+    assert.deepEqual(findings.filter(mentionsYouTube), []);
     const fixed: RunResult = {
       ...result,
-      verdict: { ...result.verdict, findings: result.verdict.findings.filter((f) => !mentionsYouTube(f)) },
-      leftSite: { control: left.control, to: left.to, source: left.source },
+      verdict: { ...result.verdict, findings: findings as unknown as RunResult["verdict"]["findings"] },
+      leftSite: { control: left!.control, to: left!.to, source: left!.source },
     };
     const [first, second] = logLines(fixed, "never");
     assert.equal(first, `a11ign: examination ENDED -- left the site at ${JSON.stringify(EMBED)} `
       + "(to https://www.youtube.com); everything after it was NOT EXAMINED");
-    assert.equal(second, "a11ign: 0 finding(s) (none) in what was examined; fail-on=never");
+    assert.match(second, new RegExp(`^a11ign: ${findings.length} finding\\(s\\) \\([^)]*\\) in what was examined; fail-on=never$`));
     assert.match(renderSummary(fixed), /\*\*The examination ended early\.\*\* Activating/);
   });
 }
@@ -116,7 +149,7 @@ for (const run of RUNS) {
 /**
  * THE CLI'S WIRING, READ FROM THE SOURCE with comments stripped. `runWitness` needs a live capture worker, so no
  * test can call it; what this pins is the one fact that decides the defect -- every consumer after the cut is
- * handed `examined`, never the whole capture. Reverting any one of them to `cap` reattributes youtube.com.
+ * handed `examined`, never the whole capture, and the outcomes are told what was not examined.
  */
 test("#1363 WIRING: runWitness judges, scopes, scores and reports the CUT capture, never the whole one", () => {
   const source = stripComments(readFileSync(new URL("./cli.ts", import.meta.url), "utf8"));
@@ -127,6 +160,7 @@ test("#1363 WIRING: runWitness judges, scopes, scores and reports the CUT captur
   assert.match(body, /await judge\(\{\s*url: examined\.url,[\s\S]*?structure: examined\.structure,\s*interaction: examined\.interaction,/);
   assert.match(body, /\.\.\.oracleCounts\(examined\),\s*\}\);/);
   assert.match(body, /conformanceFor\(examined, ruleFindings, left && \{/);
-  assert.match(body, /criterionOutcomes\(\{\s*capture: examined,/);
+  assert.match(body,
+    /criterionOutcomes\(\{\s*capture: examined, notExamined: left && \{ control: left\.control, channels: notExamined \},/);
   assert.match(body, /printJson\(\{[^}]*cap: examined,[^}]*leftSite: left,/);
 });

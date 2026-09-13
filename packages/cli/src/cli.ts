@@ -705,7 +705,7 @@ async function runWitness(
   // Per-criterion ACT outcomes. `truncatedSweeps` is what turns Conformance Requirement 2 into something
   // per-criterion: a link sweep that stopped at its cap makes 2.4.4 `cantTell`, not `passed`.
   const outcomes = criterionOutcomes({
-    capture: examined,
+    capture: examined, notExamined: left && { control: left.control, channels: notExamined },
     findings: verdict.findings,
     abstained: verdict.abstained === true,
     truncatedSweeps: truncatedSweeps(sweepOutcomes(examined.diagnostics ?? [])),

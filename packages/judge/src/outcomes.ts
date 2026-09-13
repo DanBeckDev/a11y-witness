@@ -175,6 +175,12 @@ export interface OutcomeInput {
   abstained?: boolean;
   /** Sweeps that stopped before the page ran out of elements. */
   truncatedSweeps?: readonly { type: string }[];
+  /**
+   * WHERE THE EXAMINATION ENDED (#1363): the control whose activation left the page's site, and every capture
+   * channel observed after it that `withinTheSite` removed. A criterion fed by one is `cantTell`, never
+   * `inapplicable` or `passed`: its evidence was not read on this page. Absent when every activation stayed.
+   */
+  notExamined?: { control: string; channels: readonly string[] } | null;
 }
 
 /**
@@ -242,6 +248,44 @@ function truncatedFeeds(criterion: string, truncated: readonly { type: string }[
 }
 
 /**
+ * THE CHANNELS A CUT CAPTURE NO LONGER CARRIES, named as `SWEEPS_FEEDING` names its feeds (#1363).
+ *
+ * When an activation left the page's site, `withinTheSite` removes every channel observed after it. An absent
+ * channel must then read as NOT EXAMINED, and nothing downstream could tell: `applicabilityOf` read the removed
+ * `links` as a page with none, and `completeness` read a removed sweep as `unknown`, which `EXAMINED_IN_FULL`
+ * counts as examined in full. `worker-judge` measured it on both rehearsal artifacts on #1376.
+ */
+const FEED_OF_CHANNEL: Readonly<Record<string, string>> = {
+  headings: "heading", landmarks: "landmark", formFields: "formField", graphics: "graphic", links: "link",
+  lists: "list", focusOrder: "focusOrder", focusEvents: "focusOrder", routeChange: "routeChange",
+  postSubmitFields: "postSubmit", postSubmitNames: "postSubmit", navigatedOnSubmit: "postSubmit",
+};
+
+/** The probe-derived criteria `SWEEPS_FEEDING` leaves to `NOT_SWEEP_DERIVED`, and the channel each is read from. */
+const PROBE_CHANNEL_FEEDING: Readonly<Record<string, readonly string[]>> = {
+  "1.4.13": ["focusReveal"], "3.2.1": ["focusContext"], "3.2.2": ["typedFeedback"], "3.3.3": ["postSubmitFields"],
+};
+
+/** Which of this criterion's feeds did the examination never reach, because it ended first? */
+function notExaminedFeeds(criterion: string, notExamined: OutcomeInput["notExamined"]): string[] {
+  if (!notExamined) return [];
+  const removed = new Set(notExamined.channels);
+  const feeds = new Set(notExamined.channels.flatMap((channel) => FEED_OF_CHANNEL[channel] ?? []));
+  return [...new Set([...(SWEEPS_FEEDING[criterion] ?? []).filter((feed) => feeds.has(feed)),
+    ...(PROBE_CHANNEL_FEEDING[criterion] ?? []).filter((channel) => removed.has(channel))])];
+}
+
+/** `cantTell`, naming where the examination ended and which of this criterion's evidence came after it. */
+function notExaminedOutcome(criterion: string, feeds: string[],
+  notExamined: NonNullable<OutcomeInput["notExamined"]>): CriterionOutcome {
+  return {
+    criterion, outcome: "cantTell",
+    reason: `The examination ended -- left the site at ${JSON.stringify(notExamined.control)} -- before the `
+      + `${feeds.join(" and ")} evidence this criterion needs was read, so it was NOT EXAMINED rather than empty.`,
+  };
+}
+
+/**
  * Is there anything on this page for the criterion to be about?
  *
  * Mostly delegates to `hasEvidenceFor`, which is the applicability table the scorer already uses. The
@@ -285,6 +329,8 @@ function applicabilityOf(criterion: string, capture: CaptureEvidence): "applicab
  *    criteria a deterministic rule also touches: a rule covers part of a criterion, so a silent rule plus
  *    an absent scorer is not a pass.
  * 3. Truncation beats applicability. "We stopped early and saw none" must never become "there are none".
+ *    An examination that ENDED before this criterion's evidence was read (#1363) is checked first, for the same
+ *    reason and more strongly: that evidence was never looked for on this page at all.
  * 4. Only then may an empty channel mean `inapplicable`, which is ACT's "nothing here to judge".
  */
 function outcomeFor(criterion: string, input: OutcomeInput): CriterionOutcome {
@@ -315,6 +361,8 @@ function outcomeFor(criterion: string, input: OutcomeInput): CriterionOutcome {
         + "nothing was scored for this criterion.",
     };
   }
+  const unexamined = notExaminedFeeds(criterion, input.notExamined);
+  if (unexamined.length && input.notExamined) return notExaminedOutcome(criterion, unexamined, input.notExamined);
   const stalled = truncatedFeeds(criterion, input.truncatedSweeps ?? []);
   if (stalled.length) {
     return {
