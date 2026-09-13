@@ -117,20 +117,53 @@ export function sweepDecision({ labels, checkRunCount, holdReason = null }) {
  * failure's message: `gh pr merge --auto` exits non-zero for a merged PR, an unmergeable one and a
  * network fault alike.
  *
- * UNREADABLE IS NOT MERGED. A lookup that fails returns false, so the caller reports FAILED TO ARM --
+ * ASKED MORE THAN ONCE (#1306). The race it answers is the `arm` job merging the very PR this sweep listed,
+ * and ONE read at that instant got the pre-merge answer: 3 of 3 `pull_request` failures of `auto-arm` on
+ * 2026-09-13 (#1289, #1291, #1295) printed FAILED TO ARM in the same second as the PR's `merged_at`, or one
+ * second after it. So a `false` is re-read, a bounded number of times with a named wait between, before it
+ * is believed.
+ *
+ * UNREADABLE IS NOT MERGED. A lookup that fails counts as `false`, so the caller reports FAILED TO ARM --
  * which is the honest answer, because not knowing why an arm failed is not the same as knowing it was
- * harmless. This is `armabilityOf`'s "Unreadable is not unheld" pointed at a different question.
+ * harmless. This is `armabilityOf`'s "Unreadable is not unheld" pointed at a different question. But the
+ * failure is PRINTED WITH ITS CAUSE: a bare `catch` made "the lookup failed" and "not merged yet" the same
+ * FAILED TO ARM line, which is why #1306 could not say which of the two its third case was.
  *
  * @param {string} number @param {string} repo
+ * @param {{ read?: (number: string, repo: string) => boolean, sleep?: (ms: number) => void,
+ *           log?: (line: string) => void }} [deps]
  * @returns {boolean}
  */
-function mergedMeanwhile(number, repo) {
-  try {
-    const pr = JSON.parse(gh(["api", `repos/${repo}/pulls/${number}`, "--jq", "{merged: .merged}"]));
-    return pr?.merged === true;
-  } catch {
-    return false;
+export function mergedMeanwhile(number, repo, { read = readMerged, sleep = sleepSync, log = console.log } = {}) {
+  for (let attempt = 1; attempt <= MERGED_MEANWHILE_READS; attempt += 1) {
+    try {
+      if (read(number, repo)) return true;
+    } catch (cause) {
+      log(`SWEEP: #${number} merged-meanwhile read ${attempt}/${MERGED_MEANWHILE_READS} FAILED -- `
+        + `${cause instanceof Error ? cause.message : cause}`);
+    }
+    if (attempt < MERGED_MEANWHILE_READS) sleep(MERGED_MEANWHILE_WAIT_MS);
   }
+  return false;
+}
+
+/**
+ * THE BOUND ON THAT RE-READ (#1306), named because neither number explains itself. The measured failures sat
+ * within about a second of `merged_at`, so three waits of two seconds give the API six seconds to catch up,
+ * and a genuinely failed arm costs the sweep at most that long before it reports FAILED TO ARM.
+ */
+export const MERGED_MEANWHILE_READS = 4;
+export const MERGED_MEANWHILE_WAIT_MS = 2_000;
+
+/** One read of whether the PR merged, from the API. @param {string} number @param {string} repo */
+function readMerged(number, repo) {
+  const pr = JSON.parse(gh(["api", `repos/${repo}/pulls/${number}`, "--jq", "{merged: .merged}"]));
+  return pr?.merged === true;
+}
+
+/** Blocks for `ms`. `main()` is synchronous end to end, like every `gh` call it makes. @param {number} ms */
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT)), 0, 0, ms);
 }
 
 /** @param {string[]} args */
