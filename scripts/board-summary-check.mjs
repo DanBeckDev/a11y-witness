@@ -435,6 +435,34 @@ function nextEditionDay(now = new Date()) {
 
 
 /**
+ * #1345: the month names a summary writes ("on 13 September"), derived from the platform rather than retyped.
+ * `board-document.mjs` has its own `MONTHS`, and importing it would put that file's `gh` spawns in this file's
+ * closure -- and it already imports this one.
+ */
+const MONTHS_IN_YEAR = 12;
+const ANY_YEAR = 2000;
+const MONTH_NAMES = Array.from({ length: MONTHS_IN_YEAR }, (_, month) =>
+  new Intl.DateTimeFormat("en-GB", { month: "long", timeZone: "UTC" }).format(Date.UTC(ANY_YEAR, month, 1)).toLowerCase());
+const MINUTES_PER_HOUR = 60;
+const HOURS_PER_DAY = 24;
+const MINUTES_PER_DAY = HOURS_PER_DAY * MINUTES_PER_HOUR;
+const MS_PER_MINUTE = 60_000;
+
+/**
+ * An instant as LONDON wall-clock minutes since 1970-01-01 00:00 on that wall clock, with its London year. The
+ * date is `editionDay`'s, the one definition (#1302); only the hour and minute are read here, from the same
+ * instant, so there is one clock read however many fields come from it.
+ * @param {Date} now @returns {{ year: number, minutes: number }}
+ */
+function londonWallMinutes(now) {
+  const day = editionDay(now);
+  const [hour, minute] = new Intl.DateTimeFormat("en-GB",
+    { timeZone: "Europe/London", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(now).split(":").map(Number);
+  const [year] = day.split("-").map(Number);
+  return { year, minutes: Date.parse(`${day}T00:00:00Z`) / MS_PER_MINUTE + hour * MINUTES_PER_HOUR + minute };
+}
+
+/**
  * Pure: the writing time the summary CLAIMS, and how far it is from the moment given.
  *
  * EXPORTED SO IT CAN BE SHOWN TO FAIL. The style test reads TODAY's summary, so on any day before the
@@ -443,16 +471,35 @@ function nextEditionDay(now = new Date()) {
  * times. Driving this function directly with fixtures is what makes the freshness check verified rather
  * than merely present.
  *
+ * #1345: THE AGE IS THE MINUTES THAT PASSED. Compared "HH:MM" with "HH:MM", a summary written at 23:50 and read at
+ * 00:30 was 1,400 minutes old. Given an instant, the stated "on D Month" places the time on its day and the age
+ * crosses midnight; a day named more than a day AHEAD of now is last year's (31 December read on 1 January). A time
+ * stated later than now stays its distance ahead, never wrapped into yesterday.
+ *
+ * STATED LIMIT: the difference is in London WALL-CLOCK minutes, so across the two nights the clocks change a
+ * summary is aged one hour wrong in either direction. A text with no day, or an "HH:MM" `now` (which carries no
+ * day), keeps the within-one-day age it always had.
+ *
  * @param {string} text the summary's own text
- * @param {string} londonNow "HH:MM" in Europe/London at render time
+ * @param {Date | string} now the render instant, or "HH:MM" in Europe/London
  * @returns {{ stated: string, driftMinutes: number } | null} null when no time is stated at all
  */
-export function statedWritingTime(text, londonNow) {
-  const m = /written at (\d{2}):(\d{2})/i.exec(text);
+export function statedWritingTime(text, now) {
+  const m = /written at (\d{2}):(\d{2})(?: on (\d{1,2}) ([a-z]+))?/i.exec(text);
   if (!m) return null;
-  const [, hh, mm] = m;
-  const [nowH, nowM] = londonNow.split(":").map(Number);
-  return { stated: `${hh}:${mm}`, driftMinutes: Math.abs((nowH * 60 + nowM) - (Number(hh) * 60 + Number(mm))) };
+  const [, hh, mm, day, monthName] = m;
+  const stated = `${hh}:${mm}`;
+  const statedOfDay = Number(hh) * MINUTES_PER_HOUR + Number(mm);
+  if (typeof now === "string") {
+    const [nowH, nowM] = now.split(":").map(Number);
+    return { stated, driftMinutes: Math.abs((nowH * MINUTES_PER_HOUR + nowM) - statedOfDay) };
+  }
+  const wall = londonWallMinutes(now);
+  const month = monthName ? MONTH_NAMES.indexOf(monthName.toLowerCase()) : -1;
+  if (month < 0) return { stated, driftMinutes: Math.abs((wall.minutes % MINUTES_PER_DAY) - statedOfDay) };
+  const statedIn = (/** @type {number} */ year) => Date.UTC(year, month, Number(day)) / MS_PER_MINUTE + statedOfDay;
+  const statedAt = statedIn(wall.year) - wall.minutes > MINUTES_PER_DAY ? statedIn(wall.year - 1) : statedIn(wall.year);
+  return { stated, driftMinutes: Math.abs(wall.minutes - statedAt) };
 }
 
 /**
