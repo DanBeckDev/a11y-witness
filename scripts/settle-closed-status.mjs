@@ -51,16 +51,40 @@ export function unsettledVerdict(unsettled) {
  * THE THREE OUTCOMES ARE DISTINCT, per ceo's 2026-09-08 ruling on `moveProjectStatus` itself: "'could not
  * ask' and 'asked and wrote' must not look the same, and a half-applied claim is worse than none."
  *
+ * #1360: A ROW ALREADY AT `Done` ISSUES NO MOVE. Measured 2026-09-13 15:23Z: one sweep re-wrote Done for #1298,
+ * #1292 and #1271, each already Done, and the account's GraphQL pool hit zero that afternoon. `currentStatus`
+ * answers from data the caller ALREADY HOLDS -- the process's board snapshot -- never from a new read per row,
+ * which would spend the same budget the skip exists to save. It is injected, like `moveStatus`, because the
+ * snapshot's module carries a token into any test that imports it (`board-snapshot.mjs`'s own header).
+ * `null` means "not known", and an unknown Status is moved exactly as before: skipping on a guess would leave
+ * a closed row at a live Status, which is the defect #1227 exists to prevent.
+ *
  * @param {number} n
  * @param {{ moveStatus: (n: number, status: string) =>
  *   ({ moved: true } | { moved: false, reason: string, notOnBoard: boolean }),
+ *   currentStatus?: (n: number) => string | null,
  *   log?: (line: string) => void }} deps
  * @returns {SettleOutcome} `settled` is whether the row's Status is SETTLED -- moved, or not on the board so
  *   there is none to move -- and `refused` is empty then. A refused move carries its classified refusal there: a caller that discards it reports a
  *   repair that did not happen (both close-rows paths exited 0 with no Status moved until #1299), and a caller
  *   that cannot see its cause fails every CI run on a token that cannot read the Project.
  */
-export function settleClosedStatus(n, { moveStatus, log = console.log }) {
+export function settleClosedStatus(n, { moveStatus, currentStatus = () => null, log = console.log }) {
+  /** @type {string | null} */
+  let status;
+  try {
+    status = currentStatus(n);
+  } catch (error) {
+    // #1360, `ceo`'s ruling: a Status read that fails REFUSES with its cause, and the move never reads again. In CI
+    // the Project is unreadable until #546, so letting the move try would spend a second failed read per row.
+    const reason = `could not read #${n}'s Status before moving it to "Done" -- ${/** @type {Error} */ (error).message}`;
+    log(`CLOSE-ROWS: #${n} CLOSED but Status NOT moved -- ${reason}`);
+    return { settled: false, refused: [{ row: n, cause: refusalCause(reason), message: reason }] };
+  }
+  if (status === "Done") {
+    log(`CLOSE-ROWS: #${n} Status is already Done -- no move.`);
+    return { settled: true, refused: [] };
+  }
   const result = moveStatus(n, "Done");
   if (result.moved) {
     log(`CLOSE-ROWS: #${n} Status -> Done.`);
