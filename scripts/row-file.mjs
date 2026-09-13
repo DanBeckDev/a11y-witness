@@ -852,6 +852,29 @@ export function createIssue(argv, deps = {}) {
 }
 
 /**
+ * The item-add rung's refusal: what failed, what it SKIPPED, and the command for each.
+ *
+ * Extracted for `boardAndVerify`'s line budget, but it earns its own name: this is the rung that skips
+ * TWO steps rather than one, so it is the only refusal in the ladder that has to describe a repair in
+ * three parts. Reported by worker-capture on #1250 -- the first #1249 fix reached the Status rung, which
+ * is the one the FILING author hit, and left this one, which is the rung the reviewer's own filing hit.
+ * @param {{ issueNumber: number, url: string, boarding: { status: string, label: string },
+ *           allLabels: string[], repairLabels: string }} row
+ * @param {unknown} error
+ */
+function boardAddRefusal({ issueNumber, url, boarding, allLabels, repairLabels }, error) {
+  return `FILED as #${issueNumber}, but could NOT add it to Project ${PROJECT_NUMBER} -- refusing to `
+    + `report success for a row nothing else can find. ${/** @type {Error} */ (error).message}\n  `
+    + `AND neither the Status "${boarding.status}" nor ${allLabels.map((l) => `\`${l}\``).join("/")} `
+    + `were applied, because both steps sit behind the board add and neither ran. Adding it by hand `
+    + `alone leaves this row on the board with no Status and no labels. Apply all three:\n`
+    + `    gh project item-add ${PROJECT_NUMBER} --owner ${PROJECT_OWNER} --url ${url}\n`
+    + `    gh project item-edit ${PROJECT_NUMBER} --owner ${PROJECT_OWNER} --url ${url} `
+    + `--field Status --value "${boarding.status}"\n`
+    + `    ${repairLabels}`;
+}
+
+/**
  * #844: board the freshly-created issue, set its Status, ONLY THEN add the board label, and finally
  * read all three records back -- pulled out of `createIssue` to keep that function's own complexity
  * under this repo's gate; it is the same one concept (board it, then prove it) written out, rather than
@@ -873,22 +896,44 @@ export function createIssue(argv, deps = {}) {
  *   ensureLabels: typeof ensureLabelsExist }} deps
  * @returns {{ ok: true } | { ok: false, message: string }}
  */
-function boardAndVerify({ issueNumber, url, boarding, session, laneLabels, milestone },
+export function boardAndVerify({ issueNumber, url, boarding, session, laneLabels, milestone },
   { run, fetchBoardStatus, fetchLabels, moveStatus, ensureLabels }) {
+  // #1249: `allLabels` is derived HERE, above the first step that can fail, so every refusal below can
+  // name the labels it skipped. An operator cannot derive them -- they come from the Region -- so a
+  // message that says "the labels" instead of `backlog`/`lane:any` is one they have to reconstruct.
+  const allLabels = [boarding.label, ...laneLabels];
+  const repairLabels = `gh issue edit ${issueNumber} --repo ${REPO} `
+    + `${allLabels.map((l) => `--add-label ${l}`).join(" ")}`;
   try {
     run("gh", ["project", "item-add", String(PROJECT_NUMBER), "--owner", PROJECT_OWNER, "--url", url]);
   } catch (error) {
-    return { ok: false, message: `FILED as #${issueNumber}, but could NOT add it to Project `
-      + `${PROJECT_NUMBER} -- refusing to report success for a row nothing else can find. `
-      + `${/** @type {Error} */ (error).message}\n  Add it by hand: gh project item-add ${PROJECT_NUMBER} `
-      + `--owner ${PROJECT_OWNER} --url ${url}` };
+    // #1249, SECOND RUNG: this one skips TWO steps, not one. item-add is the first of three, and the
+    // Status and the labels below both sit behind it -- so an operator who follows this message exactly
+    // gets the row onto the board with no Status and no labels, which is the partial filing this whole
+    // ladder exists to refuse, one rung up. Reported by worker-capture on #1250, whose point was that
+    // the first fix reached the rung MY filing hit and not the rung THEIRS did.
+    return { ok: false,
+      message: boardAddRefusal({ issueNumber, url, boarding, allLabels, repairLabels }, error) };
   }
   const statusResult = moveStatus(issueNumber, boarding.status, { run });
   if (!statusResult.moved) {
+    // #1249: NAME EVERY STEP THIS SKIPS, not only the one that failed.
+    //
+    // #1248 was filed with NO LABELS AT ALL and this message said only that the Status had not moved.
+    // The label step is below and never runs, so an operator who follows the refusal exactly fixes the
+    // Status and stops -- and the row stays invisible to every label-keyed view, which is #623's defect
+    // arriving through a partial filing rather than through a missing label.
+    //
+    // THE ORDER IS KEPT AND THE MESSAGE CARRIES THE WEIGHT. Applying labels first would leave a labelled
+    // row on a Status failure, which is friendlier -- but it makes the Status the partial half instead,
+    // and the board is what the org reads for what is claimable. A report that describes ALL of what is
+    // missing is what must survive, whichever half is written first.
     return { ok: false, message: `FILED as #${issueNumber} and added to Project ${PROJECT_NUMBER}, but `
-      + `its Status could not be set to "${boarding.status}" -- ${statusResult.reason}` };
+      + `its Status could not be set to "${boarding.status}" -- ${statusResult.reason}\n  `
+      + `AND ${allLabels.map((l) => `\`${l}\``).join("/")} were NOT applied, because the Status failed `
+      + `first and the label step never ran. Fixing only the Status leaves this row unlabelled and `
+      + `invisible to every label-keyed view. Apply both: ${repairLabels}` };
   }
-  const allLabels = [boarding.label, ...laneLabels];
   try {
     // #883: `lane:<owner>` is a PER-DERIVATION label -- `lane:dispatcher`, `lane:any`, whatever the
     // Region maps to -- and #749's own lesson applies identically here: `gh issue edit --add-label`
