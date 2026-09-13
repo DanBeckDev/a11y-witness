@@ -808,7 +808,10 @@ async function main() {
 
 import { pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
-import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
+// #1373: RELATIVE, not `@a11ign/worker-fleet/cli-flags` -- `row-claim.mjs` imports this file now, and
+// `close-rows-for-merged-pr.mjs`, `close-rows-sweep.mjs` and `workflow-run-liveness.mjs` run it before
+// `npm ci`, where a package specifier dies (`pre-install-import-graph.test.ts`).
+import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
   main();
 }
