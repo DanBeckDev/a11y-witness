@@ -420,3 +420,48 @@ test("#1388: a row with no nodes (an older result) cannot be told, and is not ma
   const out = ruleLayer(renderSummary(result({ ruleBased: [{ impact: "minor", wcag: [], rule: "region", help: "h" }] })));
   assert.doesNotMatch(out, /in a frame/);
 });
+
+// --- #1391: a state change announced correctly is shown as evidence observed, never as a pass ---
+
+/** A real capture's pair: the tutorial disclosure the lab's eval corpus records as GOOD. */
+const DISCLOSURE_GOOD = (() => {
+  const file = new URL("../../../lab/src/eval/fixtures/tutorials/disclosure-good.json", import.meta.url);
+  const [pair] = (JSON.parse(readFileSync(file, "utf8")) as { interaction: { stateChanges: { control: string; after: string }[] } })
+    .interaction.stateChanges;
+  return pair;
+})();
+
+test("#1391: an observed state change is shown with BOTH announcements quoted verbatim", () => {
+  assert.equal(DISCLOSURE_GOOD.control, "How do I reset my password?, button, collapsed", "the fixture as committed");
+  const md = renderSummary(result(), { stateChangesObserved: [{ ...DISCLOSURE_GOOD, from: "collapsed", to: "expanded" }] });
+  assert.match(md, /\*\*Evidence observed: 1 state change\(s\) the screen reader announced after activation\*\*/);
+  assert.ok(md.includes(`\`${DISCLOSURE_GOOD.control}\` → \`${DISCLOSURE_GOOD.after}\` (collapsed → expanded)`), md);
+});
+
+test("#1391: the section is EVIDENCE, never a pass -- no criterion is named and nothing is said to pass", () => {
+  const md = renderSummary(result(), { stateChangesObserved: [{ ...DISCLOSURE_GOOD, from: "collapsed", to: "expanded" }] });
+  const section = md.slice(md.indexOf("**Evidence observed"), md.indexOf("</sub>", md.indexOf("**Evidence observed")));
+  assert.ok(section.length > 0, "the positive control: the section is there to read");
+  assert.doesNotMatch(section, /\b\d\.\d\.\d{1,2}\b|\bpass(ed|es)?\b|conform/i,
+    "ADR 0021 gives the rule the right to conclude; one clean control is not a result for the page");
+});
+
+test("#1391: no list and an EMPTY list render exactly today's report -- the control for the absence", () => {
+  const today = renderSummary(result());
+  assert.equal(renderSummary(result(), { stateChangesObserved: [] }), today);
+  assert.equal(renderSummary(result(), { stateChangesObserved: undefined }), today);
+  assert.doesNotMatch(today, /Evidence observed/);
+});
+
+/** Two code spans open and close with four backticks, which split a line into five pieces. */
+const PIECES_AROUND_TWO_CODE_SPANS = 5;
+
+test("#1391: a pipe, a newline or a backtick in an announcement cannot break the markdown", () => {
+  const md = renderSummary(result(), { stateChangesObserved: [
+    { control: "A | B, button,\ncollapsed", after: "A `x` B, button, focused, expanded", from: "collapsed", to: "expanded" },
+  ] });
+  const line = md.split("\n").find((l) => l.startsWith("- `A")) ?? "";
+  assert.ok(line.includes("A \\| B, button, collapsed"), line);
+  assert.ok(line.includes("A 'x' B, button, focused, expanded"), line);
+  assert.equal(line.split("`").length, PIECES_AROUND_TWO_CODE_SPANS, `exactly two code spans on the line: ${line}`);
+});

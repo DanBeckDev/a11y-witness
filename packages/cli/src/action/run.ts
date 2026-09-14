@@ -13,6 +13,7 @@ import { pathToFileURL } from "node:url";
 
 import { logLines, renderSummary, shouldFail, type FailOn, type RunResult } from "./summary.js";
 import { taskVerdictLabel } from "@a11ign/judge";
+import { announcedStateChanges } from "@a11ign/judge/rules";
 import { flagValue } from "@a11ign/worker-fleet/cli-flags";
 
 // audit §9 "argv parsing": this was its own copy of the fifteen-file idiom. `flagValue` is the shared,
@@ -32,6 +33,15 @@ import { flagValue } from "@a11ign/worker-fleet/cli-flags";
  * got wrong. What the wrapper buys is that the code no longer runs merely because somebody imported the
  * module.
  */
+/**
+ * #1391: which state changes were announced correctly is the JUDGE's call, through the same gates as
+ * `4.1.2:state-change-silent`; the renderer only shows the list, the way it only shows the task label. A result
+ * written before the probe carries no `interaction`, and then there is nothing to show.
+ */
+function observedStateChanges(result: RunResult) {
+  return announcedStateChanges(result.interaction?.stateChanges ?? []);
+}
+
 function main(): void {
   const arg = (name: string, fallback?: string): string | undefined => flagValue(process.argv, name) ?? fallback;
 
@@ -61,7 +71,9 @@ function main(): void {
   }
 
   const label = taskVerdictLabel();
-  const markdown = renderSummary(result, { marker, taskQuestion: label.question, isTaskClaim: label.isTaskClaim });
+  const markdown = renderSummary(result, {
+    marker, taskQuestion: label.question, isTaskClaim: label.isTaskClaim, stateChangesObserved: observedStateChanges(result),
+  });
 
   // An unverified capture is an infrastructure failure, not a verdict about the page — so it exits 2, the
   // same code used for "could not read the result". Green would say "we checked and it is fine"; red (1)
