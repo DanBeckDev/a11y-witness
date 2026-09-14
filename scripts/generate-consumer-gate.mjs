@@ -71,6 +71,7 @@ import { realpathSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 import { sandboxGitEnv } from "./git-env.mjs";
+import { REPO as PRE_TRANSFER_REPO, PRODUCT_REPO } from "./repo-identity.mjs";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 export const README_PATH = `${REPO}README.md`;
@@ -205,9 +206,44 @@ export function substituteTarget(yamlText, target) {
  * @returns {string}
  */
 export function extractJobName(jobsYaml) {
-  const m = /^jobs:\n {2}(\S+):/m.exec(jobsYaml);
-  if (!m) throw new Error("no job key found under \"jobs:\" -- the extraction may have captured the wrong fence");
-  return m[1];
+  const jobs = jobsUnder(jobsYaml);
+  if (jobs.length === 0) {
+    throw new Error("no job key found under \"jobs:\" -- the extraction may have captured the wrong fence");
+  }
+  if (jobs.length === 1) return jobs[0].name;
+  // #1305: WITH MORE THAN ONE JOB, THE ACTION'S JOB, NEVER THE FIRST. This took the first key under `jobs:`, so a
+  // fence listing any job above the Action's made check-pin a dependency of that other job and pointed verify-report
+  // at it. The Action is matched by IDENTITY (`repo-identity.mjs`'s REPO, imported as PRE_TRANSFER_REPO beside this file's own REPO root, and PRODUCT_REPO), not one literal owner:
+  // the transfer (#63) rewrites README's `uses:` line from one to the other, and a literal would refuse the document.
+  const carrying = jobs.filter((job) => job.carriesAction);
+  if (carrying.length === 1) return carrying[0].name;
+  throw new Error(`the documented fence lists ${jobs.length} jobs (${jobs.map((j) => j.name).join(", ")}) and `
+    + (carrying.length === 0
+      ? `none carries \`uses: ${PRE_TRANSFER_REPO}\` or \`uses: ${PRODUCT_REPO}\``
+      : `${carrying.length} carry the Action (${carrying.map((j) => j.name).join(", ")})`)
+    + ", so there is no single job for check-pin to gate and verify-report to judge (#1305)");
+}
+
+/** Owners/names the Action is published under, either side of the transfer, matched case-insensitively. */
+const ACTION_IDENTITIES = [PRE_TRANSFER_REPO, PRODUCT_REPO].map((identity) => identity.toLowerCase());
+
+/**
+ * The jobs a `jobs:`-rooted block declares, in order, each with whether one of its lines is a `uses:` of the Action.
+ * A job key is a two-space-indented key, optionally followed by spaces or a comment (#1304's shapes).
+ * @param {string} jobsYaml
+ * @returns {Array<{ name: string, carriesAction: boolean }>}
+ */
+function jobsUnder(jobsYaml) {
+  /** @type {Array<{ name: string, carriesAction: boolean }>} */
+  const jobs = [];
+  for (const line of jobsYaml.split("\n")) {
+    const key = /^ {2}([^\s#:][^\s:]*):(?:[ \t]|$)/.exec(line);
+    if (key) { jobs.push({ name: key[1], carriesAction: false }); continue; }
+    const uses = /^\s+(?:-\s+)?uses:\s*([^@\s]+)@/.exec(line);
+    const current = jobs.at(-1);
+    if (uses && current && ACTION_IDENTITIES.includes(uses[1].toLowerCase())) current.carriesAction = true;
+  }
+  return jobs;
 }
 
 /**
