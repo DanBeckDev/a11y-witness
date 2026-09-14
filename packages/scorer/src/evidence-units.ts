@@ -34,7 +34,7 @@
  */
 
 /** One channel-tagged piece of evidence. The featurizer's unit of input. */
-import type { CaptureStructure } from "@a11ign/evidence";
+import type { CaptureInteraction, CaptureStructure } from "@a11ign/evidence";
 import { annotateCapture } from "@a11ign/evidence";
 
 export interface EvidenceUnit {
@@ -42,11 +42,13 @@ export interface EvidenceUnit {
   text: string;
 }
 
-/** A before/after pair as the capture records it. */
-interface AnnouncedChange {
-  control?: string;
-  after?: string | null;
-}
+/**
+ * A before/after pair as the capture records it, DERIVED from the wire's state-change element (#1603) -- a state
+ * change and a form change share `control` and `after`. Looser on purpose: this encoder reads text off whatever
+ * arrives, so both fields are optional, and `after` admits `null` because a failed disclosure read records
+ * `after: null` (`capture-probes.mjs:2343`).
+ */
+type AnnouncedChange = Partial<Omit<CaptureInteraction["stateChanges"][number], "after">> & { after?: string | null };
 
 /** Exactly the capture fields the model is allowed to see. See the note above on why this is not `CaptureResult`. */
 export interface ScorableCapture {
