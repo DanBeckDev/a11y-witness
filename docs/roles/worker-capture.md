@@ -132,8 +132,12 @@ rather than deleting a genuine finding because the evidence attached to it was w
 waiting on `dispatcher`, who was busy.** None was blocked on work. A loop whose throughput depends on one
 agent being free carries that agent's latency in every worker's day.
 
-- **When a unit is done, take the top READY row in this lane yourself.** Move it to *In progress* on the
-  board, then tell `dispatcher` what you took. Do not wait to be briefed — a brief becomes a CHECK on the
+- **When a unit is done, take the top READY row in this lane yourself.** From a non-primary tree, run
+  `node scripts/row-claim.mjs check <n>`, then `node scripts/row-claim.mjs claim <n> --session=worker-capture
+  --branch=agent/<branch> --worktree=/home/agent/repos/wt-<n>`. Since #1432 `claim` CREATES and stamps the
+  worktree and moves the row to *In progress*, so never make the worktree first: a pre-made path or branch is
+  refused before any write (`NOT CLAIMED: --worktree=<path> ALREADY EXISTS … Refusing before any write`).
+  Symlink `node_modules` and build in the tree it created, then tell `dispatcher` what you took. Do not wait to be briefed — a brief becomes a CHECK on the
   choice, sent when they are next free.
 - **A wrong choice is cheap and idling is not.** Taking a row `dispatcher` would not have given you costs
   one redirect; an idle hour costs an hour. **Take the row.**
