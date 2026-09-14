@@ -406,10 +406,13 @@ function interactionBlock(input: JudgeInput): string {
     // compound condition across four fields and `tsc` cannot narrow a single property through it.
     ...(it.controls ?? []).map((x, i) => `  ${i + 1}. ${x}`),
   ];
-  if (it.stateChanges?.length) {
+  // #1616: a failed re-read (`after: null`, `error` set) is a probe error, not an announcement. It is omitted from the
+  // prompt rather than printed as "null", which the model would read as something the screen reader said.
+  const measured = (it.stateChanges ?? []).filter((s) => s.after !== null);
+  if (measured.length) {
     lines.push(
       `Disclosure controls activated, then RE-READ (control as first announced -> the same control re-read after activation, which reports its CURRENT state). Compare the state word on each side. "collapsed" -> "expanded" means the new state IS exposed to the screen reader: correct, raise nothing. If the state word is UNCHANGED ("collapsed" -> "collapsed"), the control revealed its content visually but never updated its state, so a screen-reader user gets no indication anything changed: that fails 4.1.2 Name, Role, Value. An EMPTY re-read ("") is also a 4.1.2 failure. Judge ONLY the state word; a page title or document re-announce on either side is capture noise, not evidence. ` +
-        it.stateChanges.map((s) => `"${s.control}" -> "${s.after}"`).join("; ")
+        measured.map((s) => `"${s.control}" -> "${s.after}"`).join("; ")
     );
   }
   lines.push(...formSubmitLines(it));
