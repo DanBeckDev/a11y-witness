@@ -114,6 +114,36 @@ function primaryMarkSet(configText) {
  * @returns {string | null} the refusal, or null to go ahead
  */
 export function primaryLaunchRefusal(command, { cwd = process.cwd(), fs = LIVE_FS } = {}) {
+  return launchCheckRefusal(command, { cwd, fs });
+}
+
+/** #1352: the printed override, named the way this repository names every other one (`A11Y_*_REASON`). */
+export const POLICY_LAUNCH_REASON_ENV = "A11Y_POLICY_LAUNCH_REASON";
+
+/**
+ * #1352: THE REFUSAL OR ITS PRINTED OVERRIDE. A non-empty `A11Y_POLICY_LAUNCH_REASON` lets a launch outside a linked
+ * worktree proceed, and the reason is PRINTED rather than merely allowed, so a deliberate exception is in the log rather
+ * than in somebody's memory -- the same shape as `A11Y_PRIMARY_COMMIT_REASON`. An empty or blank reason is no reason.
+ * Its first users are the tests that drive a real CLI from CI's plain clone, which the refusal would otherwise stop
+ * before the check they were written to reach.
+ * @param {string} command
+ * @param {{ cwd?: string, fs?: GitFs, env?: Record<string, string | undefined> }} [deps]
+ * @returns {{ refusal: string | null, notice: string | null }}
+ */
+export function primaryLaunchDecision(command, { cwd = process.cwd(), fs = LIVE_FS, env = process.env } = {}) {
+  const refusal = launchCheckRefusal(command, { cwd, fs });
+  const reason = (env[POLICY_LAUNCH_REASON_ENV] ?? "").trim();
+  if (refusal === null || reason === "") return { refusal, notice: null };
+  return { refusal: null, notice: `${command}: launched outside a linked worktree, proceeding anyway -- `
+    + `${POLICY_LAUNCH_REASON_ENV}="${reason}"` };
+}
+
+/**
+ * The refusal itself, before any override is considered.
+ * @param {string} command @param {{ cwd: string, fs: GitFs }} deps
+ * @returns {string | null}
+ */
+function launchCheckRefusal(command, { cwd, fs }) {
   const top = launchCheckoutOf(cwd, fs);
   if (top === null) return null;
   const dotGit = join(top, ".git");
