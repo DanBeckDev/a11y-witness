@@ -333,7 +333,8 @@ export function fetchBoardItems({ run = defaultRun, fetchReady = fetchReadyIssue
 }
 
 /**
- * Fetches every board item and writes it to `runs/board-snapshots/<stamp>.json`, PRINTING the path --
+ * Fetches every board item and writes it to `<primary checkout>/runs/board-snapshots/<stamp>.json` (#1352: `SNAPSHOT_DIR`
+ * resolves from the git common dir, not cwd), PRINTING the path --
  * whether via the returned value (callers) or `console.log` (the CLI below) -- because an unprinted backup
  * is one nobody can find under pressure. THROWS, rather than swallowing, if the fetch or the write fails:
  * the whole point of this function is that a caller who cannot get a real snapshot must not proceed to the
