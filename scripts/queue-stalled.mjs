@@ -52,8 +52,9 @@ import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { newestConclusion, headQuietSeconds, normaliseConclusion, SUCCESS }
+import { newestConclusion, newestRun, headQuietSeconds, normaliseConclusion, SUCCESS }
   from "./update-branch-sweep.mjs";
+import { workflowRunIdOf } from "./newest-check-run.mjs";
 // #1100: SUCCESS IS IMPORTED, NOT SPELLED. `newestConclusion` normalises every conclusion to one
 // vocabulary at its own edge (`gh` spells the same verdict `SUCCESS` on `statusCheckRollup` and `success`
 // on the REST check-runs API), so a literal here is a copy of a fact this file learns from that one --
@@ -261,10 +262,57 @@ const gh = (args) => execFileSync("gh", args, { encoding: "utf8" }).trim();
 
 /**
  * @typedef {{ name?: string, conclusion?: string | null, completedAt?: string | null,
- *   startedAt?: string | null }} CheckRun
+ *   startedAt?: string | null, detailsUrl?: string | null }} CheckRun
  * @typedef {{ number: number, headRefOid: string, autoMergeRequest?: { enabledAt: string } | null,
  *   statusCheckRollup?: CheckRun[] }} QueuedPr
  */
+
+/**
+ * #1623: AN ARMED PR HELD BY A SUPERSEDING GATE THAT DID NOT SUCCEED, while an older run's gate at its head did.
+ *
+ * #1617, 2026-09-14: green, reviewed and armed at `84f684dd`, and BLOCKED with nothing for its author to fix. Two
+ * `ci` runs started at that head within 2 s. The OLDER one's `gate` succeeded; the NEWER one was cancelled 6 s after
+ * it was created, and GitHub held the PR on it. Nothing re-runs a cancelled run, and the sweep acts only on a PR
+ * that is behind, so the PR was unstuck only because main moved.
+ *
+ * "Newest" is the sweep's own `newestRun`, which orders by WORKFLOW RUN when the entries name one (#1623's comparator in
+ * newest-check-run.mjs). Every entry in a PR's rollup is on its current head, so "the same head" is the rollup itself.
+ *
+ * REPORTS, NEVER ACTS: it names both runs and the one action that clears it. A still-running newest gate is not this
+ * (the run may yet succeed), and a red gate with no success anywhere on the head is an ordinary red, not this shape.
+ *
+ * @param {{ armed: boolean, runs: CheckRun[] | null | undefined }} input
+ * @returns {{ code: "NOT_ARMED" | "NO_GATE" | "RUNNING" | "GREEN" | "RED" | "SUPERSEDED", reason: string }}
+ */
+export function supersedingGateVerdict({ armed, runs }) {
+  if (!armed) return { code: "NOT_ARMED", reason: "not armed -- not this check's concern" };
+  const newest = newestRun(runs, "gate");
+  if (!newest) return { code: "NO_GATE", reason: "no gate run on this head" };
+  const conclusion = normaliseConclusion(newest.conclusion);
+  if (conclusion === null) return { code: "RUNNING", reason: "the newest gate has not concluded -- it may yet succeed" };
+  if (conclusion === SUCCESS) return { code: "GREEN", reason: "the newest gate succeeded" };
+  const succeeded = (runs ?? []).find((run) => run !== newest && run?.name === "gate"
+    && normaliseConclusion(run.conclusion) === SUCCESS);
+  if (!succeeded) {
+    return { code: "RED", reason: `the newest gate concluded ${conclusion} and no gate on this head succeeded -- an `
+      + "ordinary red, not a superseded one" };
+  }
+  const newestId = workflowRunIdOf(newest) ?? "(no run id)";
+  const succeededId = workflowRunIdOf(succeeded) ?? "(no run id)";
+  return { code: "SUPERSEDED", reason: `blocked by a superseding ${conclusion} gate: workflow run ${newestId}'s gate `
+    + `${conclusion} after run ${succeededId}'s gate succeeded at this head -- re-run workflow run ${newestId} to clear it` };
+}
+
+/**
+ * The one summary line for #1623's check, stated whether or not anything was found.
+ * @param {number[]} blocked PR numbers
+ * @returns {string}
+ */
+export function supersededLine(blocked) {
+  return blocked.length === 0
+    ? "QUEUE: nothing blocked by a superseding gate -- no armed PR's newest gate failed after an older one succeeded."
+    : `QUEUE: ${blocked.length} blocked by a superseding gate: ${blocked.join(" ")}`;
+}
 
 /**
  * C5a, #509's per-PR behind check, pulled out of `main()`'s loop to keep complexity within this repo's
@@ -293,10 +341,11 @@ function checkArmedBehind(pr, gateConclusion, now) {
  * @param {QueuedPr} pr
  * @param {number} now
  * @returns {{ conflicting?: { number: number, reason: string, files: string[] },
+ *   superseded?: { number: number, reason: string },
  *   behind?: { stalled?: { number: number, behindBy: number, reason: string },
  *     unresolvable?: { number: number, reason: string } }, examined: boolean }}
  */
-function examinePr(pr, now) {
+export function examinePr(pr, now) {
   const armed = pr.autoMergeRequest != null;
   // #498's own bug: the FIRST matching run in the rollup, not the newest by timestamp. Fixed here the
   // same way `update-branch-sweep.mjs` fixed it for its own read of the identical field -- one function,
@@ -304,8 +353,12 @@ function examinePr(pr, now) {
   const gateConclusion = newestConclusion(pr.statusCheckRollup, "gate");
   const ageMs = armed && pr.autoMergeRequest ? now - Date.parse(pr.autoMergeRequest.enabledAt) : 0;
   const green = armed && normaliseConclusion(gateConclusion) === SUCCESS;
+  // #1623: a PR that is not green can still be one nothing will ever unstick -- reported by name, never acted on.
+  // eslint-disable-next-line local/bounded-window-reads -- #1623: the superseded-gate verdict must see the older runs; the newest is still chosen by newestRun
+  const blocking = supersedingGateVerdict({ armed, runs: pr.statusCheckRollup });
+  const superseded = blocking.code === "SUPERSEDED" ? { number: pr.number, reason: blocking.reason } : undefined;
 
-  if (!green) return { examined: false };
+  if (!green) return { superseded, examined: false };
 
   const { conflict, files } = mergeTreeConflict("origin/main", pr.headRefOid, runGitForReal);
   const verdict = stalledVerdict({ armed, gateConclusion, conflict, ageMs });
@@ -348,11 +401,16 @@ function main() {
 
   const now = Date.now();
   const stalled = [];
+  const superseded = [];
   const behindStalled = [];
   const behindUnresolvable = [];
   let behindExamined = 0;
   for (const pr of prs) {
     const result = examinePr(pr, now);
+    if (result.superseded) {
+      console.log(`#${result.superseded.number} BLOCKED -- ${result.superseded.reason}`);
+      superseded.push(result.superseded.number);
+    }
     if (result.conflicting) {
       console.log(`#${result.conflicting.number} STALLED -- ${result.conflicting.reason}`);
       console.log(`  conflicting: ${result.conflicting.files.join(", ")}`);
@@ -368,6 +426,7 @@ function main() {
   } else {
     console.log(`QUEUE: ${stalled.length} stalled: ${stalled.join(" ")}`);
   }
+  console.log(supersededLine(superseded));
   console.log(formatBehindWatchdogLine(behindStalled, behindUnresolvable, behindExamined,
     DEFAULT_BEHIND_STALL_THRESHOLD_SECONDS));
   process.exit(EXIT.EXAMINED);
