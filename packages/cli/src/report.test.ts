@@ -1,7 +1,9 @@
 // The report is what a person judges their site by, so its wording is behaviour, not decoration.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { reportLines, type Report } from "./report.js";
+import { renderSummary, type RunResult } from "./action/summary.js";
 
 const verdict = {
   taskCompletable: false,
@@ -306,4 +308,65 @@ test("and IS printed when there are findings, because then it describes them", (
     },
   });
   assert.match(found, /overall confidence 0\.72/);
+});
+
+// #1596: THE CLI'S TEXT REPORT SAYS WHAT #1388'S JOB SUMMARY SAYS ABOUT AN AXE FINDING INSIDE A FRAME. Rehearsal 3's
+// committed artifact, read in place: its three axe findings all sit inside the YouTube player embedded on w3.org/WAI
+// (targets ["iframe", …]), and `npx a11ign` printed them as the page's own.
+const REHEARSAL3 = new URL("./fixtures/rehearsal3-34774183433-a11ign-result.json", import.meta.url);
+const rehearsal3Result = (): RunResult => JSON.parse(readFileSync(REHEARSAL3, "utf8")) as RunResult;
+const rehearsal3Axe = (): Report["axe"] => rehearsal3Result().ruleBased as unknown as Report["axe"];
+/** The three axe findings on rehearsal 3's committed artifact, every one inside the YouTube player's frame (measured). */
+const REHEARSAL3_FRAME_FINDINGS = 3;
+const axeRow = (rule: string, target: unknown[]) => ({
+  source: "axe-core", impact: "serious", wcag: ["4.1.2"], rule, help: `${rule} help`, helpUrl: "",
+  nodes: [{ html: `<div class="${rule}">`, target }],
+});
+const axeOf = (...rows: ReturnType<typeof axeRow>[]) => rows as unknown as Report["axe"];
+/** The rule-based layer's section alone, up to the next section's `--` header. */
+const axeLayer = (out: string): string => {
+  const start = out.indexOf("-- Rule-based layer (axe-core)");
+  assert.notEqual(start, -1, "the rule-based layer section is missing");
+  const next = out.indexOf("\n--", start + 1);
+  return out.slice(start, next === -1 ? undefined : next);
+};
+const findingLines = (section: string) => section.split("\n").filter((line) => line.startsWith("  ["));
+
+test("#1596: rehearsal 3's frame-hosted axe findings are counted, marked and caveated in the text report", () => {
+  const out = axeLayer(render({ axe: rehearsal3Axe() }));
+  const n = REHEARSAL3_FRAME_FINDINGS;
+  assert.match(out, new RegExp(`\\n${n} violation\\(s\\), ${n} inside a frame:\\n`));
+  assert.equal(findingLines(out).filter((line) => line.endsWith("(in a frame; origin not examined)")).length, n,
+    "every frame finding is marked");
+  assert.match(out, /concerns content inside an embedded frame/);
+  assert.match(out, /may be third-party content/, "it says MAY be: the result records a frame, never whose");
+});
+
+test("#1596 CONTROL: a top-level axe finding prints as it did before, unmarked, with no split count and no caveat", () => {
+  const out = axeLayer(render({ axe: axeOf(axeRow("color-contrast", ["#main > p"])) }));
+  assert.match(out, /\n1 violation\(s\):\n/);
+  assert.deepEqual(findingLines(out), ["  [serious] 4.1.2  color-contrast: color-contrast help"]);
+  assert.doesNotMatch(out, /in a frame|inside a frame|embedded frame/);
+});
+
+test("#1596: a mixed list splits the count and marks only the frame finding", () => {
+  const out = axeLayer(render({ axe: axeOf(axeRow("button-name", ["iframe", ".player"]), axeRow("color-contrast", ["#main > p"])) }));
+  assert.match(out, /\n2 violation\(s\), 1 inside a frame:\n/);
+  assert.deepEqual(findingLines(out).map((line) => line.includes("in a frame")), [true, false]);
+  assert.match(out, /concerns content inside an embedded frame/);
+});
+
+test("#1596: a shadow-DOM target is one element, not a frame, and is not marked", () => {
+  const out = axeLayer(render({ axe: axeOf(axeRow("label", [["#host", "input"]])) }));
+  assert.doesNotMatch(out, /in a frame|inside a frame/);
+});
+
+test("#1596: the text report's frame marker and caveat are #1388's job-summary wording", () => {
+  const summary = renderSummary(rehearsal3Result());
+  const marker = /_\((in a frame; origin not examined)\)_/.exec(summary)?.[1];
+  const caveat = /(This run did not examine whose frame it is[^_]*)_/.exec(summary)?.[1];
+  assert.ok(marker && caveat, "the job summary no longer carries #1388's marker or caveat -- this pin has nothing to read");
+  const out = axeLayer(render({ axe: rehearsal3Axe() }));
+  assert.ok(out.includes(`(${marker})`), `the text report's marker is not #1388's "(${marker})"`);
+  assert.ok(out.includes(caveat), `the text report's caveat is not #1388's: "${caveat}"`);
 });
