@@ -20,7 +20,7 @@
  * Exit 0: every published manifest names `https://github.com/$GITHUB_REPOSITORY`. Exit 1: at least one does not,
  * each named. Exit 2: `GITHUB_REPOSITORY` is unset, so there is nothing to compare against -- never a pass.
  */
-import { readdirSync, readFileSync, existsSync } from "node:fs";
+import { readdirSync, readFileSync, existsSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
@@ -111,4 +111,5 @@ function main() {
   process.exitCode = 1;
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) main();
+// REALPATH'D, per `entry-points.test.ts` (#1086): reached through a symlink, the plain form skips main() and exits 0 silently.
+if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) main();
