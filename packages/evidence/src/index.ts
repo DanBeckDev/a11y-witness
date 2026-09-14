@@ -272,6 +272,14 @@ export interface CaptureResult {
     workerCode: string;
     captureProtocol: number;
     provisionRevision: string;
+    /**
+     * #1513: the CSS viewport the page was read at, per capture (`innerWidth`/`innerHeight` in CSS pixels). Absent
+     * when not measured -- an older worker, or a read that failed -- never zero. NOT a cache-key input: the width
+     * joins neither `environmentKey` nor `MUST_MATCH` until the window is pinned.
+     */
+    innerWidth?: number;
+    innerHeight?: number;
+    devicePixelRatio?: number;
   };
 }
 
