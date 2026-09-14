@@ -125,7 +125,7 @@ called — one `4.1.2` blocker at 0.998 confidence with `button` quoted as the e
 written to the SDK spec and unexercised. It is no longer the default, which is the point: the untested
 path is now the opt-in one.
 
-**Verified on a real Windows runner (the V1 rehearsal, 2026-09-13):** the local backend's setup step installs `onnxruntime`, `transformers`, `safetensors` and `numpy`, pinned in `packages/scorer/requirements.txt`, and fetches the encoder. It installs no torch, which is a training-only dependency. With the pip cache restored, that step took 40.6 s and 41.7 s at `3bb1fddf` (V1 rehearsal 4, runs 34781484432 and 34782000257). The one run without a pip cache hit, at `0e809d13` (V1 rehearsal 1, run 34764686304, the same day), took 40.8 s, inside the 32.6–53.1 s that the seven cache-hit runs took across their builds, so no cold-runner cost shows in these runs.
+**Verified on a real Windows runner (the V1 rehearsal, 2026-09-13):** the local backend's setup step installs `onnxruntime`, `transformers`, `safetensors` and `numpy`, pinned in `packages/scorer/requirements.txt`, and fetches the encoder. It installs no torch, which is a training-only dependency. With the pip cache restored, that step took 40.6 s and 41.7 s at `3bb1fddf` (V1 rehearsal 4, runs 34781484432 and 34782000257). The one run without a pip cache hit, at `0e809d13` (V1 rehearsal 1, run 34764686304, the same day), took 40.8 s, within the 32.6–53.1 s that the seven cache-hit runs took across their builds.
 
 ## Testing it without spending runner minutes
 
