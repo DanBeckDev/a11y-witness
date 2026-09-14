@@ -526,9 +526,11 @@ carries the known limitations, stated plainly. `CLAUDE.md` is operational instru
      gate result recorded in docs/board/reported/. Do not TYPE a number here: a figure the report
      cannot source is a figure that outlives its measurement, and one already did. -->
 
-**On our own corpus of 1,405 conformant records the deterministic rules asserted no failures. The real-page figure is under re-measurement since 2026-09-14. The last one published, from 2026-08-24 on the product path across 18 conformant real pages, was 0 criteria asserted wrongly and 4 referred, and it no longer describes the tool: a refreshed baseline on 2026-09-06 produced four findings on pages an older baseline had passed, and outcomes have changed since it was taken, so that some criteria which read as clean then read as undetermined now. A new figure is stated here, with its date, its denominator and the run it came from, once it is measured. The trained component refers, it never asserts, and a referral on a conformant page is expected rather than a defect.**
+**On our own corpus of 1,405 conformant records the deterministic rules asserted no failures. Measured 2026-09-14 on the 41 conformant real pages of the calibration set at the shipped floor (run 2f9c51aa): 0 criteria asserted wrongly, 422 referred. One count first read as wrong and was a publisher-declared exception the corpus lacked (networkrail careers, 4.1.2), corrected in the corpus. The 2026-08-24 18-page product-path figure is superseded: re-derived at today's code on the 17 of those pages still in the corpus, 0 asserted wrongly, 180 referred. The trained component refers, it never asserts, and a referral on a conformant page is expected rather than a defect.**
 
 <!-- CLAIM:END -->
+
+The corpus correction behind that line is tracked as #1610, and the product-path re-derivation as #1612.
 
 **Why the sentence above is worded that way, and never as an unbounded phrase.** A claim of the form
 *"this tool produces no false positives"* asserts something about the web; what was measured is a corpus.
