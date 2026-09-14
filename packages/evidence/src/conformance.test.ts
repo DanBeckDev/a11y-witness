@@ -263,7 +263,7 @@ test("#1438: no branch of requirement 2 says iframes were not entered, and each 
     const text = both(requirement2(input));
     assert.match(text, marker, `the positive control: the ${name} branch was actually reached`);
     assert.doesNotMatch(text, /iframes?\s+(?:is\s+|are\s+)?not\s+entered/i, `${name}: "not entered" is false for both layers`);
-    assert.match(text, /screen reader's read-through and sweeps can pass into a frame/i, `${name}: the screen-reader layer's scope`);
+    assert.match(text, /screen reader\x27s read-through and sweeps can pass into a frame/i, `${name}: the screen-reader layer's scope`);
     assert.match(text, /nothing inside a frame or embedded object is operated/i, `${name}: what it does not do inside one`);
     assert.match(text, /top document only/i, `${name}: what the element counts cover`);
   }
@@ -280,7 +280,7 @@ test("#1438: when the rule layer did not run, requirement 2 says so instead, and
     const text = both(requirement2({ ...input, ruleLayerRan: false }));
     assert.doesNotMatch(text, /axe-core\) examines iframe/i, `${name}: no claim for a layer that did not run`);
     assert.match(text, /the rule layer did not run/i, name);
-    assert.match(text, /screen reader's read-through and sweeps can pass into a frame/i, `${name}: the positive control`);
+    assert.match(text, /screen reader\x27s read-through and sweeps can pass into a frame/i, `${name}: the positive control`);
   }
 });
 
