@@ -30,6 +30,7 @@ import * as commandsDocumented from "./doc-checks/commands-documented.mjs";
 import * as docCitationIntegrity from "./doc-checks/doc-citation-integrity.mjs";
 import * as docReferences from "./doc-checks/doc-references.mjs";
 import * as envDocCoverage from "./doc-checks/env-doc-coverage.mjs";
+import * as inPageAnchors from "./doc-checks/in-page-anchors.mjs";
 import * as knownGapsIndex from "./doc-checks/known-gaps-index.mjs";
 import * as notWorkingNumbering from "./doc-checks/not-working-numbering.mjs";
 import * as rolesMemory from "./doc-checks/roles-memory.mjs";
@@ -46,7 +47,7 @@ const TESTS = "packages/lab/src/packaging";
  */
 
 /**
- * The fourteen. `test` is the pull-request test that asserts the same thing, so a reader of a disagreement
+ * The fifteen: #905's fourteen, and #1602's in-page anchors. `test` is the pull-request test that asserts the same thing, so a reader of a disagreement
  * knows what will say it again on the next PR -- and `null` for the six #954 took OFF the pull-request path,
  * where this report is the only thing that still reads the rule. Those six are not less checked than they
  * were; they are checked once a night instead of on every diff, which is the trade #905 argued and #928's
@@ -64,6 +65,7 @@ export const CHECKS = [
   { name: "doc-citation-integrity", test: null, check: docCitationIntegrity.check },
   { name: "doc-references", test: null, check: docReferences.check },
   { name: "env-doc-coverage", test: null, check: envDocCoverage.check },
+  { name: "in-page-anchors", test: `${TESTS}/in-page-anchors.test.ts`, check: inPageAnchors.check },
   { name: "known-gaps-index", test: `${TESTS}/known-gaps-index.test.ts`, check: knownGapsIndex.check },
   { name: "not-working-numbering", test: null, check: notWorkingNumbering.check },
   { name: "roles-memory", test: `${TESTS}/roles-memory.test.ts`, check: rolesMemory.check },
@@ -73,7 +75,7 @@ export const CHECKS = [
 
 /**
  * Runs every check against `root`. A check that throws is an outcome -- "could not run, because" -- never a
- * crash that loses the other thirteen, and never a silent zero.
+ * crash that loses the others, and never a silent zero.
  * @param {string} root @param {DocCheck[]} [checks] @returns {Promise<Outcome[]>}
  */
 export async function runChecks(root, checks = CHECKS) {

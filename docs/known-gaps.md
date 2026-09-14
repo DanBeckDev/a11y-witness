@@ -2689,7 +2689,7 @@ false` can be told apart from `revealed: false FROM HERE`. Today those are the s
 distinction this project refuses to allow anywhere else.
 
 It is a worker-file change, so it costs a deploy, a recapture and an `evidence:check`. It bundles with
-[§42](#42)'s listener-before-focus fix and `navigatedOnSubmit`'s third state, all three being probe changes
+[§42](#42-code-fix-landed-verification-pending-recapture-247-could-not-see-an-f55-on-whatever-element-held-focus-when-the-listener-was-installed)'s listener-before-focus fix and `navigatedOnSubmit`'s third state, all three being probe changes
 waiting on one recapture.
 
 ### What would tell you it is closed
@@ -2933,7 +2933,7 @@ weeks with every check green is the same shape.
 
 ### Why it matters more than an ordinary flake
 
-`focusEvents` is the whole of 2.4.7's F55 evidence, and [§42](#42) DELETED `focusLossEvidence`'s `i === 0`
+`focusEvents` is the whole of 2.4.7's F55 evidence, and [§42](#42-code-fix-landed-verification-pending-recapture-247-could-not-see-an-f55-on-whatever-element-held-focus-when-the-listener-was-installed) DELETED `focusLossEvidence`'s `i === 0`
 exception on the strength of that log being trustworthy once the listener installed early. **An unstable log
 means unstable findings on a criterion that ASSERTS.**
 
