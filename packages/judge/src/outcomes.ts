@@ -517,9 +517,45 @@ function passedReason(criterion: string): string {
 export function criterionOutcomes(input: OutcomeInput): CriterionOutcome[] {
   const covered = new Set(assessedCriteria());
   return WCAG_22_AA.map(({ num }) => covered.has(num)
-    ? outcomeFor(num, input)
+    ? besideTheRuleLayer(outcomeFor(num, input), input.ruleLayer?.[num])
     : ruleLayerOutcome(num, input.ruleLayer?.[num]));
 }
+
+/**
+ * A criterion BOTH layers cover: the screen-reader outcome, weighed against an axe-core violation (#1342, `ceo`'s ruling,
+ * recorded as ADR 0021's 2026-09-14 addendum).
+ *
+ * Before this, a covered criterion never read `ruleLayer`. V1 rehearsal run 34764686304's axe `link-name` violation reached
+ * neither 2.4.4 nor 4.1.2, and on a page whose sweeps had finished those criteria would have read `passed`.
+ *
+ * What the screen reader met is the evidence. A DOM rule may override SILENCE -- `cantTell`, where the screen-reader layer
+ * could not decide -- but not a contrary lived reading. `passed` and `inapplicable` are observations, so a violation beside
+ * either is a disagreement between two layers that examined different things, and a disagreement is referred with no
+ * assessor. The screen-reader layer's own `failed` stands as its own, and a rule layer that found no violation outranks
+ * nothing.
+ *
+ * The reasons name the criterion and not the axe rule: `RuleLayerCoverage` carries one verdict per criterion, no rule ids.
+ */
+function besideTheRuleLayer(screenReader: CriterionOutcome, verdict: RuleLayerVerdict | undefined): CriterionOutcome {
+  if (verdict !== "violated") return screenReader;
+  const { criterion, outcome, reason } = screenReader;
+  const axe = `axe-core reported a violation of ${criterion}`;
+  if (outcome === "cantTell") {
+    return { criterion, outcome: "failed", assessor: RULE_LAYER,
+      reason: `${axe}; the screen-reader layer could not decide it because ${lowerFirst(reason)}` };
+  }
+  if (outcome === "passed") {
+    return { criterion, outcome: "cantTell",
+      reason: `${axe}; the screen-reader layer examined it in full and found no failure — the two layers disagree.` };
+  }
+  if (outcome === "inapplicable") {
+    return { criterion, outcome: "cantTell",
+      reason: `The screen-reader layer met nothing this criterion applies to; ${axe} in the DOM.` };
+  }
+  return screenReader;
+}
+
+const lowerFirst = (text: string): string => text.charAt(0).toLowerCase() + text.slice(1);
 
 /**
  * The outcome for a criterion the screen-reader layer does not cover.
