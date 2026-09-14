@@ -11,7 +11,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { coverageFrom } from "./axe.js";
+import { coverageFrom, type RuleLayerCoverage } from "./axe.js";
 import { criterionOutcomes } from "@a11ign/judge/outcomes";
 const rule = (id: string, criterion: string) => ({ id, tags: ["wcag2a", `wcag${criterion.replace(/\./g, "")}`] });
 
@@ -24,7 +24,7 @@ const rule = (id: string, criterion: string) => ({ id, tags: ["wcag2a", `wcag${c
  */
 const emptyCapture = { transcript: [], structure: {}, interaction: {} };
 
-const outcomeOf = (criterion: string, ruleLayer: Record<string, "violated" | "needsReview" | "clean">) =>
+const outcomeOf = (criterion: string, ruleLayer: RuleLayerCoverage) =>
   criterionOutcomes({
     capture: emptyCapture as unknown as Parameters<typeof criterionOutcomes>[0]["capture"],
     findings: [], ruleLayer,
@@ -74,14 +74,15 @@ test("one criterion with several rules takes the STRICTEST verdict", () => {
     passes: [rule("html-has-lang", "3.1.1")],
     incomplete: [rule("html-lang-valid", "3.1.1")],
   });
-  assert.equal(coverage["3.1.1"], "needsReview");
+  assert.equal(coverage["3.1.1"]?.verdict, "needsReview");
 
   const withViolation = coverageFrom({
     passes: [rule("html-has-lang", "3.1.1")],
     incomplete: [rule("html-lang-valid", "3.1.1")],
     violations: [rule("html-xml-lang-mismatch", "3.1.1")],
   });
-  assert.equal(withViolation["3.1.1"], "violated");
+  assert.equal(withViolation["3.1.1"]?.verdict, "violated");
+  assert.deepEqual(withViolation["3.1.1"]?.rules, ["html-xml-lang-mismatch"], "only the violating rule is named (#1606)");
 });
 
 test("an inapplicable RULE does not make the CRITERION inapplicable", () => {
@@ -109,7 +110,7 @@ test("axe never overrules what the screen reader observed on a criterion it cove
   assert.notEqual(outcome?.assessor, "axe-core",
     "an observation by the screen-reader layer must not be overruled into an axe assertion");
   assert.equal(outcome?.outcome, "cantTell");
-  assert.match(outcome?.reason ?? "", /met nothing this criterion applies to; axe-core reported a violation of 1\.1\.1 in the DOM/);
+  assert.match(outcome?.reason ?? "", /met nothing this criterion applies to; axe-core reported image-alt as a violation of 1\.1\.1 in the DOM/);
 });
 
 test("a scan that examined nothing reports nothing as examined", () => {
