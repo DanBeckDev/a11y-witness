@@ -455,7 +455,7 @@ test("#1378 CONTROL: 2.1.2, 2.4.7 and 1.4.2 are untouched -- still NOT COLLECTED
  * Every row drives 2.4.4 twice, without and with axe's violation, and asserts the screen-reader outcome first: a row whose
  * premise did not hold would be testing a shape it never built.
  */
-const AXE_VIOLATED = { "2.4.4": "violated" } as const;
+const AXE_VIOLATED = { "2.4.4": { verdict: "violated", rules: ["link-name"] } } as const;
 const NO_LINKS = { ...RICH, transcript: ["heading, level 1, Newsletter"], structure: { ...RICH.structure, links: [] } };
 const besideAxe = (input: Parameters<typeof criterionOutcomes>[0]) => ({
   screenReader: find(criterionOutcomes(input), "2.4.4"),
@@ -469,7 +469,7 @@ test("#1342 violated + cantTell: FAILED, asserted by axe-core, and the reason ke
   assert.equal(withAxe.outcome, "failed");
   assert.equal(withAxe.assessor, "axe-core");
   assert.match(withAxe.reason,
-    /^axe-core reported a violation of 2\.4\.4; the screen-reader layer could not decide it because the link sweep stopped before the page did/);
+    /^axe-core reported link-name as a violation of 2\.4\.4; the screen-reader layer could not decide it because the link sweep stopped before the page did/);
 });
 
 test("#1342 violated + passed: the two layers DISAGREE, so it is cantTell and no assessor asserts", () => {
@@ -478,7 +478,7 @@ test("#1342 violated + passed: the two layers DISAGREE, so it is cantTell and no
   assert.equal(withAxe.outcome, "cantTell");
   assert.equal(withAxe.assessor, undefined);
   assert.match(withAxe.reason,
-    /^axe-core reported a violation of 2\.4\.4; the screen-reader layer examined it in full and found no failure — the two layers disagree\.$/);
+    /^axe-core reported link-name as a violation of 2\.4\.4; the screen-reader layer examined it in full and found no failure — the two layers disagree\.$/);
 });
 
 test("#1342 violated + inapplicable: meeting nothing is an observation too, so it is a cantTell disagreement", () => {
@@ -487,7 +487,7 @@ test("#1342 violated + inapplicable: meeting nothing is an observation too, so i
   assert.equal(withAxe.outcome, "cantTell");
   assert.equal(withAxe.assessor, undefined);
   assert.match(withAxe.reason,
-    /^The screen-reader layer met nothing this criterion applies to; axe-core reported a violation of 2\.4\.4 in the DOM\.$/);
+    /^The screen-reader layer met nothing this criterion applies to; axe-core reported link-name as a violation of 2\.4\.4 in the DOM\.$/);
 });
 
 test("#1342 violated + failed: the screen-reader layer's own failure stands, not attributed to axe", () => {
@@ -506,8 +506,26 @@ test("#1342 no violation: a clean or needs-review rule layer leaves every screen
   assert.deepEqual(shapes.map((input) => find(criterionOutcomes(input), "2.4.4").outcome), ["cantTell", "passed", "inapplicable"]);
   for (const verdict of ["clean", "needsReview"] as const) {
     for (const input of shapes) {
-      assert.deepEqual(find(criterionOutcomes({ ...input, ruleLayer: { "2.4.4": verdict } }), "2.4.4"),
+      assert.deepEqual(find(criterionOutcomes({ ...input, ruleLayer: { "2.4.4": { verdict, rules: [] } } }), "2.4.4"),
         find(criterionOutcomes(input), "2.4.4"), verdict);
     }
   }
+});
+
+test("#1606 CONTROL: two rules that violated one criterion are both named in the reason", () => {
+  const outcome = find(criterionOutcomes({
+    capture: RICH, findings: [], truncatedSweeps: [{ type: "link" }],
+    ruleLayer: { "2.4.4": { verdict: "violated", rules: ["area-alt", "link-name"] } },
+  }), "2.4.4");
+  assert.equal(outcome.outcome, "failed");
+  assert.match(outcome.reason, /^axe-core reported area-alt and link-name as violations of 2\.4\.4; the screen-reader layer could not decide it because /);
+});
+
+test("#1606 a violated entry with no rule ids still states the violation, naming the criterion alone", () => {
+  // An imported results file whose rules carry no `id` records the verdict with an empty rule list.
+  const outcome = find(criterionOutcomes({
+    capture: RICH, findings: [], truncatedSweeps: [{ type: "link" }], ruleLayer: { "2.4.4": { verdict: "violated", rules: [] } },
+  }), "2.4.4");
+  assert.equal(outcome.outcome, "failed");
+  assert.match(outcome.reason, /^axe-core reported a violation of 2\.4\.4; the screen-reader layer could not decide it because /);
 });

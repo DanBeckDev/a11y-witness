@@ -128,7 +128,8 @@ const SWEEPS_FEEDING: Record<string, readonly string[]> = {
 export type RuleLayerVerdict = "violated" | "needsReview" | "clean";
 
 /**
- * Criterion -> what the rule layer found. ONLY criteria it actually ran a rule for appear.
+ * Criterion -> what the rule layer found: its verdict, and the rules that violated it. ONLY criteria it actually ran a rule
+ * for appear.
  *
  * Absence is the whole point and it is load-bearing twice over. A criterion missing from this map was
  * never examined by the rule layer, which is a different fact from one it examined and found clean — the
@@ -138,7 +139,19 @@ export type RuleLayerVerdict = "violated" | "needsReview" | "clean";
  * checked at all. On that path only violated criteria are recorded, and the rest stay untested — which is
  * the honest answer rather than the flattering one.
  */
-export type RuleLayerCoverage = Readonly<Record<string, RuleLayerVerdict>>;
+export type RuleLayerCoverage = Readonly<Record<string, RuleLayerEntry>>;
+
+/**
+ * One criterion's rule-layer result: axe's verdict, and the axe rule ids that VIOLATED it (#1606).
+ *
+ * `rules` is empty for a criterion that was not violated. A passing or review-needed rule reported no failure, and naming
+ * it beside a verdict it did not produce would attribute the wrong rule. The ids exist so #1342's precedence reasons can
+ * say which rule axe reported, not only that it reported one.
+ */
+export interface RuleLayerEntry {
+  readonly verdict: RuleLayerVerdict;
+  readonly rules: readonly string[];
+}
 
 export interface OutcomeInput {
   capture: CaptureEvidence;
@@ -534,12 +547,13 @@ export function criterionOutcomes(input: OutcomeInput): CriterionOutcome[] {
  * assessor. The screen-reader layer's own `failed` stands as its own, and a rule layer that found no violation outranks
  * nothing.
  *
- * The reasons name the criterion and not the axe rule: `RuleLayerCoverage` carries one verdict per criterion, no rule ids.
+ * The reasons name the axe rule(s) that violated the criterion (#1606), and fall back to the criterion alone when an entry
+ * carries no rule ids -- an imported results file whose rules have no `id`.
  */
-function besideTheRuleLayer(screenReader: CriterionOutcome, verdict: RuleLayerVerdict | undefined): CriterionOutcome {
-  if (verdict !== "violated") return screenReader;
+function besideTheRuleLayer(screenReader: CriterionOutcome, entry: RuleLayerEntry | undefined): CriterionOutcome {
+  if (entry?.verdict !== "violated") return screenReader;
   const { criterion, outcome, reason } = screenReader;
-  const axe = `axe-core reported a violation of ${criterion}`;
+  const axe = axeReported(criterion, entry.rules);
   if (outcome === "cantTell") {
     return { criterion, outcome: "failed", assessor: RULE_LAYER,
       reason: `${axe}; the screen-reader layer could not decide it because ${lowerFirst(reason)}` };
@@ -557,6 +571,13 @@ function besideTheRuleLayer(screenReader: CriterionOutcome, verdict: RuleLayerVe
 
 const lowerFirst = (text: string): string => text.charAt(0).toLowerCase() + text.slice(1);
 
+/** "axe-core reported link-name as a violation of 2.4.4", naming every violating rule, or the criterion alone when none is known. */
+function axeReported(criterion: string, rules: readonly string[]): string {
+  if (rules.length === 0) return `axe-core reported a violation of ${criterion}`;
+  const named = rules.length === 1 ? rules[0] : `${rules.slice(0, -1).join(", ")} and ${rules[rules.length - 1]}`;
+  return `axe-core reported ${named} as ${rules.length === 1 ? "a violation" : "violations"} of ${criterion}`;
+}
+
 /**
  * The outcome for a criterion the screen-reader layer does not cover.
  *
@@ -572,7 +593,8 @@ const lowerFirst = (text: string): string => text.charAt(0).toLowerCase() + text
  * tool HAD looked. `cantTell` with the reason attached says what was actually done, which is strictly
  * more information and — unlike the sentence it replaces — true.
  */
-function ruleLayerOutcome(criterion: string, verdict: RuleLayerVerdict | undefined): CriterionOutcome {
+function ruleLayerOutcome(criterion: string, entry: RuleLayerEntry | undefined): CriterionOutcome {
+  const verdict = entry?.verdict;
   if (verdict === "violated") {
     return {
       criterion, outcome: "failed", assessor: RULE_LAYER,
