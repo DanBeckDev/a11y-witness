@@ -78,9 +78,45 @@ import { execFileSync } from "node:child_process";
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { armabilityOf } from "./pr-hold-state.mjs";
+import { armabilityOf, HOLD_PREFIX } from "./pr-hold-state.mjs";
 
 export const EXIT = { DRAINED: 0, COULD_NOT_ARM: 1, CANNOT_ASK: 2 };
+
+/**
+ * #1595: LABELS THAT LOOK LIKE A HOLD AND ARE NOT ONE.
+ *
+ * On 2026-09-14 #1592 carried a hand-added `pr:hold` and auto-merge switched off; this sweep armed it at 12:33:24Z
+ * and it merged eleven seconds later. The sweep was right -- `pr:hold` is the NAME of the command that writes a
+ * hold, not a hold -- and silent, so the person who added it believed the PR was held until it merged. `session:`
+ * is on the list because it was the hold label until 2026-09-09 and is ownership now. Warning only: the ONE hold
+ * spelling is `HOLD_PREFIX`, and a second spelling that also refused would be the fact stated twice again.
+ *
+ * @param {string[]} labels
+ * @returns {string[]} the lookalikes, in the PR's own label order
+ */
+export function holdLookalikes(labels) {
+  return labels.filter((label) => !label.startsWith(HOLD_PREFIX)
+    && (["pr:hold", "hold", "held"].includes(label.toLowerCase()) || label.startsWith("session:")));
+}
+
+/**
+ * #1595: the decision for one PR, with a warning printed for each hold lookalike FIRST. The warnings never change
+ * the answer: this returns `sweepDecision`'s own result, so a lookalike on a green, unheld PR still arms.
+ *
+ * @param {{ number: string | number, labels: string[], checkRunCount: number }} pr
+ * @param {{ log?: (line: string) => void }} [io]
+ * @returns {{ arm: boolean, reason: string }}
+ */
+export function decideAndWarn({ number, labels, checkRunCount }, { log = console.log } = {}) {
+  for (const label of holdLookalikes(labels)) {
+    const why = label.startsWith("session:")
+      ? "a `session:` label is OWNERSHIP, not a hold, since 2026-09-09"
+      : "no code reads it";
+    log(`SWEEP: #${number} carries \`${label}\`, which looks like a hold but is not one (${why}) -- a hold is `
+      + `\`npm run pr:hold -- ${number} --session=<name>\` (\`${HOLD_PREFIX}<name>\`)`);
+  }
+  return sweepDecision({ labels, checkRunCount });
+}
 
 /**
  * MAY AN UNATTENDED SWEEP ARM THIS PR? -- the whole decision, as one pure function.
@@ -209,7 +245,7 @@ function main() {
       continue;
     }
 
-    const { arm, reason } = sweepDecision({ labels, checkRunCount });
+    const { arm, reason } = decideAndWarn({ number, labels, checkRunCount });
     if (!arm) {
       console.log(`SWEEP: #${number} SKIPPED -- ${reason}`);
       continue;
