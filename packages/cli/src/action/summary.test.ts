@@ -334,7 +334,7 @@ test("#1563: both of the producer's partial-examination sentences are counted", 
 
 test("#1563: the producer's OTHER undetermined reasons are not counted -- the control for the absence", () => {
   const outcomes = outcomesFrom({
-    ruleLayer: { "1.4.3": "clean" }, abstained: false,
+    ruleLayer: { "1.4.3": { verdict: "clean", rules: [] } }, abstained: false,
     notExamined: { control: "YouTube Home, link", channels: ["link"] },
   });
   const undetermined = outcomes.filter((o) => o.outcome === "cantTell");
