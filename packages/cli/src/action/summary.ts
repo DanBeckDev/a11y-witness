@@ -10,6 +10,7 @@
 export type Severity = "blocker" | "serious" | "moderate" | "minor";
 
 import type { CaptureInteraction } from "@a11ign/evidence";
+import type { Judgment } from "@a11ign/judge";
 import type { announcedStateChanges } from "@a11ign/judge/rules";
 
 export interface RunFinding {
@@ -18,6 +19,17 @@ export interface RunFinding {
   severity: Severity;
   evidence: string;
   confidence: number;
+  /**
+   * #1366: whether this finding ASSERTS the criterion (`conformance`) or REFERS it (absent or `secondary`) -- the
+   * judge's own `RequirementMapping`, taken from its `Judgment` type so it has one definition. The result JSON has
+   * carried it all along; this renderer dropped it, so a referral rated `serious` was logged as "1 serious".
+   */
+  mapping?: Judgment["findings"][number]["mapping"];
+}
+
+/** #1366: absent means `secondary`, so an unmapped finding never reads as an assertion (`report.ts` reads it the same way). */
+function isReferral(finding: RunFinding): boolean {
+  return finding.mapping !== "conformance";
 }
 
 export interface RunResult {
@@ -178,8 +190,11 @@ function findingsSection(findings: RunFinding[], limit: number): string[] {
     "|---|---|---|---|",
   ];
   for (const f of shown) {
-    lines.push(`| ${ICON[f.severity] ?? "•"} ${cell(f.severity)} | ${cell(f.wcag)} | ${cell(f.issue)} | \`${cell(f.evidence)}\` |`);
+    // #1366: a referral says so beside its severity, which is otherwise the most declarative word on the row.
+    const kind = isReferral(f) ? ", referred" : "";
+    lines.push(`| ${ICON[f.severity] ?? "•"} ${cell(f.severity)}${kind} | ${cell(f.wcag)} | ${cell(f.issue)} | \`${cell(f.evidence)}\` |`);
   }
+  if (shown.some(isReferral)) lines.push("", REFERRED_NOTE);
   // Never a silent cap. A truncated report that looks complete is how a real finding gets missed, and
   // this project has the scars: a run once reported success while a probe had crashed 604 times.
   if (findings.length > shown.length) {
@@ -187,6 +202,13 @@ function findingsSection(findings: RunFinding[], limit: number): string[] {
   }
   return lines;
 }
+
+/**
+ * #1366: what "referred" on a findings row means, in the words `outcomeSection` below already uses for the count.
+ * Stated once, and only when a shown row is a referral.
+ */
+const REFERRED_NOTE = "_A finding marked **referred** is worth a person's eyes: the tool cannot decide it on its own, so "
+  + "it is not an assertion that the criterion fails, however its severity reads._";
 
 /**
  * What was NOT determined, as a count — the half a findings list cannot express.
@@ -366,11 +388,7 @@ function blockerCountLine(label: string, findings: readonly RunFinding[]): strin
  */
 export function logLines(result: RunResult, failOn: FailOn): string[] {
   const { findings } = result.verdict;
-  const counts = findings.reduce<Record<string, number>>((acc, f) => {
-    acc[f.severity] = (acc[f.severity] ?? 0) + 1;
-    return acc;
-  }, {});
-  const breakdown = Object.entries(counts).map(([s, n]) => `${n} ${s}`).join(", ") || "none";
+  const breakdown = findingBreakdown(findings);
   const left = result.leftSite;
   const lines: string[] = [];
   if (left) {
@@ -389,6 +407,26 @@ export function logLines(result: RunResult, failOn: FailOn): string[] {
   lines.push(`a11ign: ${findings.length} finding(s) (${breakdown})${left ? " in what was examined" : ""}; `
     + `fail-on=${failOn}`);
   return lines;
+}
+
+/**
+ * #1366: THE LOG LINE'S BREAKDOWN, ASSERTED AND REFERRED APART. A severity belongs to an assertion; a referral is
+ * counted as a referral and never as its severity, because "1 serious" read as a failure to rehearsal 2's reader
+ * about a finding the judge had only referred. Examples: "1 referred"; "2 asserted: 1 serious, 1 moderate; 1 referred".
+ */
+function findingBreakdown(findings: readonly RunFinding[]): string {
+  const asserted = findings.filter((f) => !isReferral(f));
+  const referred = findings.length - asserted.length;
+  const counts = asserted.reduce<Record<string, number>>((acc, f) => {
+    acc[f.severity] = (acc[f.severity] ?? 0) + 1;
+    return acc;
+  }, {});
+  const severities = Object.entries(counts).map(([s, n]) => `${n} ${s}`).join(", ");
+  const parts = [
+    ...(asserted.length ? [`${asserted.length} asserted: ${severities}`] : []),
+    ...(referred ? [`${referred} referred`] : []),
+  ];
+  return parts.join("; ") || "none";
 }
 
 /** The summary's warning when the examination ended early (#1363), above everything it did find. */

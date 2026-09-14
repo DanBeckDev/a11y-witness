@@ -357,9 +357,11 @@ test("#1563: rehearsal 2's real result counts its eight partial criteria in the 
   const file = new URL("../fixtures/rehearsal2-34767932873-a11ign-result.json", import.meta.url);
   const rehearsal2 = JSON.parse(readFileSync(file, "utf8")) as RunResult;
   assert.equal(rehearsal2.outcomes?.length, WCAG_22_AA_CRITERIA, "the fixture as committed");
+  // #1366 MOVED THE SECOND LINE: rehearsal 2's one finding is mapped `secondary` (its 2.4.2 outcome is `cantTell`),
+  // so it is counted as a referral, never as "1 serious" -- the reading the rehearsal's reader took as a failure.
   assert.deepEqual(logLines(rehearsal2, "never"), [
     "a11ign: 8 criteria rest on an examination known to be partial -- see the artifact",
-    "a11ign: 1 finding(s) (1 serious); fail-on=never",
+    "a11ign: 1 finding(s) (1 referred); fail-on=never",
   ]);
   const md = renderSummary(rehearsal2);
   assert.match(md, /\*\*Not determined:\*\* 19 criteria we cover were referred/);
