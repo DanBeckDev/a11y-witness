@@ -23,6 +23,15 @@
 // be typed -- is not checked. This closes the path the fleet actually uses (`gh pr create`/`gh pr edit`
 // from a script); the web form remains unguarded, the mirror of #735 (the row template's own web-form-vs-
 // `gh issue create` gap).
+//
+// EXIT CODES (#1479). A caller must be able to tell a refusal from a partial success, because they need
+// opposite next steps: retry the command, or never retry it.
+//   0  the body passed, `gh pr <mode>` ran, and a ready create was armed.
+//   1  nothing was sent: the head or the body was refused, or `gh pr <mode>` itself failed. Retry unchanged.
+//   2  usage: no `create`/`edit`, or no --body/--body-file. Nothing ran.
+//   3  `gh pr create` LANDED and the step after it failed, so the PR exists. Do not retry pr-open; run only
+//      the step the error line names. Before #1479 that throw escaped `main` and Node exited 1 for a PR
+//      that existed.
 import { execFileSync, execSync } from "node:child_process";
 import { readFileSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
@@ -30,6 +39,11 @@ import { acceptanceReport, closesDeclarationReport } from "./acceptance-commands
 import { leakRefusalReason } from "../packages/lab/src/packaging/leak-patterns.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
 import { REPO } from "./repo-identity.mjs";
+
+// The header's EXIT CODES, named because 1 and 3 ask a caller for opposite next steps.
+export const EXIT_NOTHING_SENT = 1;
+export const EXIT_USAGE = 2;
+export const EXIT_LANDED_THEN_FAILED = 3;
 
 /**
  * Runs a command FOR REAL, exactly as `acceptance-commands.mjs`'s own (unexported) `runForReal` does --
@@ -126,6 +140,25 @@ export function sendFailureLine({ mode, branch, head, message }) {
 }
 
 /**
+ * #1479: THE WRITE LANDED AND THE STEP AFTER IT FAILED, said as a partial success. `gh pr create` had already
+ * made the PR when the arm threw, and the throw escaped `main`, so Node exited 1: the code this script sets
+ * when NOTHING was sent. A caller reading 1 retries the create against a PR that exists. So the line names
+ * the branch whose PR exists and the one step to re-run, never the whole command.
+ * @param {{ mode: string, branch: string, head: string, step: string[], message: string }} at
+ */
+function landedThenFailedLine({ mode, branch, head, step, message }) {
+  const command = `gh ${step.join(" ")}`;
+  return `pr-open: \`gh pr ${mode}\` LANDED -- the PR for \`${branch}\` at \`${head}\` exists -- but the step after `
+    + `it, \`${command}\`, FAILED. Do not re-run pr-open, which would send the ${mode} again; run only `
+    + `\`${command}\` once the cause below is gone.\n  ${message.split("\n")[0]}`;
+}
+
+/** @param {unknown} error */
+function messageOf(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/**
  * The branch, or `detached at <sha>` when there is none. `git rev-parse --abbrev-ref HEAD` returns the
  * literal string `HEAD` on a detached checkout, so the line named a branch that does not exist and told
  * the reader to retry from it. **`gh pr create` fails on a detached HEAD by construction**, so the one
@@ -144,33 +177,44 @@ function branchName(fact) {
  * @param {string[]} rest
  * @param {{ run?: (args: string[]) => void, git?: (args: string[]) => string,
  *           err?: (line: string) => void }} [deps]
+ * @returns {number} the header's exit code: 0, EXIT_NOTHING_SENT, or EXIT_LANDED_THEN_FAILED
  */
 export function sendToGitHub(mode, rest, { run = defaultGh, git = defaultGit, err = writeErr } = {}) {
+  // AN ERROR HANDLER THAT CAN ITSELF ERROR IS THE ONE PLACE A THROW COSTS THE MOST (worker-capture,
+  // #1283). Both reads sat here unguarded, so a failing `git` -- a GIT_DIR pointing elsewhere, a stale
+  // gitdir file, the CLI run from outside the checkout -- replaced this message with a raw throw that
+  // carries git's error and LOSES gh's cause entirely. Worse than the 24-line dump it replaced, which
+  // at least contained the answer.
+  /** @type {(args: string[], fallback: string) => string} */
+  const fact = (args, fallback) => { try { return git(args) || fallback; } catch { return fallback; } };
+  const head = () => fact(["rev-parse", "--short", "HEAD"], "(unknown)");
   try {
     run(["pr", mode, ...rest]);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    // AN ERROR HANDLER THAT CAN ITSELF ERROR IS THE ONE PLACE A THROW COSTS THE MOST (worker-capture,
-    // #1283). Both reads sat here unguarded, so a failing `git` -- a GIT_DIR pointing elsewhere, a stale
-    // gitdir file, the CLI run from outside the checkout -- replaced this message with a raw throw that
-    // carries git's error and LOSES gh's cause entirely. Worse than the 24-line dump it replaced, which
-    // at least contained the answer.
-    /** @type {(args: string[], fallback: string) => string} */
-    const fact = (args, fallback) => { try { return git(args) || fallback; } catch { return fallback; } };
-    err(`${sendFailureLine({ mode, branch: branchName(fact), head: fact(["rev-parse", "--short", "HEAD"],
-      "(unknown)"), message })}\n`);
-    return false;
+    err(`${sendFailureLine({ mode, branch: branchName(fact), head: head(), message: messageOf(error) })}\n`);
+    return EXIT_NOTHING_SENT;
   }
   // `armAfterCreate` returns a WHOLE `gh` argv (`["pr", "merge", ...]`) and `run` is `gh` with its args as
   // given -- `args.slice(1)` stripped `pr` and spawned `gh merge`, an unknown command, after every ready
   // create since #1277, so the wrapper exited 1 on a PR that already existed.
-  for (const args of armAfterCreate(mode, rest)) run(args);
-  return true;
+  for (const args of armAfterCreate(mode, rest)) {
+    // #1479: the create has LANDED by here, so a failure is a partial success with its own code.
+    try {
+      run(args);
+    } catch (error) {
+      err(`${landedThenFailedLine({ mode, branch: branchName(fact), head: head(),
+        step: args, message: messageOf(error) })}\n`);
+      return EXIT_LANDED_THEN_FAILED;
+    }
+  }
+  return 0;
 }
 
 /** `err` returns nothing, so a caller collecting lines cannot accidentally satisfy it with a length.
  * @param {string} line */
 const writeErr = (line) => { process.stderr.write(line); };
+/** @param {string} line */
+const writeOut = (line) => { process.stdout.write(line); };
 
 /** @param {string[]} args */
 const defaultGh = (args) => { execFileSync("gh", args, { stdio: "inherit" }); };
@@ -186,38 +230,43 @@ const defaultPrHead = (repo, number) => JSON.parse(execFileSync("gh",
 const defaultGit = (args) =>
   execFileSync("git", args, { encoding: "utf8", env: sandboxGitEnv() }).trim();
 
-function main() {
-  const argv = process.argv.slice(2);
+/**
+ * The CLI, returning the header's exit code, with every spawn injectable so the path that matters most, a
+ * write that landed and a step after it that failed, is driven end to end (#1479).
+ * @param {string[]} [argv]
+ * @param {{ run?: (args: string[]) => void, git?: (args: string[]) => string,
+ *           prHead?: (repo: string, number: string) => { ref: string, oid: string } | null,
+ *           runAcceptance?: (command: string) => number, out?: (line: string) => void,
+ *           err?: (line: string) => void }} [deps]
+ * @returns {number}
+ */
+export function main(argv = process.argv.slice(2), { run, git, prHead, runAcceptance, out = writeOut, err = writeErr } = {}) {
   const [mode, ...rest] = argv;
   if (mode !== "create" && mode !== "edit") {
-    process.stderr.write(usage());
-    process.exitCode = 2;
-    return;
+    err(usage());
+    return EXIT_USAGE;
   }
   const body = bodyFromArgs(rest);
   if (body === null) {
-    process.stderr.write(`pr-open ${mode}: --body or --body-file is required -- this wrapper checks the `
+    err(`pr-open ${mode}: --body or --body-file is required -- this wrapper checks the `
       + "body before gh sends it, and cannot check a body it was never given. Use `gh pr " + mode
       + "` directly, unguarded, for an interactive editor session.\n");
-    process.exitCode = 2;
-    return;
+    return EXIT_USAGE;
   }
   // #1344: BEFORE checkBody, because checkBody RUNS the Acceptance -- in this working tree, whatever --head says.
-  const headRefused = headTreeRefusal(mode, rest) ?? editTreeRefusal(mode, rest);
+  const headRefused = headTreeRefusal(mode, rest, { git }) ?? editTreeRefusal(mode, rest, { git, prHead });
   if (headRefused) {
-    process.stderr.write(`${headRefused}\n`);
-    process.exitCode = 1;
-    return;
+    err(`${headRefused}\n`);
+    return EXIT_NOTHING_SENT;
   }
-  const result = checkBody(body);
-  for (const line of result.lines) process.stdout.write(`${line}\n`);
+  const result = checkBody(body, { run: runAcceptance });
+  for (const line of result.lines) out(`${line}\n`);
   if (!result.ok) {
-    process.stderr.write(`pr-open: REFUSED -- this body would fail CI's own acceptance job; fix it before `
+    err(`pr-open: REFUSED -- this body would fail CI's own acceptance job; fix it before `
       + `gh pr ${mode} runs (nothing was sent to GitHub).\n`);
-    process.exitCode = 1;
-    return;
+    return EXIT_NOTHING_SENT;
   }
-  if (!sendToGitHub(mode, rest)) process.exitCode = 1;
+  return sendToGitHub(mode, rest, { run, git, err });
 }
 
 /**
@@ -365,5 +414,5 @@ function flagAfter(args, flag) {
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
-  main();
+  process.exitCode = main();
 }
