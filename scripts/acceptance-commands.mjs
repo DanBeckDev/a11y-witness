@@ -553,15 +553,29 @@ const CLOSURE_REQUIREMENT_PATTERNS =
 // own rule states it. A file naming a function it does not itself call is judged wrong the same way a file
 // naming a subdirectory it does not itself write to is -- a DIFFERENT, MORE SPECIFIC refusal than plain
 // `token`, never a silent pass and never a silent override.
-const NO_TOKEN_HEADER = /^\/\/\s*no-token:\s*(\S+)\s*$/m;
+//
+// #1465: A `// no-token:` LINE IS READ, OR REFUSED -- NEVER SILENTLY IGNORED. The declaration was one regex whose
+// name had to end the line, applied once: `// no-token: gh -- every command here is git` was not a declaration,
+// and a file's SECOND header line (enumeration-completeness.test.ts, queue-table.test.ts) was never read. Both
+// were harmless where they stood and neither said so, so the next file written that way would have been refused
+// with the remedy "declare `// no-token:`", which its author would read as done. Now every line that starts like
+// a declaration (`NO_TOKEN_CANDIDATE`, any case, any indent) must match `NO_TOKEN_DECLARATION` -- the name, then
+// optionally ` -- <reason>` -- or it is refused at its own line; and every declaration read must hold.
+const NO_TOKEN_CANDIDATE = /^[ \t]*\/\/[ \t]*no-token\b/i;
+const NO_TOKEN_DECLARATION = /^\/\/[ \t]*no-token:[ \t]*(\S+)(?:[ \t]+--[ \t].*)?[ \t]*$/;
 
 /**
+ * Every line of `text` that starts like a `// no-token:` declaration, with the name it declares -- `fn: null`
+ * when the line cannot be read as one.
  * @param {string} text
- * @returns {string | null} the declared function name (e.g. `todaysReleaseExists`), or null if undeclared.
+ * @returns {{ line: number, fn: string | null }[]}
  */
-function declaredNoTokenFn(text) {
-  const match = NO_TOKEN_HEADER.exec(text);
-  return match ? match[1] : null;
+function noTokenHeaders(text) {
+  return text.split("\n").flatMap((raw, i) => {
+    if (!NO_TOKEN_CANDIDATE.test(raw)) return [];
+    const match = NO_TOKEN_DECLARATION.exec(raw.replace(/\r$/, ""));
+    return [{ line: i + 1, fn: match ? match[1] : null }];
+  });
 }
 
 /**
@@ -595,7 +609,7 @@ function lineNumberOf(text, index) {
 }
 
 /** @typedef {{ requirement: "token" | "corpus" | "history", file: string, line: number, chain: string[],
- *              wrongDeclaration?: boolean }} ClosureHit */
+ *              wrongDeclaration?: boolean, malformedDeclaration?: boolean }} ClosureHit */
 
 /**
  * Every requirement reachable from `entry`'s local-import closure, each named by the FIRST file (in walk
@@ -609,7 +623,7 @@ function lineNumberOf(text, index) {
  * own text does not bear it out is still recorded as `corpus`, flagged `wrongDeclaration: true` -- named as
  * a bad declaration, never silently trusted and never silently overridden.
  *
- * #827: `token`'s mirror, checked once against `entry` itself before the walk begins -- see `NO_TOKEN_HEADER`'s
+ * #827: `token`'s mirror, checked once against `entry` itself before the walk begins -- see `NO_TOKEN_DECLARATION`'s
  * own header for why the declaration cannot live beside the risky call the way `// writes:` does.
  * @param {string} entry absolute path to the entry file
  * @returns {ClosureHit[]}
@@ -626,20 +640,21 @@ export function deriveClosureRequirements(entry) {
   // exists to remove, one hop further down the same chain. `exemptCorpus` records that the closure has
   // already answered "corpus" honestly and nothing further in this walk may reopen it.
   let exemptCorpus = false;
-  // #827: the `token` counterpart, decided ONCE before the walk starts (see `NO_TOKEN_HEADER`'s header for
+  // #827: the `token` counterpart, decided ONCE before the walk starts (see `NO_TOKEN_DECLARATION`'s header for
   // why token's declaration is checked at the entry rather than incrementally like `// writes:` is).
   let exemptToken = false;
   if (existsSync(entry)) {
     const entryText = readFileSync(entry, "utf8");
     const entryCodeOnly = stripComments(entryText);
-    const noTokenFn = declaredNoTokenFn(entryText);
-    if (noTokenFn !== null) {
-      if (noTokenDeclarationHolds(entryCodeOnly, noTokenFn)) {
-        exemptToken = true;
-      } else {
-        const line = lineNumberOf(entryText, /** @type {RegExpExecArray} */ (NO_TOKEN_HEADER.exec(entryText)).index);
-        found.set("token", { requirement: "token", file: entry, line, chain: [entry], wrongDeclaration: true });
-      }
+    const headers = noTokenHeaders(entryText);
+    const unreadable = headers.find((h) => h.fn === null);
+    const wrong = headers.find((h) => h.fn !== null && !noTokenDeclarationHolds(entryCodeOnly, h.fn));
+    if (unreadable) {
+      found.set("token", { requirement: "token", file: entry, line: unreadable.line, chain: [entry], malformedDeclaration: true });
+    } else if (wrong) {
+      found.set("token", { requirement: "token", file: entry, line: wrong.line, chain: [entry], wrongDeclaration: true });
+    } else if (headers.length > 0) {
+      exemptToken = true;
     }
   }
   /**
@@ -707,10 +722,13 @@ export function deriveClosureRequirements(entry) {
  * @returns {string}
  */
 export function closureRequirementMessage(hit) {
-  const { requirement, file, line, chain, wrongDeclaration } = hit;
+  const { requirement, file, line, chain, wrongDeclaration, malformedDeclaration } = hit;
   const entryLabel = basename(chain[0]);
   const fileLabel = basename(file);
-  const suffix = !wrongDeclaration ? "" : requirement === "token"
+  const suffix = malformedDeclaration
+    ? ` -- ${fileLabel}:${line} is not a \`// no-token:\` declaration: the name must end the line, or be followed by `
+      + "\" -- <reason>\"; refusing rather than ignoring it"
+    : !wrongDeclaration ? "" : requirement === "token"
     ? ` -- ${fileLabel} declares \`// no-token:\` a function its own code DOES call or spawn; refusing rather than `
       + "trusting an unverified claim"
     : ` -- ${fileLabel} declares \`// writes:\` a path its own code does not bear out; refusing rather `
@@ -755,17 +773,17 @@ export function closureRequirementMessage(hit) {
  * TOKEN ONLY. `// writes:` is checked incrementally per file rather than once at the entry, so the same
  * sentence would be wrong about where it goes; naming one remedy correctly beats naming two loosely.
  *
- * @param {{requirement: string, chain: string[], wrongDeclaration?: boolean}} hit
+ * @param {{requirement: string, chain: string[], wrongDeclaration?: boolean, malformedDeclaration?: boolean}} hit
  * @param {string[]} hops
  * @returns {string}
  */
 function noTokenRemedy(hit, hops) {
-  if (hit.requirement !== "token" || hit.wrongDeclaration) return "";
+  if (hit.requirement !== "token" || hit.wrongDeclaration || hit.malformedDeclaration) return "";
   const fn = hops[hops.length - 1];
   const entry = hit.chain[0];
   if (!fn || !existsSync(entry)) return "";
   const text = readFileSync(entry, "utf8");
-  if (declaredNoTokenFn(text) !== null) return "";
+  if (noTokenHeaders(text).length > 0) return "";
   if (!noTokenDeclarationHolds(stripComments(text), fn)) return "";
   return `. This file never calls \`${fn}\` itself, so if every input it passes is injected AND reaching `
     + `\`${fn}\` is not part of what this file tests, it may declare \`// no-token: ${fn}\` on its first `
