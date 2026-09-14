@@ -1,0 +1,2292 @@
+{
+  "url": "https://www.w3.org/WAI",
+  "task": "Learn about web accessibility",
+  "screenReader": "NVDA",
+  "transcript": [
+    "same page, link, Skip to Content, link, Change Text Size or Colors, link, All Translations",
+    "out of list, banner landmark, link, graphic, W 3C homepage",
+    "same page, link, graphic, Web Accessibility Initiative (WAI) homepage",
+    "Strategies, standards, resources to make the Web accessible to people with disabilities",
+    "Meta and Search, navigation landmark, list, with 3 items, link, Get Involved",
+    "link, About W 3C WAI",
+    "search landmark, Search:, Search, edit, Search,",
+    "button, graphic, Submit Search",
+    "out of list, Main, navigation landmark, list, with 6 items, link, Accessibility Fundamentals",
+    "link, Planning and Policies",
+    "link, Design and Develop",
+    "link, Test and Evaluate",
+    "link, Teach and Advocate",
+    "link, Standards slash Guidelines",
+    "out of list, main landmark, heading, level 1, W 3C Web Accessibility Initiative Home",
+    "region, heading, level 2, Making the Web Accessible",
+    "Strategies, standards, and supporting resources to help you make the Web more accessible to people",
+    "with disabilities.",
+    "heading, level 3, W 3C",
+    "The World Wide Web Consortium (W 3C) develops international standards for the Web: HTML, CSS, and",
+    "many more.",
+    "heading, level 3, WAI",
+    "The W 3C Web Accessibility Initiative (WAI) develops standards and support materials to help you",
+    "understand and implement accessibility.",
+    "heading, level 3, You",
+    "You can use W 3C WAI resources to make your websites, applications, and other digital creations more",
+    "accessible and usable to everyone.",
+    "button, expanded, Hide Section, –",
+    "out of region, region, heading, level 2, News",
+    "heading, level 3, Current Work",
+    "(updated monthly)",
+    "See, link, What We're Working On – Accessibility Activities and Publications",
+    "heading, level 3, For Review: WCAG 3 Working Draft – September 2026",
+    "(2026-Sep-10)",
+    "link, W 3C Accessibility Guidelines (WCAG) 3.0 Working Draft, is updated. The starting place for",
+    "background, timeline, and up-to-date information is the, link, WCAG 3 Introduction, dot For a list of changes",
+    "in the September 2026 draft and review questions on the conformance model, see, link, Status: In-progress",
+    "link, drafts, dot",
+    "heading, level 3, WCAG Evaluation Methodology (WCAG-EM) 2.0 — Note Published",
+    "(2026-Jul-23)",
+    "link, WCAG Evaluation Methodology (WCAG-EM) 2.0, is published as a W 3C Group Note. WCAG-EM describes a",
+    "methodology with a step-by-step process to evaluate how well digital products conform to Web",
+    "Content Accessibility Guidelines (WCAG) 2. WCAG-EM 1 was specifically for testing websites and web",
+    "pages. WCAG-EM 2 also applies to apps and other digital products. For an introduction to WCAG-EM,",
+    "see, link, WCAG-EM Overview, dot",
+    "heading, level 3, For Review: WCAG 3 Working Draft – March 2026",
+    "(2026-Mar-03)",
+    "in the March 2026 draft, see, link, Status: In-progress drafts, dot",
+    "heading, level 3, For Review: W 3C Accessibility Guidelines Evaluation Methodology (WCAG-EM) 2.0 — First Draft Note",
+    "(2026-Feb-05)",
+    "link, W 3C Accessibility Guidelines Evaluation Methodology (WCAG-EM) 2.0, is available as a first Draft",
+    "Note. WCAG-EM describes a methodology with a step-by-step process to evaluate how well digital",
+    "products conform to Web Content Accessibility Guidelines (WCAG) 2. WCAG-EM 1 is specifically for",
+    "testing websites and web pages. WCAG-EM 2 also applies to apps and other digital products. For an",
+    "introduction to WCAG-EM and more information about the WCAG-EM 2 draft, see, link, WCAG-EM Overview, dot",
+    "heading, level 3, For Review: Cognitive Accessibility Research Modules — First Draft Notes",
+    "(2026-Feb-05)",
+    "link, Cognitive Accessibility Research Modules, are available as first Draft Notes. The documents cover",
+    "research on accessibility for people with cognitive and learning disabilities for, link, Voice Systems and",
+    "link, Conversational Interfaces, ,, link, Technology Assisted Indoor Navigation slash Wayfinding, ,, link, Online Safety and",
+    "link, Wellbeing (Algorithms and Data), , and, link, Supported Decision-Making Online, dot They address user needs,",
+    "accessibility issues, directions for solutions, and areas for further research. We particularly",
+    "seek input on what might be appropriate to add to these documents, including other relevant",
+    "research, additional user needs, and the connection between research and priorities for new work in",
+    "W 3C groups. Information on related work is in, link, Cognitive Accessibility at W 3C, dot",
+    "heading, level 3, ACT Rules Format 1.1 is a Web Standard (W 3C Recommendation)",
+    "(2026-Feb-05)",
+    "link, Accessibility Conformance Testing (ACT) Rules Format 1.1, is now a web standard (W 3C",
+    "Recommendation). ACT Rules Format defines a format for writing accessibility test rules. The test",
+    "rules can be used for developing automated testing tools and manual testing methodologies. For an",
+    "introduction to ACT Rules, see, link, Accessibility Conformance Testing (ACT) Overview, dot",
+    "heading, level 3, WCAG 2.2 Approved as an ISO Standard",
+    "(2025-Oct-21)",
+    "Web Content Accessibility Guidelines (, link, WCAG, ) 2.2 is now an approved International Organization for",
+    "Standardization (ISO) standard: ISO slash IEC 40500:2025. It is available free from, link, ISO slash IEC 40500:2025 -",
+    "link, Information technology — W 3C Web Content Accessibility Guidelines (WCAG) 2.2, dot This standard enables",
+    "more countries to formally adopt WCAG 2.2. Additional information is in the, link, W 3C press release on",
+    "link, WCAG 2.2 approved as ISO slash IEC international standard, and, link, ISO slash IEC 40500, EAA, EN 301 549’ section of",
+    "link, WCAG 2 Overview, dot",
+    "link, See All News, link, Subscribe to WAI News",
+    "out of region, region, heading, level 2, See what we have for you:Get Resources for...",
+    "list, with 11 items, bullet, link, Getting Started",
+    "bullet, link, Content Writers",
+    "bullet, link, Designers",
+    "bullet, link, Developers",
+    "bullet, link, Evaluators, Testers",
+    "bullet, link, Managers",
+    "bullet, link, Policy Makers",
+    "bullet, link, Trainers, Educators",
+    "bullet, link, Web Users, People with Disabilities, Advocates",
+    "bullet, link, Everyone (All WAI Resources)",
+    "bullet, link, Other Languages",
+    "out of list, out of region, region, link, heading, level 2, Training Course:Digital Accessibility Foundations",
+    "link, The free Introduction to Web Accessibility online course provides the foundation you need to make",
+    "link, your digital technology accessible. It's designed for:",
+    "link, list, with 3 items, bullet technical and non-technical learners",
+    "link, bullet developers, designers, ux, writers, managers, advocates",
+    "link, bullet professionals, instructors, students",
+    "out of list, link, About the Free Online Course",
+    "out of region, region, heading, level 2, Web Accessibility Perspectives:Video Captions",
+    "Video, frame, clickable, You Tube Video Player",
+    "clickable, button, Play video",
+    "button, Hide player controls",
+    "clickable",
+    "clickable, link, Web Accessibility Perspectives: Video Captions",
+    "link, W 3C Web Accessibility Initiative (WAI)",
+    "button, graphic, thumbnail-image",
+    "W 3C Web Accessibility Initiative (WAI)10.1K subscribers",
+    "clickable",
+    "out of frame, Captions are the audio information in text that is synchronized with the audio and visual content.",
+    "Captions are called subtitles in some regions.",
+    "Video Captions are essential for people with disabilities and benefit everyone in a variety of",
+    "situations.",
+    "link, More About Video Captions",
+    "link, See All Perspectives Videos",
+    "out of region, region, link, heading, level 2, Featured Resource:Making Audio and Video Media Accessible",
+    "link, This media resource helps you understand and create captions slash subtitles, audio description of visual",
+    "link, information, descriptive transcripts, and sign language for media. It introduces user experiences",
+    "link, and benefits to organizations.",
+    "link, Making Audio and Video Media Accessible",
+    "out of region, heading, level 2, Sponsors and Funders",
+    "WAI is supported in part by the following organizations. Thank you!",
+    "list, with 1 item, bullet, link, Ford Foundation, ,, link, Technology and Society Program",
+    "out of list, WAI welcomes donations, sponsors, grants and other, link, financial support, dot",
+    "same page, link, Back to Top",
+    "Site, content info landmark, same page, link, W 3C Web Accessibility Initiative (WAI)",
+    "list, with 4 items, link, Get News in Email",
+    "link, Linked In",
+    "link, Mastodon",
+    "link, You Tube",
+    "out of list, list, with 8 items, same page, link, Home",
+    "link, Contact",
+    "link, Site map",
+    "link, Support WAI",
+    "link, News",
+    "link, Accessibility statement",
+    "link, All Translations",
+    "link, Resources for roles",
+    "out of list, Copyright copyright 2026, link, World Wide Web Consortium, dot",
+    "W 3C, registered, , link, liability, ,, link, trademark, and, link, permissive license, rules apply unless otherwise noted. See, link, Permission",
+    "link, to Use WAI Material, dot"
+  ],
+  "leftSite": null,
+  "structure": {
+    "headings": [
+      "main landmark, Sponsors and Funders, heading, level 2",
+      "Featured Resource: Making Audio and Video Media Accessible, region, Featured Resource:Making Audio and Video Media Accessible, heading, level 2, link",
+      "Web Accessibility Perspectives: Video Captions, region, Web Accessibility Perspectives:Video Captions, heading, level 2",
+      "Training Course: Digital Accessibility Foundations, region, Training Course:Digital Accessibility Foundations, heading, level 2, link",
+      "See what we have for you: Get Resources for..., region, See what we have for you:Get Resources for..., heading, level 2",
+      "News, region, WCAG 2.2 Approved as an ISO Standard, heading, level 3",
+      "ACT Rules Format 1.1 is a Web Standard (W 3C Recommendation), heading, level 3",
+      "For Review: Cognitive Accessibility Research Modules — First Draft Notes, heading, level 3",
+      "For Review: W 3C Accessibility Guidelines Evaluation Methodology (WCAG-EM) 2.0 — First Draft Note, heading, level 3",
+      "For Review: WCAG 3 Working Draft – March 2026, heading, level 3",
+      "WCAG Evaluation Methodology (WCAG-EM) 2.0 — Note Published, heading, level 3",
+      "For Review: WCAG 3 Working Draft – September 2026, heading, level 3",
+      "Current Work, heading, level 3",
+      "News, heading, level 2",
+      "Making the Web Accessible, region, You, heading, level 3",
+      "WAI, heading, level 3",
+      "W 3C, heading, level 3",
+      "Making the Web Accessible, heading, level 2",
+      "W 3C Web Accessibility Initiative Home, heading, level 1"
+    ],
+    "landmarks": [
+      "Featured Resource: Making Audio and Video Media Accessible, region, Featured Resource:Making Audio and Video Media Accessible, heading, level 2, link",
+      "Web Accessibility Perspectives: Video Captions, region, Web Accessibility Perspectives:Video Captions, heading, level 2",
+      "Training Course: Digital Accessibility Foundations, region, Training Course:Digital Accessibility Foundations, heading, level 2, link",
+      "See what we have for you: Get Resources for..., region, See what we have for you:Get Resources for..., heading, level 2",
+      "News, region, News, heading, level 2",
+      "Making the Web Accessible, region, Making the Web Accessible, heading, level 2",
+      "W 3C Web Accessibility Initiative Home, heading, level 1",
+      "Main, navigation landmark, list, with 6 items, Accessibility Fundamentals, link",
+      "banner landmark, Meta and Search, navigation landmark, list, with 3 items, search landmark, Search:, Search, edit, Search,",
+      "Get Involved, link",
+      "W 3C homepage, graphic, link",
+      "Skip Link and Language Selector, navigation landmark, list, with 3 items, Skip to Content, same page, link, Change Text Size or Colors, link, All Translations",
+      "Meta and Search, navigation landmark, list, with 3 items, Get Involved, link",
+      "search landmark, Search:, Search, edit, Search,",
+      "Site, content info landmark, W 3C Web Accessibility Initiative (WAI), same page, link"
+    ],
+    "formFields": [
+      "main landmark, Web Accessibility Perspectives: Video Captions, region, Video, frame, clickable, thumbnail-image, graphic, button",
+      "Hide player controls, button",
+      "clickable, Play video, button",
+      "Making the Web Accessible, region, Hide Section, –, button, expanded",
+      "banner landmark, Meta and Search, navigation landmark, list, with 3 items, search landmark, Submit Search, graphic, button",
+      "banner landmark, Meta and Search, navigation landmark, list, with 3 items, search landmark, Search, edit, Search",
+      "Submit Search, graphic, button",
+      "main landmark, form, Search:, edit, required, At least 3 characters",
+      "Search, button"
+    ],
+    "graphics": [
+      "banner landmark, Meta and Search, navigation landmark, list, with 3 items, search landmark, Submit Search, graphic, button",
+      "Web Accessibility Initiative (WAI) homepage, graphic, link",
+      "W 3C homepage, graphic, link"
+    ],
+    "links": [
+      "About W 3C WAI, link",
+      "Get Involved, link",
+      "Web Accessibility Initiative (WAI) homepage, graphic, link",
+      "W 3C homepage, graphic, link",
+      "Skip Link and Language Selector, navigation landmark, list, with 3 items, All Translations, link",
+      "Change Text Size or Colors, link",
+      "Skip to Content, same page, link",
+      "All Translations, link",
+      "Meta and Search, navigation landmark, list, with 3 items, Get Involved, link",
+      "Main, navigation landmark, list, with 6 items, Accessibility Fundamentals, link",
+      "Planning and Policies, link",
+      "Design and Develop, link",
+      "Test and Evaluate, link",
+      "Teach and Advocate, link",
+      "Standards slash Guidelines, link",
+      "Breadcrumb, navigation landmark, list, with 2 items, Home, link",
+      "main landmark, list, with 2 items, Search W 3C standards, guidelines, and Notes, link",
+      "Search the entire W 3C website, link",
+      "feedback, complementary landmark, wai at w 3 dot org, link",
+      "E-mail, link",
+      "Fork and Edit on Git Hub, link",
+      "New Git Hub Issue, link",
+      "Back to Top, same page, link",
+      "Site, content info landmark, W 3C Web Accessibility Initiative (WAI), link",
+      "list, with 4 items, Get News in Email, link",
+      "Linked In, link",
+      "Mastodon, link",
+      "You Tube, link",
+      "list, with 8 items, Home, link",
+      "Contact, link",
+      "Site map, link",
+      "Support WAI, link",
+      "News, link",
+      "Accessibility statement, link",
+      "Resources for roles, link",
+      "World Wide Web Consortium, link",
+      "liability, link",
+      "trademark, link",
+      "permissive license, link, W 3C Software License",
+      "Permission to Use WAI Material, link"
+    ],
+    "lists": [
+      "Skip Link and Language Selector, navigation landmark, list, with 3 items, Skip to Content, same page, link, Change Text Size or Colors, link, All Translations",
+      "banner landmark, Meta and Search, navigation landmark, list, with 3 items, Get Involved, link",
+      "Main, navigation landmark, list, with 6 items, Accessibility Fundamentals, link",
+      "Breadcrumb, navigation landmark, list, with 2 items, Home, link",
+      "main landmark, list, with 2 items, bullet, Search W 3C standards, guidelines, and Notes, link, , including accessibility and other areas",
+      "Site, content info landmark, list, with 4 items, Get News in Email, link",
+      "list, with 8 items, Home, link"
+    ],
+    "tableCells": [],
+    "frames": []
+  },
+  "interaction": {
+    "controls": [
+      "main landmark, Web Accessibility Perspectives: Video Captions, region, Video, frame, clickable, thumbnail-image, graphic, button",
+      "Hide player controls, button",
+      "clickable, Play video, button",
+      "Making the Web Accessible, region, Hide Section, –, button, expanded",
+      "banner landmark, Meta and Search, navigation landmark, list, with 3 items, search landmark, Submit Search, graphic, button",
+      "banner landmark, Meta and Search, navigation landmark, list, with 3 items, search landmark, Search, edit, Search",
+      "Submit Search, graphic, button",
+      "main landmark, form, Search:, edit, required, At least 3 characters",
+      "Search, button"
+    ],
+    "stateChanges": [],
+    "formChanges": [
+      {
+        "control": "Making the Web Accessible, region, Hide Section, –, button, expanded",
+        "kind": "taskButton",
+        "after": "Show information about W 3C, WAI, You plus, collapsed",
+        "baselineQuiet": true,
+        "baselineWaitedMs": 300
+      },
+      {
+        "control": "banner landmark, Meta and Search, navigation landmark, list, with 3 items, search landmark, Submit Search, graphic, button",
+        "kind": "submit",
+        "after": "Search Web Accessibility Initiative (WAI) W 3C, document",
+        "baselineQuiet": true,
+        "baselineWaitedMs": 300
+      },
+      {
+        "control": "Submit Search, graphic, button",
+        "kind": "submit",
+        "after": "Search Web Accessibility Initiative (WAI) W 3C, document",
+        "baselineQuiet": true,
+        "baselineWaitedMs": 307
+      },
+      {
+        "control": "Search, button",
+        "kind": "submit",
+        "after": "Search:, edit, required, At least 3 characters, blank",
+        "baselineQuiet": true,
+        "baselineWaitedMs": 300
+      },
+      {
+        "control": "Change Text Size or Colors, link",
+        "kind": "route",
+        "after": "How to Change Text Size or Colors Web Accessibility Initiative (WAI) W 3C, document",
+        "baselineQuiet": true,
+        "baselineWaitedMs": 303
+      }
+    ],
+    "postSubmitFields": [
+      "banner landmark, Meta and Search, navigation landmark, list, with 3 items, search landmark, Search, edit, Search",
+      "Submit Search, graphic, button",
+      "main landmark, form, Search:, edit, required, At least 3 characters",
+      "Search, button"
+    ],
+    "focusOrder": [
+      "Change Text Size or Colors, link, focused, linked",
+      "All Translations, link, focused, linked",
+      "W 3C homepage, link, focused, linked",
+      "Web Accessibility Initiative (WAI) homepage, link, focused, linked",
+      "Get Involved, link, focused, linked",
+      "About W 3C WAI, link, focused, linked",
+      "Search, edit, focused, Search, blank",
+      "Submit Search, button, focused",
+      "Accessibility Fundamentals, link, focused, linked",
+      "Planning and Policies, link, focused, linked",
+      "Design and Develop, link, focused, linked",
+      "Test and Evaluate, link, focused, linked",
+      "Teach and Advocate, link, focused, linked",
+      "Standards slash Guidelines, link, focused, linked",
+      "Home, link, focused, linked",
+      "Search W 3C standards, guidelines, and Notes, link, focused, linked",
+      "Search the entire W 3C website, link, focused, linked",
+      "Search:, edit, focused, required, At least 3 characters, blank",
+      "Search, button, focused",
+      "wai at w 3 dot org, link, focused, linked",
+      "E-mail, link, focused, linked",
+      "Fork and Edit on Git Hub, link, focused, linked",
+      "New Git Hub Issue, link, focused, linked",
+      "Back to Top, link, focused, linked, same page",
+      "W 3C Web Accessibility Initiative (WAI), link, focused, linked",
+      "Get News in Email, link, focused, linked",
+      "Linked In, link, focused, linked",
+      "Mastodon, link, focused, linked",
+      "You Tube, link, focused, linked",
+      "Home, link, focused, linked",
+      "Contact, link, focused, linked",
+      "Site map, link, focused, linked",
+      "Support WAI, link, focused, linked",
+      "News, link, focused, linked",
+      "Accessibility statement, link, focused, linked",
+      "All Translations, link, focused, linked",
+      "Resources for roles, link, focused, linked",
+      "World Wide Web Consortium, link, focused, linked",
+      "liability, link, focused, linked",
+      "trademark, link, focused, linked",
+      "permissive license, link, focused, linked, W 3C Software License",
+      "Permission to Use WAI Material, link, focused, linked",
+      "Skip to Content, link, focused, linked, same page",
+      "Change Text Size or Colors, link, focused, linked",
+      "All Translations, link, focused, linked",
+      "W 3C homepage, link, focused, linked"
+    ],
+    "routeChange": {
+      "control": "Change Text Size or Colors, link",
+      "titleBefore": "Search Web Accessibility Initiative (WAI) W 3C",
+      "titleAfter": "How to Change Text Size or Colors Web Accessibility Initiative (WAI) W 3C",
+      "headingBefore": "main landmark, Search, heading, level 1",
+      "headingAfter": "main landmark, How to Change Text Size or Colors, heading, level 1",
+      "nextFocusAfter": "Change Text Size or Colors, link, focused, visited, linked, same page",
+      "announced": "How to Change Text Size or Colors Web Accessibility Initiative (WAI) W 3C, document",
+      "navigated": true
+    },
+    "focusContext": {
+      "focused": true,
+      "control": "Submit Search, button, focused",
+      "titleBefore": "Search Web Accessibility Initiative (WAI) W 3C",
+      "titleAfter": "Search Web Accessibility Initiative (WAI) W 3C"
+    },
+    "focusReveal": {
+      "asked": true,
+      "revealed": false,
+      "why": "nothing appeared on focus"
+    },
+    "focusEvents": {
+      "asked": true,
+      "checked": false,
+      "why": "focus-event log target unconfirmed (targetMatch=fallback, candidates=1)",
+      "log": null
+    },
+    "navigatedOnSubmit": {
+      "checked": true,
+      "navigated": false,
+      "from": "https://www.w3.org/WAI/search/?q=",
+      "to": "https://www.w3.org/WAI/search/?q="
+    },
+    "postSubmitNames": [
+      "Search | Web Accessibility Initiative (WAI) | W3C",
+      "Please fill out this field.",
+      "Skip Link and Language Selector",
+      "Main",
+      "Breadcrumb",
+      "Site",
+      "W3C homepage",
+      "Web Accessibility Initiative (WAI) homepage",
+      "Strategies, standards, resources to make the Web accessible to people with disabilities",
+      "Search Form",
+      "Search Results",
+      "feedback",
+      "Back to Top",
+      "W3C homepage",
+      "Web Accessibility Initiative (WAI) homepage",
+      "Strategies, standards,",
+      "resources to make the",
+      "Web accessible to",
+      "people with disabilities",
+      "Meta & Search",
+      "Search",
+      "You can also:",
+      "Search Form",
+      "Search:",
+      "Search",
+      "Search Results",
+      "E-mail",
+      "Fork & Edit on GitHub",
+      "New GitHub Issue",
+      "Back to Top",
+      "W3C Web Accessibility Initiative (WAI)",
+      "Strategies, standards, resources to make the Web accessible to people with disabilities",
+      "Copyright © 2026",
+      "World Wide Web Consortium",
+      ".",
+      "World Wide Web Consortium",
+      "liability",
+      ",",
+      "trademark",
+      "and",
+      "permissive license",
+      "rules apply unless otherwise noted. See",
+      "Permission to Use WAI Material",
+      ".",
+      "Skip to Content",
+      "Change Text Size or Colors",
+      "All Translations",
+      "Accessibility Fundamentals",
+      "Planning & Policies",
+      "Design & Develop",
+      "Test & Evaluate",
+      "Teach & Advocate",
+      "Standards/ Guidelines",
+      "Search",
+      "This page searches accessibility introductory and educational materials on the WAI website.",
+      "You can also:",
+      "•",
+      "Search W3C standards, guidelines, and Notes",
+      ", including accessibility and other areas",
+      "•",
+      "Search the entire W3C website",
+      "Search Form",
+      "Search:",
+      "Search",
+      "Search Results",
+      "Help improve this page",
+      "Please share your ideas, suggestions, or comments via e-mail to the publicly-archived list",
+      "wai@w3.org",
+      "or via GitHub.",
+      "E-mail",
+      "Fork & Edit on GitHub",
+      "New GitHub Issue",
+      "Back to Top",
+      "W3C Web Accessibility Initiative (WAI)",
+      "Strategies, standards, resources to make the Web accessible to people with disabilities",
+      "Copyright © 2026",
+      "World Wide Web Consortium",
+      ".",
+      "W3C",
+      "®",
+      "liability",
+      ",",
+      "trademark",
+      "and",
+      "permissive license",
+      "rules apply unless otherwise noted. See",
+      "Permission to Use WAI Material",
+      ".",
+      "Skip to Content",
+      "Change Text Size or Colors",
+      "All Translations",
+      "Accessibility Fundamentals",
+      "Planning & Policies",
+      "Design & Develop",
+      "Test & Evaluate",
+      "Teach & Advocate",
+      "Standards/",
+      "Guidelines",
+      "Home",
+      "...",
+      "Search",
+      "This page searches accessibility introductory and educational materials on the",
+      "WAI website.",
+      "Search W3C standards, guidelines, and Notes",
+      ", including accessibility and other",
+      "areas",
+      "Search the entire W3C website",
+      "Search:",
+      "Search",
+      "Help improve this page",
+      "Please share your ideas, suggestions, or comments via e-mail to the publicly-",
+      "archived list",
+      "wai@w3.org",
+      "or via GitHub.",
+      "E-mail",
+      "Fork & Edit on GitHub",
+      "New GitHub Issue",
+      "W3C Web Accessibility Initiative (WAI)",
+      "Get News in Email",
+      "LinkedIn",
+      "Mastodon",
+      "YouTube",
+      "Home",
+      "Contact",
+      "Site map",
+      "Support WAI",
+      "News",
+      "Accessibility statement",
+      "All Translations",
+      "Resources for roles",
+      "World Wide Web Consortium",
+      "W3C",
+      "®",
+      "liability",
+      "trademark",
+      "permissive license",
+      "Permission to Use WAI Material",
+      "Skip to Content",
+      "Change Text Size or Colors",
+      "All Translations",
+      "Get Involved",
+      "About W3C WAI",
+      "Accessibility",
+      "Fundamentals",
+      "Planning & Policies",
+      "Design & Develop",
+      "Test & Evaluate",
+      "Teach & Advocate",
+      "Standards/",
+      "Guidelines",
+      "Home",
+      "...",
+      "Search W3C standards, guidelines, and Notes",
+      "Search the entire W3C website",
+      "Help improve this page",
+      "wai@w3.org",
+      "Get News in Email",
+      "LinkedIn",
+      "Mastodon",
+      "YouTube",
+      "Home",
+      "Contact",
+      "Site map",
+      "Support WAI",
+      "News",
+      "Accessibility statement",
+      "All Translations",
+      "Resources for roles",
+      "Get Involved",
+      "About W3C WAI",
+      "Submit Search",
+      "Home",
+      "Get News in Email",
+      "LinkedIn",
+      "Mastodon",
+      "YouTube",
+      "Home",
+      "Contact",
+      "Site map",
+      "Support WAI",
+      "News",
+      "Accessibility statement",
+      "All Translations",
+      "Resources for roles",
+      "Get Involved",
+      "About W3C WAI",
+      "Search:",
+      "Search",
+      "Submit Search",
+      "Search:"
+    ]
+  },
+  "artifactPath": "runs\\witness\\2026-09-13T18-24-21-055Z-www-w3-org.json",
+  "environment": {
+    "measuredAt": "2026-09-13T18:24:19.309Z",
+    "screenReader": "NVDA",
+    "screenReaderVersion": "2026.1.1",
+    "browser": "Microsoft Edge",
+    "browserVersion": "151.0.4129.72",
+    "guidepupVersion": "0.31.0",
+    "screenReaderSettings": "speech.autoLanguageSwitching=True,speech.reportLanguage=True,speech.reportNotSupportedLanguage=speech",
+    "browserProfile": "adopted",
+    "nodeVersion": "v22.23.2",
+    "windowsVersion": "Microsoft Windows Server 2022 Datacenter 10.0.20348",
+    "architecture": "x64",
+    "workerCode": "a2eddbf4f53888fc",
+    "captureProtocol": 18,
+    "provisionRevision": "unstamped"
+  },
+  "ruleBased": [
+    {
+      "source": "axe-core",
+      "wcag": [
+        "4.1.2"
+      ],
+      "rule": "aria-allowed-attr",
+      "impact": "critical",
+      "help": "Elements must only use supported ARIA attributes",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/aria-allowed-attr?application=playwright",
+      "nodes": [
+        {
+          "html": "<a class=\"ytmVideoInfoVideoTitle\" aria-level=\"2\" href=\"https://www.youtube.com/watch?v=iWO5N3n1DXU\"><span class=\"ytAttributedStringHost ytmVideoInfoLink ytAttributedStringWhiteSpaceNoWrap\" style=\"\">Web Accessibility Perspectives: Video Captions</span></a>",
+          "target": [
+            "iframe",
+            ".ytmVideoInfoVideoTitle"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "axe-core",
+      "wcag": [
+        "4.1.2"
+      ],
+      "rule": "aria-prohibited-attr",
+      "impact": "serious",
+      "help": "Elements must only use permitted ARIA attributes",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/aria-prohibited-attr?application=playwright",
+      "nodes": [
+        {
+          "html": "<div class=\"html5-video-player ytp-hide-controls ytp-exp-bottom-control-flexbox ytp-modern-caption ytp-livebadge-color unstarted-mode ytp-small-mode\" tabindex=\"\" id=\"movie_player\" data-version=\"/s/player/8c3fda2d/player_embed_es6.vflset/en_US/base.js\" aria-label=\"YouTube Video Player\">",
+          "target": [
+            "iframe",
+            "#movie_player"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "axe-core",
+      "wcag": [
+        "4.1.2"
+      ],
+      "rule": "button-name",
+      "impact": "critical",
+      "help": "Buttons must have discernible text",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/button-name?application=playwright",
+      "nodes": [
+        {
+          "html": "<button class=\"ytmVideoInfoLink ytmVideoInfoChannelAvatar\"><img class=\"ytCoreImageHost ytmVideoInfoChannelLogo ytCoreImageFillParentHeight ytCoreImageFillParentWidth ytCoreImageContentModeScaleAspectFill\" alt=\"thumbnail-image\" style=\"background-color: transparent;\"></button>",
+          "target": [
+            "iframe",
+            ".ytmVideoInfoChannelAvatar"
+          ]
+        }
+      ]
+    }
+  ],
+  "verdict": {
+    "novelty": {
+      "nearestTrainingCosine": 0.9749,
+      "inSupport": true,
+      "floor": 0.6557
+    },
+    "runtime": {
+      "numpy": "2.5.1",
+      "onnxruntime": "1.28.0",
+      "safetensors": "0.8.0",
+      "transformers": "4.57.6"
+    },
+    "taskCompletable": true,
+    "summary": "This layer covers 20 criteria: 17 by deterministic rules and 17 by the trained scorer, overlapping. Other criteria are unchecked, not clean.",
+    "findings": [],
+    "confidence": 1,
+    "suppressed": []
+  },
+  "captureVerified": true,
+  "conformance": [
+    {
+      "number": 1,
+      "name": "Conformance Level",
+      "establishes": "Assessed 20 of 55 WCAG 2.2 A/AA success criteria.",
+      "limitation": "No conformance level is claimed or established. 35 criteria were NOT assessed and are unchecked, not clean. A conforming alternate version, if this page has one, is not detected."
+    },
+    {
+      "number": 2,
+      "name": "Full pages",
+      "establishes": "Every structural sweep ran until the page ran out of elements, so the parts of the page a screen reader can reach were examined in full. Reach, as distinct announcements the screen reader produced against DISTINCT NAMES the browser reports — like compared with like: heading 19/19, landmark 15/13, link 40/70 of 75 on the page, graphic 3/3. A shortfall here is a coverage question about this tool, not a finding about the page.",
+      "limitation": "One viewport, one state, one document. Responsive VARIATIONS each have to conform separately and only one was rendered; content inside iframes is not entered; and WCAG counts an application at a single URI as ONE page, so every state reachable without a URL change — menus, dialogs, steps of a wizard — is part of this page and was not examined. Document a529f931: served https://www.w3.org/WAI/. Render (domCensus): tabbable=78, formField=1, link=75, landmark=13, heading=19, graphic=2. THIS CAPTURE NAMED MORE THAN ONE DOCUMENT and so has no single identity — title \"Search Web Accessibility Initiative (WAI) W 3C\" then \"How to Change Text Size or Colors Web Accessibility Initiative (WAI) W 3C\". Its evidence was gathered across more than one page. Every one of the 9 form control(s) found was offered to the activation probe."
+    },
+    {
+      "number": 3,
+      "name": "Complete processes",
+      "establishes": "Findings are scoped to this single page.",
+      "limitation": "If this page is one step of a process — signing in, checking out, completing a multi-step form — the other steps were not assessed, and WCAG conformance for the process cannot be claimed from this run. See docs/adr/0011-task-journeys.md. Third-party content (embeds, adverts, widgets) is also not distinguished from the author's own, so a finding may concern content they cannot control — the case WCAG §5.4 covers with a statement of partial conformance."
+    },
+    {
+      "number": 4,
+      "name": "Only Accessibility-Supported Ways of Using Technologies",
+      "establishes": "Evidence is what NVDA 2026.1.1 driving Microsoft Edge 151.0.4129.72 actually announced, so support is demonstrated rather than inferred from markup.",
+      "limitation": "Accessibility support was demonstrated for that one combination only. Other screen readers, browsers and platforms behave differently and were not assessed, and one language version was read with one synthesiser — §5.5 requires each language offered to conform on its own. Nor was this page checked with the technology it relies on turned OFF or unsupported, which §5.2.5 also requires."
+    },
+    {
+      "number": 5,
+      "name": "Non-Interference",
+      "establishes": "Of the four criteria that apply to ALL content, assessed: 1.4.2, 2.1.2.",
+      "limitation": "NOT assessed: 2.2.2, 2.3.1. These apply to all content on the page whether or not it is relied upon, so they cannot be assumed satisfied. 2.3.1 Three Flashes is visual and belongs to the rule-based layer, which ran."
+    }
+  ],
+  "outcomes": [
+    {
+      "criterion": "1.1.1",
+      "outcome": "passed",
+      "reason": "Content of the relevant kind was examined in full and no failure was found."
+    },
+    {
+      "criterion": "1.2.1",
+      "outcome": "untested",
+      "reason": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+    },
+    {
+      "criterion": "1.2.2",
+      "outcome": "cantTell",
+      "assessor": "axe-core",
+      "reason": "The rule layer (axe-core) ran its rules for this criterion and found no violation. Automated rules cover only part of any criterion, so this is not shown to fail — which is not the same as satisfied."
+    },
+    {
+      "criterion": "1.2.3",
+      "outcome": "untested",
+      "reason": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+    },
+    {
+      "criterion": "1.2.4",
+      "outcome": "untested",
+      "reason": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+    },
+    {
+      "criterion": "1.2.5",
+      "outcome": "untested",
+      "reason": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+    },
+    {
+      "criterion": "1.3.1",
+      "outcome": "passed",
+      "reason": "Content of the relevant kind was examined in full and no failure was found."
+    },
+    {
+      "criterion": "1.3.2",
+      "outcome": "untested",
+      "reason": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+    },
+    {
+      "criterion": "1.3.3",
+      "outcome": "untested",
+      "reason": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+    },
+    {
+      "criterion": "1.3.4",
+      "outcome": "untested",
+      "reason": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+    },
+    {
+      "criterion": "1.3.5",
+      "outcome": "inapplicable",
+      "reason": "The page exposed nothing of the kind this criterion is about, so there is nothing to be right or wrong about."
+    },
+    {
+      "criterion": "1.4.1",
+      "outcome": "cantTell",
+      "assessor": "axe-core",
+      "reason": "The rule layer (axe-core) ran its rules for this criterion and found no violation. Automated rules cover only part of any criterion, so this is not shown to fail — which is not the same as satisfied."
+    },
+    {
+      "criterion": "1.4.2",
+      "outcome": "inapplicable",
+      "reason": "The page exposed nothing of the kind this criterion is about, so there is nothing to be right or wrong about."
+    },
+    {
+      "criterion": "1.4.3",
+      "outcome": "cantTell",
+      "assessor": "axe-core",
+      "reason": "The rule layer (axe-core) ran its rules for this criterion and found no violation. Automated rules cover only part of any criterion, so this is not shown to fail — which is not the same as satisfied."
+    },
+    {
+      "criterion": "1.4.4",
+      "outcome": "cantTell",
+      "assessor": "axe-core",
+      "reason": "The rule layer (axe-core) ran its rules for this criterion and found no violation. Automated rules cover only part of any criterion, so this is not shown to fail — which is not the same as satisfied."
+    },
+    {
+      "criterion": "1.4.5",
+      "outcome": "untested",
+      "reason": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+    },
+    {
+      "criterion": "1.4.10",
+      "outcome": "untested",
+      "reason": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+    },
+    {
+      "criterion": "1.4.11",
+      "outcome": "untested",
+      "reason": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+    },
+    {
+      "criterion": "1.4.12",
+      "outcome": "cantTell",
+      "assessor": "axe-core",
+      "reason": "The rule layer (axe-core) ran its rules for this criterion and found no violation. Automated rules cover only part of any criterion, so this is not shown to fail — which is not the same as satisfied."
+    },
+    {
+      "criterion": "1.4.13",
+      "outcome": "inapplicable",
+      "reason": "The page exposed nothing of the kind this criterion is about, so there is nothing to be right or wrong about."
+    },
+    {
+      "criterion": "2.1.1",
+      "outcome": "cantTell",
+      "reason": "The formField sweep announced a different number of elements than the browser exposes, so this criterion rests on an examination known to be partial."
+    },
+    {
+      "criterion": "2.1.2",
+      "outcome": "passed",
+      "reason": "Content of the relevant kind was examined in full and no failure was found."
+    },
+    {
+      "criterion": "2.1.4",
+      "outcome": "untested",
+      "reason": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+    },
+    {
+      "criterion": "2.2.1",
+      "outcome": "cantTell",
+      "assessor": "axe-core",
+      "reason": "The rule layer (axe-core) ran its rules for this criterion and found no violation. Automated rules cover only part of any criterion, so this is not shown to fail — which is not the same as satisfied."
+    },
+    {
+      "criterion": "2.2.2",
+      "outcome": "cantTell",
+      "assessor": "axe-core",
+      "reason": "The rule layer (axe-core) ran its rules for this criterion and found no violation. Automated rules cover only part of any criterion, so this is not shown to fail — which is not the same as satisfied."
+    },
+    {
+      "criterion": "2.3.1",
+      "outcome": "untested",
+      "reason": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+    },
+    {
+      "criterion": "2.4.1",
+      "outcome": "cantTell",
+      "reason": "The link sweep announced a different number of elements than the browser exposes, so this criterion rests on an examination known to be partial."
+    },
+    {
+      "criterion": "2.4.2",
+      "outcome": "cantTell",
+      "reason": "The link sweep announced a different number of elements than the browser exposes, so this criterion rests on an examination known to be partial."
+    },
+    {
+      "criterion": "2.4.3",
+      "outcome": "cantTell",
+      "reason": "The formField sweep announced a different number of elements than the browser exposes, so this criterion rests on an examination known to be partial."
+    },
+    {
+      "criterion": "2.4.4",
+      "outcome": "cantTell",
+      "reason": "The link sweep announced a different number of elements than the browser exposes, so this criterion rests on an examination known to be partial."
+    },
+    {
+      "criterion": "2.4.5",
+      "outcome": "untested",
+      "reason": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+    },
+    {
+      "criterion": "2.4.6",
+      "outcome": "cantTell",
+      "reason": "The formField sweep announced a different number of elements than the browser exposes, so this criterion rests on an examination known to be partial."
+    },
+    {
+      "criterion": "2.4.7",
+      "outcome": "cantTell",
+      "reason": "The evidence this criterion needs was not collected on this capture, so it is undetermined rather than clean."
+    },
+    {
+      "criterion": "2.4.11",
+      "outcome": "untested",
+      "reason": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+    },
+    {
+      "criterion": "2.5.1",
+      "outcome": "untested",
+      "reason": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+    },
+    {
+      "criterion": "2.5.2",
+      "outcome": "untested",
+      "reason": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+    },
+    {
+      "criterion": "2.5.3",
+      "outcome": "untested",
+      "reason": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+    },
+    {
+      "criterion": "2.5.4",
+      "outcome": "untested",
+      "reason": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+    },
+    {
+      "criterion": "2.5.7",
+      "outcome": "untested",
+      "reason": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+    },
+    {
+      "criterion": "2.5.8",
+      "outcome": "cantTell",
+      "assessor": "axe-core",
+      "reason": "The rule layer (axe-core) ran its rules for this criterion and found no violation. Automated rules cover only part of any criterion, so this is not shown to fail — which is not the same as satisfied."
+    },
+    {
+      "criterion": "3.1.1",
+      "outcome": "cantTell",
+      "assessor": "axe-core",
+      "reason": "The rule layer (axe-core) ran its rules for this criterion and found no violation. Automated rules cover only part of any criterion, so this is not shown to fail — which is not the same as satisfied."
+    },
+    {
+      "criterion": "3.1.2",
+      "outcome": "cantTell",
+      "assessor": "axe-core",
+      "reason": "The rule layer (axe-core) ran its rules for this criterion and found no violation. Automated rules cover only part of any criterion, so this is not shown to fail — which is not the same as satisfied."
+    },
+    {
+      "criterion": "3.2.1",
+      "outcome": "inapplicable",
+      "reason": "The page exposed nothing of the kind this criterion is about, so there is nothing to be right or wrong about."
+    },
+    {
+      "criterion": "3.2.2",
+      "outcome": "inapplicable",
+      "reason": "The page exposed nothing of the kind this criterion is about, so there is nothing to be right or wrong about."
+    },
+    {
+      "criterion": "3.2.3",
+      "outcome": "untested",
+      "reason": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+    },
+    {
+      "criterion": "3.2.4",
+      "outcome": "untested",
+      "reason": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+    },
+    {
+      "criterion": "3.2.6",
+      "outcome": "untested",
+      "reason": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+    },
+    {
+      "criterion": "3.3.1",
+      "outcome": "inapplicable",
+      "reason": "The page exposed nothing of the kind this criterion is about, so there is nothing to be right or wrong about."
+    },
+    {
+      "criterion": "3.3.2",
+      "outcome": "cantTell",
+      "reason": "The formField sweep announced a different number of elements than the browser exposes, so this criterion rests on an examination known to be partial."
+    },
+    {
+      "criterion": "3.3.3",
+      "outcome": "inapplicable",
+      "reason": "The page exposed nothing of the kind this criterion is about, so there is nothing to be right or wrong about."
+    },
+    {
+      "criterion": "3.3.4",
+      "outcome": "untested",
+      "reason": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+    },
+    {
+      "criterion": "3.3.7",
+      "outcome": "untested",
+      "reason": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+    },
+    {
+      "criterion": "3.3.8",
+      "outcome": "untested",
+      "reason": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+    },
+    {
+      "criterion": "4.1.2",
+      "outcome": "cantTell",
+      "reason": "The formField sweep announced a different number of elements than the browser exposes, so this criterion rests on an examination known to be partial."
+    },
+    {
+      "criterion": "4.1.3",
+      "outcome": "passed",
+      "reason": "Content of the relevant kind was examined in full and no failure was found."
+    }
+  ],
+  "earl": {
+    "@context": {
+      "earl": "http://www.w3.org/ns/earl#",
+      "dct": "http://purl.org/dc/terms/",
+      "WCAG22": "https://www.w3.org/TR/WCAG22/#"
+    },
+    "@graph": [
+      {
+        "@id": "_:assertor",
+        "@type": "earl:Software",
+        "dct:title": "a11ign",
+        "dct:hasVersion": "0.0.0",
+        "dct:description": "Drives a real screen reader. Evidence produced by NVDA 2026.1.1 Microsoft Edge 151.0.4129.72."
+      },
+      {
+        "@id": "_:subject",
+        "@type": [
+          "earl:TestSubject",
+          "earl:WebPage"
+        ],
+        "dct:source": "https://www.w3.org/WAI",
+        "dct:date": "2026-09-13T18:24:25.936Z"
+      },
+      {
+        "@id": "_:assertion-0",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#non-text-content"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:passed"
+          },
+          "dct:description": "Content of the relevant kind was examined in full and no failure was found."
+        }
+      },
+      {
+        "@id": "_:assertion-1",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#audio-only-and-video-only-prerecorded"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:untested"
+          },
+          "dct:description": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+        }
+      },
+      {
+        "@id": "_:assertion-2",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#captions-prerecorded"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:cantTell"
+          },
+          "dct:description": "The rule layer (axe-core) ran its rules for this criterion and found no violation. Automated rules cover only part of any criterion, so this is not shown to fail — which is not the same as satisfied."
+        }
+      },
+      {
+        "@id": "_:assertion-3",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#audio-description-or-media-alternative-prerecorded"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:untested"
+          },
+          "dct:description": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+        }
+      },
+      {
+        "@id": "_:assertion-4",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#captions-live"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:untested"
+          },
+          "dct:description": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+        }
+      },
+      {
+        "@id": "_:assertion-5",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#audio-description-prerecorded"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:untested"
+          },
+          "dct:description": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+        }
+      },
+      {
+        "@id": "_:assertion-6",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#info-and-relationships"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:passed"
+          },
+          "dct:description": "Content of the relevant kind was examined in full and no failure was found."
+        }
+      },
+      {
+        "@id": "_:assertion-7",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#meaningful-sequence"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:untested"
+          },
+          "dct:description": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+        }
+      },
+      {
+        "@id": "_:assertion-8",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#sensory-characteristics"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:untested"
+          },
+          "dct:description": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+        }
+      },
+      {
+        "@id": "_:assertion-9",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#orientation"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:untested"
+          },
+          "dct:description": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+        }
+      },
+      {
+        "@id": "_:assertion-10",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#identify-input-purpose"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:inapplicable"
+          },
+          "dct:description": "The page exposed nothing of the kind this criterion is about, so there is nothing to be right or wrong about."
+        }
+      },
+      {
+        "@id": "_:assertion-11",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#use-of-color"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:cantTell"
+          },
+          "dct:description": "The rule layer (axe-core) ran its rules for this criterion and found no violation. Automated rules cover only part of any criterion, so this is not shown to fail — which is not the same as satisfied."
+        }
+      },
+      {
+        "@id": "_:assertion-12",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#audio-control"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:inapplicable"
+          },
+          "dct:description": "The page exposed nothing of the kind this criterion is about, so there is nothing to be right or wrong about."
+        }
+      },
+      {
+        "@id": "_:assertion-13",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#contrast-minimum"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:cantTell"
+          },
+          "dct:description": "The rule layer (axe-core) ran its rules for this criterion and found no violation. Automated rules cover only part of any criterion, so this is not shown to fail — which is not the same as satisfied."
+        }
+      },
+      {
+        "@id": "_:assertion-14",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#resize-text"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:cantTell"
+          },
+          "dct:description": "The rule layer (axe-core) ran its rules for this criterion and found no violation. Automated rules cover only part of any criterion, so this is not shown to fail — which is not the same as satisfied."
+        }
+      },
+      {
+        "@id": "_:assertion-15",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#images-of-text"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:untested"
+          },
+          "dct:description": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+        }
+      },
+      {
+        "@id": "_:assertion-16",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#reflow"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:untested"
+          },
+          "dct:description": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+        }
+      },
+      {
+        "@id": "_:assertion-17",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#non-text-contrast"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:untested"
+          },
+          "dct:description": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+        }
+      },
+      {
+        "@id": "_:assertion-18",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#text-spacing"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:cantTell"
+          },
+          "dct:description": "The rule layer (axe-core) ran its rules for this criterion and found no violation. Automated rules cover only part of any criterion, so this is not shown to fail — which is not the same as satisfied."
+        }
+      },
+      {
+        "@id": "_:assertion-19",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#content-on-hover-or-focus"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:inapplicable"
+          },
+          "dct:description": "The page exposed nothing of the kind this criterion is about, so there is nothing to be right or wrong about."
+        }
+      },
+      {
+        "@id": "_:assertion-20",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#keyboard"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:cantTell"
+          },
+          "dct:description": "The formField sweep announced a different number of elements than the browser exposes, so this criterion rests on an examination known to be partial."
+        }
+      },
+      {
+        "@id": "_:assertion-21",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#no-keyboard-trap"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:passed"
+          },
+          "dct:description": "Content of the relevant kind was examined in full and no failure was found."
+        }
+      },
+      {
+        "@id": "_:assertion-22",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#character-key-shortcuts"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:untested"
+          },
+          "dct:description": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+        }
+      },
+      {
+        "@id": "_:assertion-23",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#timing-adjustable"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:cantTell"
+          },
+          "dct:description": "The rule layer (axe-core) ran its rules for this criterion and found no violation. Automated rules cover only part of any criterion, so this is not shown to fail — which is not the same as satisfied."
+        }
+      },
+      {
+        "@id": "_:assertion-24",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#pause-stop-hide"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:cantTell"
+          },
+          "dct:description": "The rule layer (axe-core) ran its rules for this criterion and found no violation. Automated rules cover only part of any criterion, so this is not shown to fail — which is not the same as satisfied."
+        }
+      },
+      {
+        "@id": "_:assertion-25",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#three-flashes-or-below-threshold"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:untested"
+          },
+          "dct:description": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+        }
+      },
+      {
+        "@id": "_:assertion-26",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#bypass-blocks"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:cantTell"
+          },
+          "dct:description": "The link sweep announced a different number of elements than the browser exposes, so this criterion rests on an examination known to be partial."
+        }
+      },
+      {
+        "@id": "_:assertion-27",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#page-titled"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:cantTell"
+          },
+          "dct:description": "The link sweep announced a different number of elements than the browser exposes, so this criterion rests on an examination known to be partial."
+        }
+      },
+      {
+        "@id": "_:assertion-28",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#focus-order"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:cantTell"
+          },
+          "dct:description": "The formField sweep announced a different number of elements than the browser exposes, so this criterion rests on an examination known to be partial."
+        }
+      },
+      {
+        "@id": "_:assertion-29",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#link-purpose-in-context"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:cantTell"
+          },
+          "dct:description": "The link sweep announced a different number of elements than the browser exposes, so this criterion rests on an examination known to be partial."
+        }
+      },
+      {
+        "@id": "_:assertion-30",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#multiple-ways"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:untested"
+          },
+          "dct:description": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+        }
+      },
+      {
+        "@id": "_:assertion-31",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#headings-and-labels"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:cantTell"
+          },
+          "dct:description": "The formField sweep announced a different number of elements than the browser exposes, so this criterion rests on an examination known to be partial."
+        }
+      },
+      {
+        "@id": "_:assertion-32",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#focus-visible"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:cantTell"
+          },
+          "dct:description": "The evidence this criterion needs was not collected on this capture, so it is undetermined rather than clean."
+        }
+      },
+      {
+        "@id": "_:assertion-33",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#focus-not-obscured-minimum"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:untested"
+          },
+          "dct:description": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+        }
+      },
+      {
+        "@id": "_:assertion-34",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#pointer-gestures"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:untested"
+          },
+          "dct:description": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+        }
+      },
+      {
+        "@id": "_:assertion-35",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#pointer-cancellation"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:untested"
+          },
+          "dct:description": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+        }
+      },
+      {
+        "@id": "_:assertion-36",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#label-in-name"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:untested"
+          },
+          "dct:description": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+        }
+      },
+      {
+        "@id": "_:assertion-37",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#motion-actuation"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:untested"
+          },
+          "dct:description": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+        }
+      },
+      {
+        "@id": "_:assertion-38",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#dragging-movements"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:untested"
+          },
+          "dct:description": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+        }
+      },
+      {
+        "@id": "_:assertion-39",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#target-size-minimum"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:cantTell"
+          },
+          "dct:description": "The rule layer (axe-core) ran its rules for this criterion and found no violation. Automated rules cover only part of any criterion, so this is not shown to fail — which is not the same as satisfied."
+        }
+      },
+      {
+        "@id": "_:assertion-40",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#language-of-page"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:cantTell"
+          },
+          "dct:description": "The rule layer (axe-core) ran its rules for this criterion and found no violation. Automated rules cover only part of any criterion, so this is not shown to fail — which is not the same as satisfied."
+        }
+      },
+      {
+        "@id": "_:assertion-41",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#language-of-parts"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:cantTell"
+          },
+          "dct:description": "The rule layer (axe-core) ran its rules for this criterion and found no violation. Automated rules cover only part of any criterion, so this is not shown to fail — which is not the same as satisfied."
+        }
+      },
+      {
+        "@id": "_:assertion-42",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#on-focus"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:inapplicable"
+          },
+          "dct:description": "The page exposed nothing of the kind this criterion is about, so there is nothing to be right or wrong about."
+        }
+      },
+      {
+        "@id": "_:assertion-43",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#on-input"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:inapplicable"
+          },
+          "dct:description": "The page exposed nothing of the kind this criterion is about, so there is nothing to be right or wrong about."
+        }
+      },
+      {
+        "@id": "_:assertion-44",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#consistent-navigation"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:untested"
+          },
+          "dct:description": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+        }
+      },
+      {
+        "@id": "_:assertion-45",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#consistent-identification"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:untested"
+          },
+          "dct:description": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+        }
+      },
+      {
+        "@id": "_:assertion-46",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#consistent-help"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:untested"
+          },
+          "dct:description": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+        }
+      },
+      {
+        "@id": "_:assertion-47",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#error-identification"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:inapplicable"
+          },
+          "dct:description": "The page exposed nothing of the kind this criterion is about, so there is nothing to be right or wrong about."
+        }
+      },
+      {
+        "@id": "_:assertion-48",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#labels-or-instructions"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:cantTell"
+          },
+          "dct:description": "The formField sweep announced a different number of elements than the browser exposes, so this criterion rests on an examination known to be partial."
+        }
+      },
+      {
+        "@id": "_:assertion-49",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#error-suggestion"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:inapplicable"
+          },
+          "dct:description": "The page exposed nothing of the kind this criterion is about, so there is nothing to be right or wrong about."
+        }
+      },
+      {
+        "@id": "_:assertion-50",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#error-prevention-legal-financial-data"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:untested"
+          },
+          "dct:description": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+        }
+      },
+      {
+        "@id": "_:assertion-51",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#redundant-entry"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:untested"
+          },
+          "dct:description": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+        }
+      },
+      {
+        "@id": "_:assertion-52",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#accessible-authentication-minimum"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:untested"
+          },
+          "dct:description": "No assessor in this tool covers this criterion. It is unchecked, not clean."
+        }
+      },
+      {
+        "@id": "_:assertion-53",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#name-role-value"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:cantTell"
+          },
+          "dct:description": "The formField sweep announced a different number of elements than the browser exposes, so this criterion rests on an examination known to be partial."
+        }
+      },
+      {
+        "@id": "_:assertion-54",
+        "@type": "earl:Assertion",
+        "earl:assertedBy": {
+          "@id": "_:assertor"
+        },
+        "earl:subject": {
+          "@id": "_:subject"
+        },
+        "earl:test": {
+          "@id": "https://www.w3.org/TR/WCAG22/#status-messages"
+        },
+        "earl:mode": {
+          "@id": "earl:automatic"
+        },
+        "earl:result": {
+          "@type": "earl:TestResult",
+          "earl:outcome": {
+            "@id": "earl:passed"
+          },
+          "dct:description": "Content of the relevant kind was examined in full and no failure was found."
+        }
+      }
+    ]
+  }
+}
