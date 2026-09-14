@@ -27,8 +27,18 @@ the ban is still right, the justification was not.
 **Setup, done by me and not by them**, so the fleet-affecting git state stays with one driver:
 
 ```
-git worktree add ../a11y-wt-<name> -b agent/<branch>
+node scripts/row-claim.mjs check <n>
+node scripts/row-claim.mjs claim <n> --session=<name> --branch=agent/<branch> --worktree=../a11y-wt-<name>
 cd ../a11y-wt-<name> && npm install && ln -s <main>/runs runs && ln -s <main>/.venv .venv
+```
+
+**Since #1432 (2026-09-14) `claim` CREATES the worktree** from `origin/main`, stamps it, then claims, so both
+commands run from a non-primary tree and nobody makes the worktree first. A worktree or branch made
+beforehand is refused before any write, and a reader who meets this followed the old order:
+
+```
+NOT CLAIMED: --worktree=<path> ALREADY EXISTS, stamped by `<session>`. Refusing before any write: ...
+NOT CLAIMED: --branch=<name> ALREADY EXISTS locally (...). Refusing before any write.
 ```
 
 `.gitignore` carries `/runs` without the trailing slash precisely because a symlink is not a directory —
