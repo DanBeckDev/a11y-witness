@@ -90,6 +90,23 @@ export function documentsSpannedSentence(conformance: RunResult["conformance"]):
   return null;
 }
 
+/**
+ * The producer's own sentences for a criterion resting on an examination that stopped short -- #1563.
+ *
+ * READ, never rephrased, like `DOCUMENTS_SPANNED` above: `@a11ign/judge`'s `outcomes.ts` ends a `cantTell` reason
+ * with one of these when a sweep feeding the criterion stopped before the page did, or ended having reached less
+ * than the browser exposes. Rehearsal 2's result carried eight, and its log read `1 finding(s)` with no word of
+ * them. `summary.test.ts` drives the real producer for both sentences, so a change to its wording fails there
+ * rather than this count going quietly to zero. Left out: the left-site reason, which #1363's own line states.
+ */
+const PARTIAL_EXAMINATION = new RegExp("(?:so this criterion rests on an examination known to be partial"
+  + "|sweep stopped before the page did, so content past that point was never examined for this criterion)\\.$");
+
+/** How many undetermined criteria rest on an examination known to be partial. Zero with no outcomes at all. */
+export function partialExaminationCount(outcomes: RunResult["outcomes"]): number {
+  return (outcomes ?? []).filter((o) => o.outcome === "cantTell" && PARTIAL_EXAMINATION.test(o.reason)).length;
+}
+
 /** Ordered worst-first, so a threshold can be "this severity or worse". */
 const SEVERITY_ORDER: Severity[] = ["blocker", "serious", "moderate", "minor"];
 
@@ -177,6 +194,12 @@ function outcomeSection(outcomes: RunResult["outcomes"]): string[] {
   const undetermined = tally("cantTell");
   const untested = tally("untested");
   if (undetermined === 0 && untested === 0) return [];
+  const partial = partialExaminationCount(outcomes);
+  // #1563: the one reason among the referrals that is about this tool rather than the page, so it is counted apart.
+  const cutShort = partial
+    ? ` **${partial} of the referred criteria rest on an examination known to be partial:** a sweep stopped short `
+      + "of the page, so they were not examined in full."
+    : "";
   // #254: this renders on a STRANGER'S pull request, with no legend and no chance to ask -- worse than
   // #242's `report.ts` instance, which at least reaches someone who ran the CLI and can scroll up to one.
   // `cantTell` is ACT's own vocabulary term (still what `--json`/`ActOutcome` emit, untouched); a reviewer
@@ -187,7 +210,7 @@ function outcomeSection(outcomes: RunResult["outcomes"]): string[] {
   // it outright, correctly: a reader with no legend gets no term to misread.
   return ["", `**Not determined:** ${undetermined} criteria we cover were referred — worth a person's `
     + `eyes, the tool cannot decide these on its own — and ${untested} are not covered by any assessor `
-    + "of ours. Neither is a pass — see the run artifact for the per-criterion reasons."];
+    + `of ours. Neither is a pass — see the run artifact for the per-criterion reasons.${cutShort}`];
 }
 
 /**
@@ -283,6 +306,10 @@ export function logLines(result: RunResult, failOn: FailOn): string[] {
   if (documentsSpannedSentence(result.conformance)) {
     lines.push("a11ign: this capture named MORE THAN ONE DOCUMENT -- its evidence was gathered across more "
       + "than one page (see the summary)");
+  }
+  const partial = partialExaminationCount(result.outcomes);
+  if (partial) {
+    lines.push(`a11ign: ${partial} criteria rest on an examination known to be partial -- see the artifact`);
   }
   lines.push(`a11ign: ${findings.length} finding(s) (${breakdown})${left ? " in what was examined" : ""}; `
     + `fail-on=${failOn}`);
