@@ -257,7 +257,7 @@ Running it is one command; getting value out of it is a few habits.
        evidence: 4. link, Learn more
 ```
 
-`evidence` points at a line in the transcript. **Check it.** Run with `--json` to get the full transcript and find that line. If a finding's evidence is not in the transcript, that is a bug in this tool, not a defect in your page — please report it.
+`evidence` comes from the capture. **Check it.** Run with `--json`. A finding read from the page's announcements, like the one above, quotes a line in `transcript`. A finding about what happened when a control was activated or Tab was pressed reads that probe's record in `interaction` instead: `interaction.routeChange` for a link that changed the page without changing its title, for example. Some findings count or compare what they read (how many images have no name, reading order against tab order), and some read `structure`. If a finding's evidence is not borne out by `transcript`, `interaction` or `structure`, that is a bug in this tool, not a defect in your page — please report it.
 
 **Fix in the order it prints them.** Findings are grouped Perceive → Navigate → Interact. Something a user cannot perceive outranks something they cannot operate, because the second doesn't matter if the first blocks them.
 
