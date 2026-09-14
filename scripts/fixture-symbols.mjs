@@ -45,4 +45,6 @@ export const ABSENT_FIXTURE_SYMBOLS = Object.freeze({
     fixtureSymbol("RowReachabilityFixtureSy", "mbol719"),
   "row-reachability.test.ts #772 CONTROL: the symbol no tree holds":
     fixtureSymbol("no-tree-here-holds", "-this-symbol-zzz"),
+  "row-reachability.test.ts #1566: the subject-half carrier's symbol":
+    fixtureSymbol("rowReachabilitySeam", "Carrier1566"),
 });
