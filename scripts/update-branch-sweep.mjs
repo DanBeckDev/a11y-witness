@@ -48,6 +48,7 @@ import { sandboxGitEnv } from "./git-env.mjs";
 import { NO_VERDICT } from "./merge-guard/checks-rule.mjs";
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+import { isAtLeastAsNew } from "./newest-check-run.mjs";
 
 export const EXIT = { EXAMINED: 0, COULD_NOT_UPDATE: 1, CANNOT_ASK: 2 };
 
@@ -384,9 +385,10 @@ export function newestConclusion(runs, name) {
  * pair of facts the classification compares, so there is one scan and both readers call it.
  *
  * @param {{name?: string, conclusion?: string | null, completedAt?: string | null,
- *          startedAt?: string | null}[] | null | undefined} runs
+ *          startedAt?: string | null, detailsUrl?: string | null}[] | null | undefined} runs
  * @param {string} name
- * @returns {{conclusion?: string | null, completedAt?: string | null, startedAt?: string | null} | null}
+ * @returns {{conclusion?: string | null, completedAt?: string | null, startedAt?: string | null,
+ *   detailsUrl?: string | null} | null}
  */
 export function newestRun(runs, name) {
   const matching = (runs ?? []).filter((run) => run?.name === name);
@@ -399,11 +401,12 @@ export function newestRun(runs, name) {
   //
   // That is #498's own defect surviving its own fix, and it lands exactly where this row lives: an author
   // who has just pushed HAS a running gate, which is the case #488 is about.
-  const real = (/** @type {string | null | undefined} */ value) =>
-    (value && value !== ZERO_DATE ? value : null);
-  const stamp = (/** @type {{completedAt?: string | null, startedAt?: string | null}} */ run) =>
-    real(run.completedAt) ?? real(run.startedAt) ?? "";
-  return matching.reduce((best, run) => (stamp(run) >= stamp(best) ? run : best));
+  //
+  // #1623: THAT RULE NOW LIVES IN ONE COMPARATOR, `isAtLeastAsNew` (newest-check-run.mjs), which orders by
+  // WORKFLOW RUN first when both entries name a different one. Completion time put #1617's cancelled gate
+  // (run 34858134371, "completed" 14:49:32Z) behind the success it superseded (run 34858130620, 14:51:42Z), so
+  // this read SUCCESS on a PR GitHub held BLOCKED. Entries without a run id still take the rule above.
+  return matching.reduce((best, run) => (isAtLeastAsNew(run, best) ? run : best));
 }
 
 /**
