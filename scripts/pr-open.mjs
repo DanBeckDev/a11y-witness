@@ -56,12 +56,33 @@ export const EXIT_LANDED_THEN_FAILED = 3;
  */
 function runForReal(command) {
   try {
-    execSync(command, { stdio: "inherit", shell: "/bin/bash" });
+    execSync(command, { stdio: "inherit", shell: "/bin/bash", env: acceptanceEnv(process.env) });
     return 0;
   } catch (error) {
     const status = /** @type {{ status?: number }} */ (error).status;
     return typeof status === "number" ? status : 1;
   }
+}
+
+/**
+ * #1578: THE ACCEPTANCE'S OWN `PATH`, and only the Acceptance's.
+ *
+ * pr-open's `gh pr create`/`gh pr edit` and its head read resolve `gh` from the process `PATH`, and until this
+ * the Acceptance child inherited that same `PATH`. So a refusing `gh` shim first on `PATH` refused pr-open's own
+ * create, and with no shim a tracker-reaching test ran against the real `gh` inside pr-open, where nothing could
+ * count its calls (#1576). `A11Y_ACCEPTANCE_PATH` is prepended to the CHILD's `PATH` alone:
+ *
+ *     A11Y_ACCEPTANCE_PATH="$SHIM_DIR" node scripts/pr-open.mjs create --draft --body-file body.md ...
+ *
+ * runs the Acceptance against the shim's `gh` while pr-open's own calls keep the real one. Unset or empty, the
+ * child's environment is the process's, unchanged.
+ * @param {NodeJS.ProcessEnv} env
+ * @returns {NodeJS.ProcessEnv}
+ */
+export function acceptanceEnv(env) {
+  const prefix = env.A11Y_ACCEPTANCE_PATH;
+  if (!prefix) return env;
+  return { ...env, PATH: env.PATH ? `${prefix}:${env.PATH}` : prefix };
 }
 
 /**
