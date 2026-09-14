@@ -11,7 +11,7 @@
  * whose title is never spoken; this one only catches the egregious wrong-content case,
  * which is the one that silently poisons results.
  */
-import type { CaptureStructure } from "./index.js";
+import type { CaptureInteraction, CaptureStructure } from "./index.js";
 import { servedPathOf } from "./document-identity.js";
 import { parseAnnouncement, isLandmarkRole } from "./announcement.js";
 
@@ -26,7 +26,8 @@ export interface CapturedAnnouncements {
   structure?: Pick<CaptureStructure, "headings" | "landmarks" | "formFields" | "tableCells">;
   interaction?: {
     controls: string[];
-    stateChanges: { control: string; after: string }[];
+    // Derived from the wire type -- known-gaps §15, one field over (#1603).
+    stateChanges: CaptureInteraction["stateChanges"];
     postSubmitFields?: string[];
     /**
      * Set once `probeFormSubmit` runs (`capture-probes.mjs:3068`), never absent for that reason alone as
@@ -46,15 +47,13 @@ export interface CapturedAnnouncements {
      */
     navigatedOnSubmit?: { checked: boolean; navigated?: boolean; from?: string; to?: string };
     /**
-     * `kind` is on the real wire (`capture-probes.mjs`'s `activateAndCaptureDelta`/`probeToggle`'s own
-     * comment: "a NEW value ... additive on purpose") but not yet declared on `CaptureInteraction` in
-     * `index.ts` — a separate, un-widened gap noted here rather than fixed, since this interface is
-     * already a deliberately narrower LOCAL redeclaration (known-gaps §15) and adding one field it reads
-     * does not require touching the main wire type. Read by `submitNavigatedTheDocument` as the SECOND
+     * `kind` is on the real wire and, since #1603, declared on `CaptureInteraction` too -- the gap this comment
+     * used to note, closed there rather than here. Derived, and looser than the wire on purpose: every field
+     * optional and `after` admitting `null`, as `submitNavigatedTheDocument` reads it. Read there as the SECOND
      * signal: a "submit" whose `after` reads like NVDA's own new-document announcement navigated,
      * whatever `navigatedOnSubmit` does or does not say.
      */
-    formChanges?: { control?: string; kind?: string; after?: string | null }[];
+    formChanges?: (Partial<Omit<CaptureInteraction["formChanges"][number], "after">> & { after?: string | null })[];
   };
   /**
    * The capture's diagnostic marks. Only the CDP census's accessible names are read here — they are the
