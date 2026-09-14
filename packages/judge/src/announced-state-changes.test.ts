@@ -59,6 +59,17 @@ test("#1391 ROLE GATE: a NAMED combo box announced collapsed then expanded is no
   assert.equal(announcedStateChanges(button).length, 1);
 });
 
+test("#1391 IDENTITY GATE: two different buttons, one collapsed before and the other expanded after, are not listed", () => {
+  // SYNTHETIC, the #812 shape the row's caution names: `after` is a FOCUS read, so it can describe a different
+  // control, and "collapsed, then expanded" is then true of two strings and says nothing about either control.
+  // Without this test the Acceptance stayed green with the identity gate removed; only the rule's tests noticed.
+  const twoControls = [{ control: "Shipping details, button, collapsed", after: "Billing details, button, focused, expanded" }];
+  assert.deepEqual(announcedStateChanges(twoControls), []);
+  // POSITIVE CONTROL for the gate: the same pair naming ONE control is listed, so the empty result above is identity.
+  const oneControl = [{ control: "Shipping details, button, collapsed", after: "Shipping details, button, focused, expanded" }];
+  assert.equal(announcedStateChanges(oneControl).length, 1);
+});
+
 test("#1391: rehearsal 3's taskButton pair is not a state change -- it is formChanges, and its after names no control", () => {
   const result = read(REHEARSAL_3);
   assert.deepEqual(result.interaction.stateChanges, [], "a stated limit: stateChanges is empty in the rehearsal results");
