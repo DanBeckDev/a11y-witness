@@ -136,8 +136,43 @@ export interface CaptureStructure {
  * are meaningful: they record that activation produced no announcement. */
 export interface CaptureInteraction {
   controls: string[];
-  stateChanges: { control: string; after: string }[];
-  formChanges: { control: string; after: string }[];
+  stateChanges: {
+    control: string;
+    after: string;
+    /**
+     * Which question `after` answers. `"focus"` -- the only value written today -- means it is a read of whatever
+     * held focus after activation, not a re-read of the activated element, so the two sides can describe two
+     * controls (#812). Written on every entry, `capture-probes.mjs:2328` and `:2343` at `01290c2c` (#1603); absent on
+     * captures from before it was added.
+     */
+    afterSource?: string;
+    /**
+     * Set when the read after activation failed -- a failed measurement, never silence -- `capture-probes.mjs:2343`
+     * at `01290c2c` (#1603). That entry also writes `after: null`, which this type does not yet declare: a
+     * reading change for every consumer, not an additive field, and its own row: #1616.
+     */
+    error?: string;
+  }[];
+  formChanges: {
+    control: string;
+    after: string;
+    /**
+     * What kind of activation produced the entry -- a submit, a task button, a toggle -- because criteria mean
+     * different things per activation (3.3.1 is about a SUBMIT rejected silently, never a disclosure opened).
+     * The producer writes it on every entry: `const entry = { control: phrase, kind, after, ... }` then
+     * `interaction.formChanges.push(entry)`, `capture-probes.mjs:2531-2532` at `01290c2c` (#1603). Optional
+     * because captures made before it travelled carry none, and a reader must treat `undefined` as "this
+     * capture cannot say", never as "not a submit".
+     */
+    kind?: string;
+    /**
+     * Whether the page was quiet before the activation, and how long that wait took -- a consumer deciding what the
+     * entry proves needs to know the measurement was sound. Written with `kind`, `capture-probes.mjs:2531` at
+     * `01290c2c` (#1603); optional for the same reason.
+     */
+    baselineQuiet?: boolean;
+    baselineWaitedMs?: number;
+  }[];
   postSubmitFields: string[];
   /**
    * What each Tab press announced, in order — present when `probeFocus` was asked for.
