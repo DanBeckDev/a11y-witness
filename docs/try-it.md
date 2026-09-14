@@ -209,14 +209,14 @@ point the run at the page with the form on it.
 of shape, because the time is a screen reader reading and that is not parallelisable or recoverable. The
 range above it is not: the slowest measured run is seventy per cent longer than the fastest. A very large page can still exhaust our capture budget beyond that
 range, and if it does you will get a partial result that **says** it is partial rather than a short one
-that looks complete, **but it says so in the `a11ign-result` artifact, not in the log.** In the result JSON,
-every criterion resting on a sweep that fell short is `cantTell` in `outcomes`, and its `reason` names the
-sweep. A real run on `https://www.w3.org/WAI` read *"The link sweep said it reached the end having found far
-less than the page's census, so something held it, so this criterion rests on an examination known to be
-partial."* The `conformance` block's reach line sets what the screen reader reached against what the browser
-exposes, type by type. The one-line log (`a11ign: N finding(s)`) counts findings only and does not carry any
-of it, and the job summary counts those criteria under **Not determined** without saying why. On a large
-page, open the artifact before you read a low count as a clean page.
+that looks complete. The log adds a line above its count of findings,
+`a11ign: N criteria rest on an examination known to be partial -- see the artifact`, and the job summary's
+**Not determined** line counts those criteria apart. Which criteria, and why, is in the `a11ign-result`
+artifact: each is `cantTell` in `outcomes`, and its `reason` names the sweep that fell short. A real run on
+`https://www.w3.org/WAI` read *"The link sweep said it reached the end having found far less than the page's
+census, so something held it, so this criterion rests on an examination known to be partial."* The
+`conformance` block's reach line sets what the screen reader reached against what the browser exposes, type by
+type. On a large page, open the artifact before you read a low count as a clean page.
 
 ## YOUR PAGE — the one section that is not written yet
 
