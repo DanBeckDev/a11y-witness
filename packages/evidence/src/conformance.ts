@@ -645,6 +645,30 @@ function conformanceLevel(input: ConformanceScopeInput): ConformanceRequirement 
 }
 
 /**
+ * WHAT EACH LAYER EXAMINES INSIDE AN IFRAME -- #1438. Stated once, because Requirement 2 carries it in five branches
+ * and all five told the reader that iframes were never entered, which rehearsals 4 and 5 read beside three axe findings addressed
+ * `["iframe", …]` and a transcript that went into the YouTube player's frame and came "out of frame".
+ *
+ * Neither layer stays out of a frame, and each is described from its own code:
+ *   - THE SCREEN READER follows its own read-through and quick navigation into a frame's content (a `frame` sweep
+ *     exists for that), but the probe operates nothing announced as a frame or embedded object (#1363,
+ *     `EMBEDDED_CONTENT_ROLE_RE`), and the DOM counts behind the coverage figures read the top document only
+ *     (`document.querySelectorAll` in the worker's census expressions).
+ *   - THE RULE LAYER runs `new AxeBuilder({ page }).analyze()` (packages/cli/src/scan/axe.ts), and @axe-core/playwright
+ *     "automatically injects into all frames". This function never sees findings, only whether that layer ran, so
+ *     it says what the layer does rather than claiming a finding came from a frame.
+ */
+function framesSentence(input: ConformanceScopeInput): string {
+  const screenReader = "iframes: the screen reader's read-through and sweeps can pass into a frame's content, but "
+    + "nothing inside a frame or embedded object is operated, and the page's element counts are read from the top "
+    + "document only";
+  const rules = input.ruleLayerRan
+    ? "the rule layer (axe-core) examines iframe documents too, so a rule finding can come from inside one"
+    : "the rule layer did not run";
+  return `${screenReader}; ${rules}`;
+}
+
+/**
  * WHICH document, appended to Requirement 2's "one viewport, one state, one document".
  *
  * Empty when no identity was passed. A report that invented "the page you asked for" from an absent
@@ -779,7 +803,7 @@ function leftTheSite(input: ConformanceScopeInput, left: NonNullable<Conformance
     limitation: `The examination ENDED when activating ${JSON.stringify(left.control)} took the browser off this `
       + "site, so nothing observed after that point is attributed to this page. NOT EXAMINED, because they would "
       + `have run afterwards: ${unexamined}.` + coverageSentence(input)
-      + " Separately: one viewport only, iframes not entered, and any state reachable without a URL change is "
+      + ` Separately: one viewport only; ${framesSentence(input)}; and any state reachable without a URL change is `
       + "part of this same page and was not examined."
       + renderSentence(input) + activationSentence(input),
   };
@@ -805,7 +829,7 @@ function fullPages(input: ConformanceScopeInput): ConformanceRequirement {
         + `so these sweeps ran out of the DIALOG rather than of the page: ${detail}. Their `
         + "`exhausted` is the screen reader's own answer and it is correct; it is correct about the "
         + "dialog. What the page holds outside it was not examined." + coverageSentence(input)
-        + " Separately: one viewport only, iframes not entered, and any state reachable without a URL "
+        + ` Separately: one viewport only; ${framesSentence(input)}; and any state reachable without a URL `
         + "change is part of this same page and was not examined."
         + renderSentence(input) + activationSentence(input),
     };
@@ -829,7 +853,7 @@ function fullPages(input: ConformanceScopeInput): ConformanceRequirement {
         + "the page went unexamined. This does not establish that anything was missed: the census counts "
         + "elements a quick-navigation key may not reach at all. It establishes that the full-page claim "
         + "is not supported." + coverageSentence(input)
-        + " Separately: one viewport only, iframes not entered, and any state reachable without a URL "
+        + ` Separately: one viewport only; ${framesSentence(input)}; and any state reachable without a URL `
         + "change is part of this same page and was not examined."
         + renderSentence(input) + activationSentence(input),
     };
@@ -841,7 +865,7 @@ function fullPages(input: ConformanceScopeInput): ConformanceRequirement {
       establishes: "Every structural sweep ran until the page ran out of elements, so the parts of the "
         + "page a screen reader can reach were examined in full." + coverageSentence(input),
       limitation: "One viewport, one state, one document. Responsive VARIATIONS each have to conform "
-        + "separately and only one was rendered; content inside iframes is not entered; and WCAG counts "
+        + `separately and only one was rendered; ${framesSentence(input)}; and WCAG counts `
         + "an application at a single URI as ONE page, so every state reachable without a URL change — "
         + "menus, dialogs, steps of a wizard — is part of this page and was not examined."
         + renderSentence(input) + activationSentence(input),
@@ -857,7 +881,7 @@ function fullPages(input: ConformanceScopeInput): ConformanceRequirement {
     limitation: `Examination was INCOMPLETE — these sweeps stopped before the page did: ${detail}. `
       + "Elements beyond that point were never reached, so an absence of findings among them is not "
       + "evidence they are correct." + coverageSentence(input)
-      + " Separately: one viewport only, iframes not entered, and any state "
+      + ` Separately: one viewport only; ${framesSentence(input)}; and any state `
       + "reachable without a URL change is part of this same page and was not examined."
       + renderSentence(input) + activationSentence(input),
   };
