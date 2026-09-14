@@ -373,3 +373,50 @@ test("a run where everything WAS determined adds no noise", () => {
   ]));
   assert.doesNotMatch(md, /Not determined/);
 });
+
+// #1388: rehearsal 3's committed artifact, read in place: its three axe findings all sit inside the embedded YouTube player
+// on w3.org/WAI (targets ["iframe", …]), and the result records no frame origin.
+const rehearsal3Rules = (): RunResult => JSON.parse(readFileSync(
+  new URL("../fixtures/rehearsal3-34774183433-a11ign-result.json", import.meta.url), "utf8")) as RunResult;
+const ruleRow = (rule: string, target: unknown[]) =>
+  ({ impact: "serious", wcag: ["4.1.2"], rule, help: `${rule} help`, nodes: [{ target }] });
+const ruleLayer = (out: string): string => out.slice(out.indexOf("**Rule layer (axe-core)"));
+/** The three axe findings on rehearsal 3's committed artifact, every one inside the YouTube player's frame (measured). */
+const REHEARSAL3_FRAME_ROWS = 3;
+
+test("#1388: rehearsal 3's frame-hosted axe findings are counted, marked and caveated as inside a frame", () => {
+  const out = ruleLayer(renderSummary(rehearsal3Rules()));
+  const n = REHEARSAL3_FRAME_ROWS;
+  assert.match(out, new RegExp(`^\\*\\*Rule layer \\(axe-core\\): ${n} violation\\(s\\), ${n} inside a frame\\*\\*`));
+  assert.equal(out.split("\n").filter((line) => line.includes("_(in a frame; origin not examined)_")).length, n,
+    "every frame row is marked");
+  assert.match(out, /A row marked \*\*in a frame\*\* concerns content inside an embedded frame/);
+  assert.match(out, /may be third-party content/, "it says MAY be: the result records a frame, never whose");
+});
+
+test("#1388: a top-level axe finding renders unmarked, with no split count and no caveat", () => {
+  const out = ruleLayer(renderSummary(result({ ruleBased: [ruleRow("color-contrast", ["#main > p"])] })));
+  assert.match(out, /^\*\*Rule layer \(axe-core\): 1 violation\(s\)\*\*/);
+  assert.doesNotMatch(out, /in a frame/);
+});
+
+test("#1388: a mixed table splits the count and marks only the frame row", () => {
+  const out = ruleLayer(renderSummary(result({ ruleBased: [
+    ruleRow("button-name", ["iframe", ".player"]), ruleRow("color-contrast", ["#main > p"]),
+  ] })));
+  assert.match(out, /^\*\*Rule layer \(axe-core\): 2 violation\(s\), 1 inside a frame\*\*/);
+  const rows = out.split("\n").filter((line) => line.startsWith("| serious"));
+  assert.deepEqual(rows.map((line) => line.includes("in a frame")), [true, false]);
+  assert.match(out, /A row marked \*\*in a frame\*\*/);
+});
+
+test("#1388: a shadow-DOM target is one element, not a frame, and is not marked", () => {
+  const out = ruleLayer(renderSummary(result({ ruleBased: [ruleRow("label", [["#host", "input"]])] })));
+  assert.match(out, /^\*\*Rule layer \(axe-core\): 1 violation\(s\)\*\*/);
+  assert.doesNotMatch(out, /in a frame/);
+});
+
+test("#1388: a row with no nodes (an older result) cannot be told, and is not marked", () => {
+  const out = ruleLayer(renderSummary(result({ ruleBased: [{ impact: "minor", wcag: [], rule: "region", help: "h" }] })));
+  assert.doesNotMatch(out, /in a frame/);
+});
