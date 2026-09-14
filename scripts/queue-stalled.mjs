@@ -281,8 +281,12 @@ const gh = (args) => execFileSync("gh", args, { encoding: "utf8" }).trim();
  * REPORTS, NEVER ACTS: it names both runs and the one action that clears it. A still-running newest gate is not this
  * (the run may yet succeed), and a red gate with no success anywhere on the head is an ordinary red, not this shape.
  *
+ * ONLY WORKFLOW-RUN ORDER CAN SAY IT (#1631's review). Without two DISTINCT run ids -- both entries id-free, one
+ * missing, or one run holding both -- "newest" is `newestRun`'s completion-time fallback, the very guess that read
+ * #1617 backwards. Such a pair is UNORDERED: not reported, and never a re-run instruction naming a run nobody can name.
+ *
  * @param {{ armed: boolean, runs: CheckRun[] | null | undefined }} input
- * @returns {{ code: "NOT_ARMED" | "NO_GATE" | "RUNNING" | "GREEN" | "RED" | "SUPERSEDED", reason: string }}
+ * @returns {{ code: "NOT_ARMED" | "NO_GATE" | "RUNNING" | "GREEN" | "RED" | "UNORDERED" | "SUPERSEDED", reason: string }}
  */
 export function supersedingGateVerdict({ armed, runs }) {
   if (!armed) return { code: "NOT_ARMED", reason: "not armed -- not this check's concern" };
@@ -297,8 +301,12 @@ export function supersedingGateVerdict({ armed, runs }) {
     return { code: "RED", reason: `the newest gate concluded ${conclusion} and no gate on this head succeeded -- an `
       + "ordinary red, not a superseded one" };
   }
-  const newestId = workflowRunIdOf(newest) ?? "(no run id)";
-  const succeededId = workflowRunIdOf(succeeded) ?? "(no run id)";
+  const [newestId, succeededId] = [workflowRunIdOf(newest), workflowRunIdOf(succeeded)];
+  if (newestId === null || succeededId === null || newestId <= succeededId) {
+    return { code: "UNORDERED", reason: `the newest gate by time concluded ${conclusion} after a gate on this head `
+      + "succeeded, but the two do not carry distinct workflow run ids, so which attempt GitHub counts cannot be read "
+      + "-- not reported" };
+  }
   return { code: "SUPERSEDED", reason: `blocked by a superseding ${conclusion} gate: workflow run ${newestId}'s gate `
     + `${conclusion} after run ${succeededId}'s gate succeeded at this head -- re-run workflow run ${newestId} to clear it` };
 }
