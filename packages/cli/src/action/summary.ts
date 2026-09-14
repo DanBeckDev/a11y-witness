@@ -38,7 +38,7 @@ export interface RunResult {
   screenReader: string;
   transcript?: string[];
   /** null when the rule layer did not run — NOT the same as running and finding nothing. */
-  ruleBased: { impact: string; wcag: string[]; rule: string; help: string }[] | null;
+  ruleBased: { impact: string; wcag: string[]; rule: string; help: string; nodes?: { target?: unknown[] }[] }[] | null;
   verdict: {
     taskCompletable: boolean;
     summary: string;
@@ -214,6 +214,27 @@ function outcomeSection(outcomes: RunResult["outcomes"]): string[] {
 }
 
 /**
+ * #1388: IS THIS RULE-LAYER ROW ABOUT CONTENT INSIDE A FRAME?
+ *
+ * axe's `target` holds one selector per frame boundary it crossed, so a target of more than one entry points inside an
+ * iframe. It says the node is in A frame, never WHOSE: a same-origin frame is the author's own, and the result records no
+ * frame origin, so the marker claims no more than that. A single entry that is itself an array is a shadow-DOM path, not
+ * a frame. A row with no nodes (an older result) cannot be told, so it is not marked.
+ */
+function insideFrame(row: NonNullable<RunResult["ruleBased"]>[number]): boolean {
+  return (row.nodes ?? []).some((node) => Array.isArray(node.target) && node.target.length > 1);
+}
+
+/**
+ * #1388: the caveat the run artifact already carries (Conformance Requirement 3's limitation: "Third-party content …
+ * is also not distinguished from the author's own"), stated beside the table it concerns, and only when a row is inside a
+ * frame. Rehearsal 3 read "Rule layer (axe-core): 3 violation(s)" on w3.org/WAI, all three inside the embedded YouTube
+ * player, with the caveat two layers down in the JSON.
+ */
+const FRAME_CAVEAT = "_A row marked **in a frame** concerns content inside an embedded frame. This run did not examine "
+  + "whose frame it is, so it may be third-party content (an embed, advert or widget) the page's author cannot control._";
+
+/**
  * The rule layer's section.
  *
  * "not run" and "0 violations" must never look alike: one means the visual criteria are unchecked, the
@@ -225,11 +246,16 @@ function ruleSection(ruleBased: RunResult["ruleBased"], limit: number): string[]
     return ["**Rule layer (axe-core): not run.** Visual criteria such as contrast are *unchecked*, not clean."];
   }
   if (ruleBased.length === 0) return ["**Rule layer (axe-core): 0 violations.**"];
-  const lines = [`**Rule layer (axe-core): ${ruleBased.length} violation(s)**`, "", "| Impact | WCAG | Rule |", "|---|---|---|"];
+  // #1388: the count line does not silently absorb rows about content inside a frame. A split count, not a bare total.
+  const framed = ruleBased.filter(insideFrame).length;
+  const split = framed > 0 ? `, ${framed} inside a frame` : "";
+  const lines = [`**Rule layer (axe-core): ${ruleBased.length} violation(s)${split}**`, "", "| Impact | WCAG | Rule |", "|---|---|---|"];
   for (const v of ruleBased.slice(0, limit)) {
-    lines.push(`| ${cell(v.impact)} | ${cell((v.wcag ?? []).join(", ")) || "—"} | ${cell(v.rule)}: ${cell(v.help)} |`);
+    const marker = insideFrame(v) ? " _(in a frame; origin not examined)_" : "";
+    lines.push(`| ${cell(v.impact)} | ${cell((v.wcag ?? []).join(", ")) || "—"} | ${cell(v.rule)}: ${cell(v.help)}${marker} |`);
   }
   if (ruleBased.length > limit) lines.push("", `_… and ${ruleBased.length - limit} more._`);
+  if (framed > 0) lines.push("", FRAME_CAVEAT);
   return lines;
 }
 
