@@ -123,6 +123,27 @@ for (const run of RUNS) {
     assert.doesNotMatch(fullPages.establishes, /examined in full/);
   });
 
+  test(`#1365 (run ${run}): the two navigation instruments that disagreed are both NOT EXAMINED, and the stale-title finding goes with them`, () => {
+    const capture = captureOf(resultOf(run));
+    const interaction = capture.interaction as {
+      navigatedOnSubmit?: { navigated?: boolean }; routeChange?: { navigated?: boolean; titleBefore?: string; titleAfter?: string };
+    };
+    // THE POSITIVE CONTROL: the whole capture carries rehearsal 2's contradiction, and the rules read its stale title.
+    assert.equal(interaction.navigatedOnSubmit?.navigated, false, "the submit instrument read w3.org");
+    assert.equal(interaction.routeChange?.navigated, true, "the route instrument followed the screen reader to YouTube");
+    assert.equal(interaction.routeChange?.titleBefore, interaction.routeChange?.titleAfter, "a stale title, read after the tab change");
+    const routeTitleFindings = (findings: ReturnType<typeof rulesOn>) =>
+      findings.filter((finding) => String((finding as { wcag?: unknown }).wcag).startsWith("2.4.2"));
+    assert.equal(routeTitleFindings(rulesOn(capture)).length, 1, "the uncut capture reports the stale-title 2.4.2 finding");
+
+    const { examined, notExamined } = examineWithinTheSite(capture);
+    for (const channel of ["navigatedOnSubmit", "routeChange"]) {
+      assert.ok(notExamined.includes(channel), `${channel} ran after the excursion and must be NOT EXAMINED`);
+      assert.equal(channel in ((examined.interaction ?? {}) as object), false, `the examined capture carries no ${channel}`);
+    }
+    assert.deepEqual(routeTitleFindings(rulesOn(examined)), [], "no 2.4.2 finding rests on a title read on the other site");
+  });
+
   test(`#1363 ACCEPTANCE (run ${run}): the one-line log and the summary say so, over the cut pipeline's own findings`, () => {
     const result = resultOf(run);
     // TODAY'S LINE, from the artifact as it was published: the control for the wording below. Since #1563 it is the
@@ -152,6 +173,24 @@ for (const run of RUNS) {
     assert.match(renderSummary(fixed), /\*\*The examination ended early\.\*\* Activating/);
   });
 }
+
+test("#1365 CONTROL: rehearsal 3 left no site, keeps both navigation instruments, and its route genuinely navigated", () => {
+  // Run 34774183433, after #1376: the route probe and the submit probe are two different activations, so their two
+  // answers are not a contradiction -- the link navigated (title and heading both changed), the empty search did not.
+  const record = JSON.parse(readFileSync(new URL("./fixtures/rehearsal3-34774183433-a11ign-result.json", import.meta.url), "utf8"));
+  const capture = captureOf(record);
+  const interaction = capture.interaction as {
+    navigatedOnSubmit?: { navigated?: boolean }; routeChange?: { titleBefore?: string; titleAfter?: string; control?: string };
+  };
+  assert.equal(leftSite(capture), null, "nothing left the site");
+  const { examined, notExamined } = examineWithinTheSite(capture);
+  assert.deepEqual(notExamined, []);
+  assert.equal(examined, capture, "an examination that never left the site is reported whole");
+  assert.equal(interaction.navigatedOnSubmit?.navigated, false);
+  assert.notEqual(interaction.routeChange?.titleBefore, interaction.routeChange?.titleAfter, "the route genuinely changed the title");
+  assert.deepEqual(rulesOn(capture).filter((finding) => String((finding as { wcag?: unknown }).wcag).startsWith("2.4.2")), [],
+    "a real navigation with a changed title is not a stale-title finding");
+});
 
 /**
  * THE CLI'S WIRING, READ FROM THE SOURCE with comments stripped. `runWitness` needs a live capture worker, so no
