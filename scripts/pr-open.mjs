@@ -39,6 +39,7 @@ import { acceptanceReport, closesDeclarationReport } from "./acceptance-commands
 import { leakRefusalReason } from "../packages/lab/src/packaging/leak-patterns.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
 import { REPO } from "./repo-identity.mjs";
+import { launchGate } from "./board-snapshot-scope.mjs";
 
 // The header's EXIT CODES, named because 1 and 3 ask a caller for opposite next steps.
 export const EXIT_NOTHING_SENT = 1;
@@ -414,5 +415,11 @@ function flagAfter(args, flag) {
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
-  process.exitCode = main();
+  // #1352: IN THE ENTRY BLOCK, NOT IN `main`, because the tests call `main` directly -- in CI's plain clone a refusal
+  // inside it would refuse them. From the primary checkout or a plain clone: refuse before anything, nothing sent.
+  if (launchGate(`pr-open ${process.argv[2] ?? ""}`.trim())) {
+    process.exitCode = EXIT_NOTHING_SENT;
+  } else {
+    process.exitCode = main();
+  }
 }
