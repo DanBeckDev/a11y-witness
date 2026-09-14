@@ -127,6 +127,17 @@ inputs:
       unreachable rather than clean, and the report says so.
     required: false
     default: "true"
+  probe-navigation:
+    description: >-
+      Activate the page's first link and follow it, to hear whether the new page's title and focus are
+      announced. 2.4.1's skip-link rule and 2.4.2's route-title rule read what it records.
+
+      ON by default, as in the CLI, where `--no-probe-navigation` turns it off. Unlike `probe-focus` it
+      ACTIVATES A LINK on the page under test and can leave that page; an activation that leaves the page's
+      site ends the examination there. On a page you do not own, set false to skip it, and note what that
+      costs: those criteria become unreachable rather than clean.
+    required: false
+    default: "true"
   axe:
     description: >-
       Also run axe-core for the visual and rule-based criteria a screen reader cannot perceive, such as
@@ -473,6 +484,9 @@ runs:
         # Inverted, because the CLI defaults this ON: only an explicit false turns it off. Tab activates
         # nothing, so unlike probe-forms there is no reason to make a consumer opt in to it.
         [ "${{ inputs.probe-focus }}" = "false" ] && args+=(--no-probe-focus)
+        # Inverted for the same reason (#1392, ceo 5655434240): the CLI defaults navigation ON, so only an
+        # explicit false turns it off. Unlike Tab it activates a link, which is why a consumer needs the input.
+        [ "${{ inputs.probe-navigation }}" = "false" ] && args+=(--no-probe-navigation)
         [ "${{ inputs.axe }}" = "true" ] || args+=(--no-axe)
         # stdout is the JSON result; the CLI's diagnostics go to stderr and stay in the log.
         npx tsx packages/cli/src/cli.ts "${args[@]}" > "$out"
