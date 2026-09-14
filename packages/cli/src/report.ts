@@ -16,7 +16,7 @@ import { layerOf, orderByLayer, LAYER_LABEL, type ExperienceLayer } from "@a11ig
 import { notAConformanceClaim, type ConformanceRequirement }
   from "@a11ign/evidence/conformance";
 import { outcomeTally, type CriterionOutcome } from "@a11ign/judge/outcomes";
-import { documentsSpannedSentence } from "./action/summary.js";
+import { documentsSpannedSentence, insideFrame } from "./action/summary.js";
 
 /** How much offending markup to quote as evidence. Enough to recognise the element, not the page. */
 const EVIDENCE_CHARS = 100;
@@ -93,18 +93,30 @@ function howToReadThisSection(): string[] {
  * single most misleading thing this tool could do.
  */
 function axeSection(axe: AxeFinding[] | null): string[] {
+  // #1596: a finding inside an embedded frame is not silently the page's own. `insideFrame` is #1388's rule, imported so
+  // the job summary and this report cannot disagree about which findings it covers.
+  const framed = (axe ?? []).filter(insideFrame).length;
   const lines = [
     "-- Rule-based layer (axe-core): contrast, colour, ARIA, parsing --",
     axe === null
       ? "not run. Visual criteria are unchecked, not clean."
-      : `${axe.length} violation(s):`,
+      : `${axe.length} violation(s)${framed > 0 ? `, ${framed} inside a frame` : ""}:`,
   ];
   for (const finding of axe ?? []) {
-    lines.push(`  [${finding.impact}] ${finding.wcag.join(", ") || "(no SC)"}  ${finding.rule}: ${finding.help}`);
+    const marker = insideFrame(finding) ? "  (in a frame; origin not examined)" : "";
+    lines.push(`  [${finding.impact}] ${finding.wcag.join(", ") || "(no SC)"}  ${finding.rule}: ${finding.help}${marker}`);
     if (finding.nodes[0]) lines.push(`     evidence: ${finding.nodes[0].html.slice(0, EVIDENCE_CHARS)}`);
   }
+  if (framed > 0) lines.push(FRAME_CAVEAT);
   return lines;
 }
+
+/**
+ * #1596: #1388's caveat, in the words the job summary uses, as plain text for a terminal. Its second sentence and the
+ * marker are pinned equal to the summary's by `report.test.ts`, so the two outputs say one thing about a frame.
+ */
+const FRAME_CAVEAT = "  A finding marked in a frame concerns content inside an embedded frame. This run did not examine "
+  + "whose frame it is, so it may be third-party content (an embed, advert or widget) the page's author cannot control.";
 
 /**
  * The judge's findings, grouped by the Perceive -> Navigate -> Interact waterfall.
