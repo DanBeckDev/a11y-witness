@@ -459,6 +459,32 @@ const ENTER_ACTIVATES: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * #1391: THE ONE READING OF A DISCLOSURE PAIR, for the rule and for the report alike.
+ *
+ * Every gate `4.1.2:state-change-silent` applies, in the rule's order, ending with the expandable state each side
+ * announced -- or `null` when the pair is not a state-change observation at all (the wrong role, two different
+ * controls, or no expandable state on a side). The rule then asserts on `from === to`; `announcedStateChanges`
+ * lists `from !== to`. One helper so a gate cannot be loosened for one of them and not the other.
+ */
+function readDisclosurePair(change: { control?: string; after?: string | null }): { from: string; to: string } | null {
+  // The ROLE gate comes first: a combo box that stays collapsed after Enter is correct behaviour, and
+  // asserting from it is this tool's worst error.
+  if (!enterActivates(change.control)) return null;
+  // IDENTITY BEFORE STATE — #812, and the order is the fix. `after` is a FOCUS read (see
+  // `sameControlAnnounced`), so the two sides can legitimately describe two different controls, and
+  // "both say collapsed" is then a true statement about two strings that says nothing about either
+  // control. Checking the state word first and identity afterwards would let the same pair through.
+  if (!sameControlAnnounced(change.control, change.after)) return null;
+  const before = statesOf(change.control);
+  const after = statesOf(change.after);
+  // Both sides must actually carry an expandable state. Absent on either side means the control is not
+  // a disclosure, or the probe never read it — neither is evidence that a state failed to change, and
+  // treating the absence as the finding is the mistake this repo has paid for most often.
+  if (!before.length || !after.length) return null;
+  return { from: before[0], to: after[0] };
+}
+
+/**
  * A control that announces an expandable state, is activated, and announces the SAME state afterwards.
  *
  * ## Why this is a rule and not the model's, reversing a decision recorded above
@@ -493,25 +519,29 @@ function addSilentStateChanges(
   changes: readonly { control?: string; after?: string | null }[], add: AddFinding,
 ): void {
   for (const change of changes) {
-    // The ROLE gate comes first: a combo box that stays collapsed after Enter is correct behaviour, and
-    // asserting from it is this tool's worst error.
-    if (!enterActivates(change.control)) continue;
-    // IDENTITY BEFORE STATE — #812, and the order is the fix. `after` is a FOCUS read (see
-    // `sameControlAnnounced`), so the two sides can legitimately describe two different controls, and
-    // "both say collapsed" is then a true statement about two strings that says nothing about either
-    // control. Checking the state word first and identity afterwards would let the same pair through.
-    if (!sameControlAnnounced(change.control, change.after)) continue;
-    const before = statesOf(change.control);
-    const after = statesOf(change.after);
-    // Both sides must actually carry an expandable state. Absent on either side means the control is not
-    // a disclosure, or the probe never read it — neither is evidence that a state failed to change, and
-    // treating the absence as the finding is the mistake this repo has paid for most often.
-    if (!before.length || !after.length) continue;
-    if (before[0] !== after[0]) continue;
+    const pair = readDisclosurePair(change);
+    if (!pair || pair.from !== pair.to) continue;
     add("4.1.2 Name, Role, Value",
       "Control announced the same state after activation, so its state change is not exposed",
       `${change.control} -> ${change.after}`, "conformance");
   }
+}
+
+/**
+ * #1391: the disclosure pairs whose state CHANGED and was announced -- evidence the report shows, never a finding.
+ *
+ * The same `readDisclosurePair` as the rule, so it lists exactly the pairs the rule reads and does not fault. Pure.
+ * @returns each such pair's two announcements verbatim, with the expandable state before and after activation.
+ */
+export function announcedStateChanges(
+  changes: readonly { control?: string; after?: string | null }[],
+): { control: string; after: string; from: string; to: string }[] {
+  return changes.flatMap((change) => {
+    const pair = readDisclosurePair(change);
+    return pair && pair.from !== pair.to && change.control && change.after
+      ? [{ control: change.control, after: change.after, from: pair.from, to: pair.to }]
+      : [];
+  });
 }
 
 /**

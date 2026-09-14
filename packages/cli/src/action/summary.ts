@@ -9,6 +9,9 @@
 
 export type Severity = "blocker" | "serious" | "moderate" | "minor";
 
+import type { CaptureInteraction } from "@a11ign/evidence";
+import type { announcedStateChanges } from "@a11ign/judge/rules";
+
 export interface RunFinding {
   issue: string;
   wcag: string;
@@ -63,6 +66,14 @@ export interface RunResult {
    * page, and on results written before the check existed.
    */
   leftSite?: { control: string; to: string | null; source: "recorded" | "derived" } | null;
+  /**
+   * The disclosure probe's before/after pairs: a control as first announced, and what took focus after it was
+   * activated. Declared for #1391 only -- `run.ts` reads it to compute which changes were announced correctly --
+   * and TYPED FROM `@a11ign/evidence`'s own `CaptureInteraction`, never restated, so the shape has one definition.
+   * The import is `import type`: erased at runtime, so this renderer still imports nothing when it runs. Absent on
+   * results written before the probe.
+   */
+  interaction?: Partial<Pick<CaptureInteraction, "stateChanges">> | null;
   /**
    * WCAG §5.2's five conformance requirements, as `cli.ts --json` emits them (`@a11ign/evidence/conformance`).
    * Declared for one sentence only (#1387): Requirement 2 names a capture that spanned more than one document,
@@ -235,6 +246,30 @@ const FRAME_CAVEAT = "_A row marked **in a frame** concerns content inside an em
   + "whose frame it is, so it may be third-party content (an embed, advert or widget) the page's author cannot control._";
 
 /**
+ * #1391: THE EVIDENCE A RUN COLLECTED THAT NOTHING FAILED ON. Rehearsal 3's reader: *"the one piece of evidence that
+ * would have shown me what this tool is for was collected, stored, and then not shown to me."*
+ *
+ * EVIDENCE OBSERVED, NEVER A PASS. Each line quotes what the screen reader said before and after one control was
+ * activated. It names no criterion and says nothing passed: ADR 0021 gives the RULE the right to conclude about
+ * `4.1.2:state-change-silent`, and one clean control is not a conclusion about the page. Silent when there is
+ * nothing to show, so a report without this evidence reads exactly as it did.
+ */
+function stateChangeSection(observed: readonly ObservedStateChange[] | undefined): string[] {
+  if (!observed?.length) return [];
+  // A code span ends at a backtick, so one inside an announcement is replaced rather than escaped.
+  const quote = (text: string) => `\`${cell(text).replace(/`/g, "'")}\``;
+  return [
+    "",
+    `**Evidence observed: ${observed.length} state change(s) the screen reader announced after activation**`,
+    "",
+    ...observed.map((change) => `- ${quote(change.control)} → ${quote(change.after)} `
+      + `(${cell(change.from)} → ${cell(change.to)})`),
+    "",
+    "<sub>What one control said before and after it was activated, not a result for the page.</sub>",
+  ];
+}
+
+/**
  * The rule layer's section.
  *
  * "not run" and "0 violations" must never look alike: one means the visual criteria are unchecked, the
@@ -258,6 +293,13 @@ function ruleSection(ruleBased: RunResult["ruleBased"], limit: number): string[]
   if (framed > 0) lines.push("", FRAME_CAVEAT);
   return lines;
 }
+
+/**
+ * #1391: ONE STATE CHANGE ANNOUNCED CORRECTLY -- exactly the judge's `announcedStateChanges` element type, taken from
+ * it by a type-only import (erased at runtime; this renderer still loads nothing), so the shape has one definition.
+ * `from` and `to` are the expandable-state words the rule reads; `control` and `after` are the two announcements.
+ */
+export type ObservedStateChange = ReturnType<typeof announcedStateChanges>[number];
 
 export interface SummaryOptions {
   /** Rows per table. Bounded because a job summary has a hard size limit and truncation must be stated. */
@@ -287,6 +329,13 @@ export interface SummaryOptions {
    * `false`, the honest default for the backend that ships.
    */
   isTaskClaim?: boolean;
+  /**
+   * #1391: the state changes the screen reader announced correctly, computed by `run.ts` through the judge's
+   * `announcedStateChanges` -- the SAME gates as the `4.1.2:state-change-silent` rule, so this renderer never
+   * decides what counts. Passed in for the identical reason `taskQuestion` is: this renderer is pure. Absent or
+   * empty renders nothing, which is also what a result without the probe gets.
+   */
+  stateChangesObserved?: readonly ObservedStateChange[];
 }
 
 const DEFAULT_LIMIT = 20;
@@ -413,6 +462,7 @@ export function renderSummary(result: RunResult, options: SummaryOptions = {}): 
     "",
     ...findingsSection(verdict.findings, limit),
     ...outcomeSection(result.outcomes),
+    ...stateChangeSection(options.stateChangesObserved),
     "",
     ...ruleSection(result.ruleBased, limit),
     "",
