@@ -437,9 +437,14 @@ test("#1378: no probe state makes 1.4.13, 3.2.1 or 3.2.2 PASSED -- one control n
 });
 
 test("#1378 CONTROL: 2.1.2, 2.4.7 and 1.4.2 are untouched -- still NOT COLLECTED on a capture without their probes", () => {
+  // Three separate facts, each read by its own branch in `channelApplicabilityOf` (focusOrder, focusEvents, media) -- asserted
+  // one by one rather than looped over a typed list, which `criterion-list-duplication.test.ts` would rightly ask about.
   const outcomes = criterionOutcomes({ capture: probeCapture("focusContext", undefined), findings: [] });
-  for (const criterion of ["2.1.2", "2.4.7", "1.4.2"]) {
+  const notCollected = (criterion: string) => {
     assert.equal(find(outcomes, criterion).outcome, "cantTell", criterion);
     assert.match(find(outcomes, criterion).reason, NOT_COLLECTED, criterion);
-  }
+  };
+  notCollected("2.1.2");
+  notCollected("2.4.7");
+  notCollected("1.4.2");
 });
