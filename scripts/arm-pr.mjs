@@ -20,8 +20,19 @@ import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-
 import { armabilityOf } from "./pr-hold-state.mjs";
 import { extractClosesDeclaration } from "./acceptance-commands.mjs";
 
-/** Exit codes are the contract: 0 armed or deliberately not, 2 could not ask. */
-export const EXIT = { DONE: 0, CANNOT_ASK: 2 };
+/**
+ * EXIT CODES ARE THE CONTRACT. `auto-arm.yml`'s `arm` step goes red on any non-zero, so each code's job is to tell the
+ * reader of that red step what state the PR is actually in:
+ * - `0` DONE: armed, or deliberately not armed (held, or already merged or closed).
+ * - `1` REFUSED: a retired or unknown `session:*` label stopped the labelling (#1000). The arm line printed before it
+ *   says whether auto-merge was enabled. Node also exits 1 on an UNCAUGHT throw, which is why a failure after the arm
+ *   must never escape as one: it would read as this refusal.
+ * - `2` CANNOT_ASK: `--pr`/`--repo` were missing, or the PR could not be read. Nothing was written.
+ * - `3` ARMED_THEN_LABEL_FAILED: (#1478) the arm step FINISHED -- auto-merge landed, or there was nothing left to arm
+ *   -- and the labelling step after it threw. The message names what landed and the labels that were not applied, so a
+ *   caller can tell a partial success from a refusal.
+ */
+export const EXIT = { DONE: 0, REFUSED: 1, CANNOT_ASK: 2, ARMED_THEN_LABEL_FAILED: 3 };
 
 /** @param {string} cmd @param {string[]} args */
 const defaultRun = (cmd, args) => execFileSync(cmd, args, { encoding: "utf8" });
@@ -284,57 +295,117 @@ export function armMerge({ number, repo }, deps = {}) {
   }
 }
 
-function main() {
-  refuseUnknownFlags(["--pr=", "--repo="], { entry: import.meta.url, command: "node scripts/arm-pr.mjs" });
-  const number = flagValue(process.argv, "pr");
-  const repo = flagValue(process.argv, "repo") ?? process.env.GITHUB_REPOSITORY;
-  if (!number || !repo) {
-    console.error("arm-pr: --pr=<n> is required, and --repo or GITHUB_REPOSITORY must name the repo.\n"
-      + "  REFUSING rather than guessing: arming the wrong PR is not recoverable by re-running.");
-    process.exit(EXIT.CANNOT_ASK);
-  }
-
-  /** @type {string[] | null} */
-  let labels = null;
-  /** @type {string | null} */
-  let prBody = null;
-  /** @type {string | null} */
-  let state = null;
+/**
+ * The PR's labels, body and state in ONE read, or all three null when the read fails -- never a guess.
+ * @param {{ number: string, repo: string, run: typeof defaultRun, error: (line: string) => void }} args
+ * @returns {{ labels: string[] | null, prBody: string | null, state: string | null }}
+ */
+function readPr({ number, repo, run, error }) {
   try {
     // #1022: `state` rides along on the read that was already happening -- no extra `gh` call for the
     // common case, where the PR is plainly OPEN and this costs nothing.
-    const view = JSON.parse(gh(["pr", "view", number, "--repo", repo, "--json", "labels,body,state"]));
-    labels = view.labels.map((/** @type {{name: string}} */ l) => l.name);
-    prBody = view.body;
-    state = typeof view.state === "string" ? view.state : null;
+    const view = JSON.parse(gh(["pr", "view", number, "--repo", repo, "--json", "labels,body,state"], run));
+    return { labels: view.labels.map((/** @type {{name: string}} */ l) => l.name), prBody: view.body,
+      state: typeof view.state === "string" ? view.state : null };
   } catch (cause) {
-    console.error(`arm-pr: could not read #${number}'s labels: ${/** @type {Error} */ (cause).message}`);
+    error(`arm-pr: could not read #${number}'s labels: ${/** @type {Error} */ (cause).message}`);
+    return { labels: null, prBody: null, state: null };
   }
+}
 
+/**
+ * The step AFTER the arm: label the PR from its rows, and turn the outcome into the exit code.
+ * @param {{ number: string, repo: string, prBody: string | null, run: typeof defaultRun,
+ *   error: (line: string) => void }} args
+ * @param {{ armed: boolean, reason: string }} outcome what the arm step did
+ * @returns {number}
+ */
+function labelAfterArm({ number, repo, prBody, run, error }, outcome) {
+  try {
+    // #1000: this function owns the exit code. A retired session label refuses the labelling, and the workflow step
+    // running this must go red rather than reporting a PR labelled with a session that does not exist.
+    return labelArmedPr({ number, repo, prBody, run }).refused ? EXIT.REFUSED : EXIT.DONE;
+  } catch (cause) {
+    // #1478: A FAILURE AFTER A WRITE THAT LANDED IS NOT A REFUSAL. Left uncaught, Node exits 1 -- this script's REFUSED
+    // code -- for a PR that IS armed. So it is caught, the landed write is NAMED, the error is quoted, and the exit is
+    // the one code that means "partly done".
+    const landed = outcome.armed
+      ? `#${number} IS ARMED: auto-merge was enabled before this step`
+      : `#${number} needed no arm (${outcome.reason})`;
+    const wanted = labelsWanted({ repo, prBody, run });
+    // FOLLOWABLE: re-running arm-pr would re-arm a PR that is already armed, so the one step that failed is named as the
+    // command to run by hand -- the convention worker-capture's #1479 uses for pr-open's exit 3.
+    const finish = wanted.labels.length > 0
+      ? ` Apply them by hand: gh pr edit ${number} --repo ${repo} ${wanted.labels.map((l) => `--add-label ${l}`).join(" ")}`
+      : "";
+    error(`arm-pr: labelling failed AFTER the arm step. ${landed}. NOT applied: ${wanted.text}. `
+      + `The failure: ${/** @type {Error} */ (cause).message}.${finish}`);
+    return EXIT.ARMED_THEN_LABEL_FAILED;
+  }
+}
+
+/**
+ * #1478: the session labels the failed labelling was trying to apply, for the message only. A second read of the rows,
+ * which can itself fail, so it says so rather than guessing a label.
+ * @param {{ repo: string, prBody: string | null, run: typeof defaultRun }} args
+ * @returns {{ labels: string[], text: string }}
+ */
+function labelsWanted({ repo, prBody, run }) {
+  try {
+    const lists = closedRowNumbers(prBody).map((rowNumber) => JSON.parse(
+      gh(["issue", "view", String(rowNumber), "--repo", repo, "--json", "labels"], run)).labels.map((/** @type {{name: string}} */ l) => l.name));
+    const labels = sessionLabelsForArm(lists);
+    return { labels, text: labels.length > 0 ? labels.join(", ") : "(none were wanted)" };
+  } catch (cause) {
+    return { labels: [], text: `(could not re-read the rows' labels: ${/** @type {Error} */ (cause).message})` };
+  }
+}
+
+/**
+ * #1478: THE ENTRY POINT WITH ITS SEAMS INJECTED. `main` is this plus the unknown-flag refusal and `process.exitCode`,
+ * so a test drives the path the workflow runs -- the order of the writes and the code the process exits with --
+ * rather than the functions it happens to call.
+ * @param {{ argv: string[], env: Record<string, string | undefined>, run?: typeof defaultRun,
+ *   sleep?: typeof defaultSleep, log?: (line: string) => void, error?: (line: string) => void }} io
+ * @returns {number} the exit code, one of `EXIT`
+ */
+export function runArmPr({ argv, env, run = defaultRun, sleep = defaultSleep, log = console.log, error = console.error }) {
+  const number = flagValue(argv, "pr");
+  const repo = flagValue(argv, "repo") ?? env.GITHUB_REPOSITORY;
+  if (!number || !repo) {
+    error("arm-pr: --pr=<n> is required, and --repo or GITHUB_REPOSITORY must name the repo.\n"
+      + "  REFUSING rather than guessing: arming the wrong PR is not recoverable by re-running.");
+    return EXIT.CANNOT_ASK;
+  }
+  const { labels, prBody, state } = readPr({ number, repo, run, error });
   const verdict = armDecision(labels);
   if (labels === null) {
-    console.error(`arm-pr: ${verdict.reason}.`);
-    process.exit(EXIT.CANNOT_ASK);
+    error(`arm-pr: ${verdict.reason}.`);
+    return EXIT.CANNOT_ASK;
   }
   if (!verdict.arm) {
-    console.log(`arm-pr: NOT arming #${number} -- ${verdict.reason}`);
-    return;
+    log(`arm-pr: NOT arming #${number} -- ${verdict.reason}`);
+    return EXIT.DONE;
   }
   // #1022: A PR THAT HAS ALREADY SETTLED IS NOT A FAILURE. Checked BEFORE the merge from the state this
   // run already read, so the ordinary "it merged before the workflow got here" case costs no call and no
   // wait at all -- `armMerge`'s poll is only reached when the merge is genuinely refused.
   const already = settledReason(state);
   if (already) {
-    console.log(`arm-pr: NOT arming #${number} -- ${already}, so there is nothing left to arm`);
-    return;
+    log(`arm-pr: NOT arming #${number} -- ${already}, so there is nothing left to arm`);
+    return EXIT.DONE;
   }
-  const outcome = armMerge({ number, repo });
-  // #1000: `main` owns the exit code. A retired session label refuses the arm, and the workflow step
-  // running this must go red rather than reporting a PR labelled with a session that does not exist.
-  if (labelArmedPr({ number, repo, prBody }).refused) process.exitCode = 1;
-  console.log(outcome.armed
+  const outcome = armMerge({ number, repo }, { run, sleep });
+  // #1478: WHAT LANDED IS SAID BEFORE THE NEXT STEP RUNS, so a failure in labelling cannot hide it.
+  log(outcome.armed
     ? `arm-pr: armed #${number} -- ${verdict.reason}`
     : `arm-pr: did not need to arm #${number} -- ${outcome.reason}`);
+  return labelAfterArm({ number, repo, prBody, run, error }, outcome);
+}
+
+function main() {
+  refuseUnknownFlags(["--pr=", "--repo="], { entry: import.meta.url, command: "node scripts/arm-pr.mjs" });
+  process.exitCode = runArmPr({ argv: process.argv, env: process.env });
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) main();
