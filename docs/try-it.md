@@ -185,7 +185,7 @@ page reached with the cookie already set) will also work.
 
 | what your page has | what you may see | is it a claim? |
 |---|---|---|
-| Many images | **Missing alt text**, and **alt text that is a filename** | **Yes — asserted.** Both are read directly from what the screen reader said |
+| Many images | **Missing alt text** (announced as unlabelled, or with an empty name), and **alt text that is a filename**: a camera name such as *IMG 4821*, or a name ending in an image extension, spoken (*photo dot jpg*) or written (*logo.png*) | **Yes — asserted.** Both are read directly from what the screen reader said. A generic placeholder name such as *thumbnail-image* is **not** a filename and is not flagged, so an image named that way still needs a person to look |
 | *Learn more* / *Read more* links | Link purpose unclear from the text alone | **No — a referral.** It means *a person should look*, not *this is broken* |
 | Unnamed graphics inside links or buttons | A control with no accessible name | **Yes — asserted**, when nothing names it |
 | Headings | Heading structure, and whether headings and labels describe their content | Mixed — some asserted, some referred |
