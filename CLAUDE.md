@@ -50,6 +50,14 @@ assess them in the sense of concluding anything. The product-path real-page figu
 ADR 0021 records why that is the right division rather than a shortfall, and moved
 `4.1.2:state-change-silent` — the flagship finding — from the model to the rules so it could be stated
 rather than suggested.
+
+**axe-core beside the screen-reader layer (ADR 0021's 2026-09-14 addendum, #1342).** On a criterion both cover,
+an axe-core `violated` outranks the screen-reader layer's `cantTell` and the outcome is `failed`, **asserted BY
+axe-core and attributed to it** — never by the screen-reader layer or the scorer; against a screen-reader `passed`
+or `inapplicable` it is a DISAGREEMENT and the outcome is `cantTell` with both facts in the reason; against a
+screen-reader `failed` the screen-reader layer's own `failed` stands; no violation changes nothing; a rule-layer
+pass outranks nothing. A DOM rule may override silence, not a contrary lived reading. The table is pinned row by
+row in `outcomes.test.ts` (`besideTheRuleLayer`).
 ## Code conventions
 
 We follow the applicable subset of *Clean Code* (Martin). It has two halves, enforced differently.
