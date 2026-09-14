@@ -77,9 +77,16 @@ const REPO = fileURLToPath(new URL("..", import.meta.url));
 export const README_PATH = `${REPO}README.md`;
 export const OUT = `${REPO}.github/workflows/consumer-gate.yml`;
 
-/** The action reference this generator looks for -- the one line that identifies the right fence among
- *  several code blocks in README.md, and the one whose ref gets pinned. */
-const ACTION_REF = "DanBeckDev/a11y-witness";
+/**
+ * The Action's published identities, either side of the transfer -- #1555. This was one constant,
+ * `"DanBeckDev/a11y-witness"`, used to find README's fence and to pin and read back its `uses:` line; the transfer (#63)
+ * rewrites that line to `a11ign/a11ign`, and the generator and its `--check` would then refuse README outright. README's
+ * own fence now decides which name is found and pinned, from `repo-identity.mjs`'s two answers.
+ */
+const ACTION_IDENTITY_NAMES = [PRE_TRANSFER_REPO, PRODUCT_REPO];
+
+/** `uses: <either identity>`, with the identity captured as group 1 -- a RegExp SOURCE, matched case-insensitively. */
+const ACTION_USES = `uses: (${ACTION_IDENTITY_NAMES.map((name) => escapeRegExp(name)).join("|")})`;
 
 /** Top-level keys `buildWorkflowHeader` wraps itself -- a fence carrying either of its own produces a
  *  DUPLICATE key once spliced in. */
@@ -138,7 +145,7 @@ function whyTopLevelLineIsRefused(line) {
 }
 
 /**
- * Extracts the first fenced ```yaml block in `markdown` that contains a `uses: <ACTION_REF>` line --
+ * Extracts the first fenced ```yaml block in `markdown` that contains a `uses:` line of the Action, under either identity --
  * the documented consumer workflow, not any other yaml example the document happens to carry.
  *
  * @param {string} markdown
@@ -147,18 +154,18 @@ function whyTopLevelLineIsRefused(line) {
 export function extractDocumentedJobsBlock(markdown) {
   const fences = markdown.matchAll(/```yaml\n([\s\S]*?)```/g);
   for (const m of fences) {
-    if (m[1].includes(`uses: ${ACTION_REF}`)) {
+    if (new RegExp(`${ACTION_USES}(?=@|\\s|$)`, "im").test(m[1])) {
       const jobsYaml = m[1].trimEnd();
       refuseAnythingButJobsAtTopLevel(jobsYaml);
       return jobsYaml;
     }
   }
-  throw new Error(`no \`\`\`yaml fence containing "uses: ${ACTION_REF}" found in ${README_PATH} -- `
+  throw new Error(`no \`\`\`yaml fence containing "uses: ${ACTION_IDENTITY_NAMES.join("\" or \"uses: ")}" found in ${README_PATH} -- `
     + "the Quickstart section may have moved or been reworded");
 }
 
 /**
- * Pins the `DanBeckDev/a11y-witness@<ref>` step to `sha` -- and ONLY that line. A workflow snippet may
+ * Pins the Action's `uses: <identity>@<ref>` step to `sha`, keeping the identity the fence carries (#1555) -- and ONLY that line. A workflow snippet may
  * carry other `uses:` steps (`actions/checkout@v4`) that must not be touched.
  *
  * @param {string} yamlText
@@ -166,12 +173,12 @@ export function extractDocumentedJobsBlock(markdown) {
  * @returns {string}
  */
 export function pinActionRef(yamlText, sha) {
-  const pattern = new RegExp(`uses: ${ACTION_REF}@[^\\s]+`);
+  const pattern = new RegExp(`${ACTION_USES}@[^\\s]+`, "i");
   if (!pattern.test(yamlText)) {
-    throw new Error(`no "uses: ${ACTION_REF}@<ref>" line found to pin -- the extraction may have `
-      + "captured the wrong fence");
+    throw new Error(`no "uses: ${ACTION_IDENTITY_NAMES[0]}@<ref>" line (nor "uses: ${ACTION_IDENTITY_NAMES[1]}@<ref>") found `
+      + "to pin -- the extraction may have captured the wrong fence");
   }
-  return yamlText.replace(pattern, `uses: ${ACTION_REF}@${sha}`);
+  return yamlText.replace(pattern, (_whole, identity) => `uses: ${identity}@${sha}`);
 }
 
 /**
@@ -225,7 +232,7 @@ export function extractJobName(jobsYaml) {
 }
 
 /** Owners/names the Action is published under, either side of the transfer, matched case-insensitively. */
-const ACTION_IDENTITIES = [PRE_TRANSFER_REPO, PRODUCT_REPO].map((identity) => identity.toLowerCase());
+const ACTION_IDENTITIES = ACTION_IDENTITY_NAMES.map((identity) => identity.toLowerCase());
 
 /**
  * The jobs a `jobs:`-rooted block declares, in order, each with whether one of its lines is a `uses:` of the Action.
@@ -256,9 +263,12 @@ function jobsUnder(jobsYaml) {
  * @returns {string}
  */
 export function extractPinnedSha(jobsYaml) {
-  const m = new RegExp(`uses: ${ACTION_REF}@(\\S+)`).exec(jobsYaml);
-  if (!m) throw new Error(`no "uses: ${ACTION_REF}@<sha>" line found -- pinActionRef may not have run yet`);
-  return m[1];
+  const m = new RegExp(`${ACTION_USES}@(\\S+)`, "i").exec(jobsYaml);
+  if (!m) {
+    throw new Error(`no "uses: ${ACTION_IDENTITY_NAMES.join("@<sha>\" or \"uses: ")}@<sha>" line found -- `
+      + "pinActionRef may not have run yet");
+  }
+  return m[2];
 }
 
 /**
