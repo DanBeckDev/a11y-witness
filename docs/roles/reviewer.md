@@ -125,9 +125,15 @@ or
   afternoon: `ceo`'s watch pattern required `"#1068 at"` and missed a verdict entirely because it was not
   where the pattern looked. On the line, a reader counting outstanding provisional verdicts can see which
   they are instead of assuming there are none.
-- **`ceo` or `worker-judge` spot-checks it before the author marks ready** — either of them. **A
-  spot-check is re-running the PR's Acceptance line and one Mutation in a detached worktree and finding
-  what the verdict says.** A *not convinced* counts as held when its named blocker reproduces.
+- **Since the line lifted (2026-09-13, #912: `reviewer` at 20:30Z, `reviewer-2` at 20:54Z, five of five
+  holding each), a provisional `convinced` IS the verdict: the author marks ready on it, and `ceo`
+  samples every fifth `convinced` per instance, counted from its lift in the verdict comments.** Before
+  the lift the rule was "`ceo` or `worker-judge` spot-checks it before the author marks ready", and it
+  held #1542 on 2026-09-14 for a sample that was not due. **A spot-check is
+  re-running the PR's Acceptance line and one Mutation in a fresh shallow clone and finding what the
+  verdict says.** A
+  *not convinced* counts as held when its named blocker reproduces. One miss restores that instance's
+  line at zero.
 - **The line lifts after FIVE CONSECUTIVE verdicts, all five holding.** **The count is PER MODEL**: the
   chairman swapped this role's model on 2026-09-12 when its quota ran out, and **a sample of one model
   says nothing about another**, so a model change restarts the count at zero and the prompt names the
