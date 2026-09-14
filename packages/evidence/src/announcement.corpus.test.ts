@@ -23,6 +23,11 @@ import { nameOf, parseAnnouncement } from "./announcement.js";
 
 const CAPTURES = fileURLToPath(
   new URL("../../../runs/screenreader-dataset/captures/", import.meta.url));
+/**
+ * Why the three corpus tests skip, printed after `# SKIP` (#1415). A boolean `skip` prints nothing there, so a reader
+ * of the run could not tell these from a skip for any other reason.
+ */
+const NO_CAPTURES = existsSync(CAPTURES) ? false : `no captures at ${CAPTURES} (runs/ is gitignored; local-only)`;
 
 type Capture = { transcript?: unknown[]; structure?: Record<string, unknown[]> };
 
@@ -38,7 +43,7 @@ function captures(limit: number): Capture[] {
 const lines = (values: unknown[] | undefined): string[] =>
   (values ?? []).filter((v): v is string => typeof v === "string");
 
-test("a link named in one channel is named the same in the other", { skip: !existsSync(CAPTURES) }, () => {
+test("a link named in one channel is named the same in the other", { skip: NO_CAPTURES }, () => {
   const disagreements: string[] = [];
   let compared = 0;
 
@@ -67,7 +72,7 @@ test("a link named in one channel is named the same in the other", { skip: !exis
     + disagreements.slice(0, 5).join("\n  "));
 });
 
-test("every announcement that mentions a role yields an object for it", { skip: !existsSync(CAPTURES) }, () => {
+test("every announcement that mentions a role yields an object for it", { skip: NO_CAPTURES }, () => {
   // Coverage, not correctness — the question `test_extractor_coverage.py` asks of the Python side. A parser
   // that silently returns nothing looks exactly like a page with nothing to report, which is the
   // indistinguishability this repo pays for most often.
@@ -88,7 +93,7 @@ test("every announcement that mentions a role yields an object for it", { skip: 
     + missed.slice(0, 5).join("\n  "));
 });
 
-test("parsing is total: no announcement on disk throws", { skip: !existsSync(CAPTURES) }, () => {
+test("parsing is total: no announcement on disk throws", { skip: NO_CAPTURES }, () => {
   let parsed = 0;
   for (const capture of captures(300)) {
     for (const channel of ["sweep", "transcript"] as const) {
