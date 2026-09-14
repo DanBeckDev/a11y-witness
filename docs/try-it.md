@@ -70,7 +70,7 @@ jobs:
 
 Save it as `.github/workflows/a11ign.yml`. It runs on every pull request, and `workflow_dispatch` also lets you start it by hand from the repository's Actions tab (or `gh workflow run a11ign.yml`).
 
-**Not on a pull request, no comment.** A run started by hand or by a push has nothing to comment on: the log shows one line (`a11ign: N finding(s)`), the report is in the run's job summary, and the full result, transcript included, is the `a11ign-result` artifact the upload step saves.
+**Not on a pull request, no comment.** A run started by hand or by a push has nothing to comment on: the log's last line is the count (`a11ign: N finding(s)`), with a line before it for anything that bounds that count (an examination that ended early, a capture spanning more than one document, criteria resting on an examination known to be partial), the report is in the run's job summary, and the full result, transcript included, is the `a11ign-result` artifact the upload step saves.
 
 **`task` is load-bearing.** It is what a user is trying to *do*, in plain words, and it changes what gets
 captured: a button whose announced name shares a meaningful word with the task gets activated, and
