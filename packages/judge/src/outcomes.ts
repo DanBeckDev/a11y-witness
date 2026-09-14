@@ -286,6 +286,65 @@ function notExaminedOutcome(criterion: string, feeds: string[],
 }
 
 /**
+ * #1378: 1.4.13, 3.2.1 AND 3.2.2 ARE READ FROM A PROBE'S OWN VERDICT, and a probe has three answers an empty channel
+ * cannot give.
+ *
+ * None of the three has an `EVIDENCE_CHANNEL` entry, so each fell through `hasEvidenceFor` to "empty" in EVERY state:
+ * a probe that never ran, a probe with nothing to probe, and a probe that examined a control all read "The page exposed
+ * nothing of the kind". Measured at `a199b435` over each producer's own return shapes (`probeFocusContext`,
+ * `probeTypedFeedback` and `probeFocusReveal` in `capture-probes.mjs`, `focusRevealVerdict` in `capture-pure.mjs`).
+ *   - NOT COLLECTED (`notProbed`, cantTell): the key is absent -- the probe was not asked, ran out of time or threw, and
+ *     the worker writes none of the three unless truthy -- or the probe could not tell: `revealed: null` for any reason
+ *     but "nothing focusable", or `typed: false` with focus on something that is not an edit field.
+ *   - NOTHING TO PROBE (`empty`, inapplicable): nothing focusable (3.2.1, 1.4.13), or no edit field (3.2.2).
+ *   - EXAMINED ONE (`examinedOne`, cantTell): the probe ran on one control, one field or a short tab walk and found no
+ *     failure. Never `passed`: that would claim the PAGE conforms from one control. It refers; it does not assert.
+ */
+type ProbeApplicability = "notProbed" | "empty" | "examinedOne";
+type ProbeChannel = Record<string, unknown> | null | undefined;
+
+/** `probeFocusReveal`'s own words when the page has no focusable control: the one `revealed: null` that is an answer. */
+const NOTHING_FOCUSABLE = "nothing focusable on this page";
+
+const probeChannelOf = (capture: CaptureEvidence, key: string): ProbeChannel =>
+  (capture.interaction as Record<string, ProbeChannel> | undefined)?.[key];
+
+/** Null titles mean the probe read nothing -- the same absence rule `contextChanged` in `rules.ts` applies. */
+const bothTitlesRead = (channel: Record<string, unknown>): boolean =>
+  typeof channel.titleBefore === "string" && typeof channel.titleAfter === "string";
+
+const PROBE_APPLICABILITY: Readonly<Record<string, (capture: CaptureEvidence) => ProbeApplicability>> = {
+  "1.4.13": (capture) => {
+    const reveal = probeChannelOf(capture, "focusReveal");
+    if (!reveal || reveal.error) return "notProbed";
+    if (reveal.revealed === null) return reveal.why === NOTHING_FOCUSABLE ? "empty" : "notProbed";
+    return typeof reveal.revealed === "boolean" ? "examinedOne" : "notProbed";
+  },
+  "3.2.1": (capture) => {
+    const focus = probeChannelOf(capture, "focusContext");
+    if (!focus || focus.error) return "notProbed";
+    if (focus.focused === false) return "empty";
+    return focus.focused === true && bothTitlesRead(focus) ? "examinedOne" : "notProbed";
+  },
+  "3.2.2": (capture) => {
+    const typing = probeChannelOf(capture, "typedFeedback");
+    if (!typing || typing.error) return "notProbed";
+    if (typing.typed === false) return typing.focusBefore === "" ? "empty" : "notProbed";
+    return typing.typed === true && bothTitlesRead(typing) ? "examinedOne" : "notProbed";
+  },
+};
+
+/** What an EXAMINED-ONE probe checked, said as what it is: never the page. */
+const EXAMINED_ONE_REASON: Readonly<Record<string, string>> = {
+  "1.4.13": "The focus-reveal probe walked a short run of tab stops and found no failure there -- a few controls "
+    + "examined, not the page, so this is undetermined rather than clean.",
+  "3.2.1": "The focus probe focused one control and found no change of context -- one control examined, not the "
+    + "page, so this is undetermined rather than clean.",
+  "3.2.2": "The typing probe typed into one field and found no change of context -- one field examined, not the "
+    + "page, so this is undetermined rather than clean.",
+};
+
+/**
  * Is there anything on this page for the criterion to be about?
  *
  * Mostly delegates to `hasEvidenceFor`, which is the applicability table the scorer already uses. The
@@ -294,6 +353,12 @@ function notExaminedOutcome(criterion: string, feeds: string[],
  * collapse into one answer — the first is `cantTell` and the second is `inapplicable`.
  */
 function applicabilityOf(criterion: string, capture: CaptureEvidence):
+  "applicable" | "empty" | "notProbed" | "unrecognised" | "examinedOne" {
+  return PROBE_APPLICABILITY[criterion]?.(capture) ?? channelApplicabilityOf(criterion, capture);
+}
+
+/** Everything but the three probe-verdict criteria: a channel's presence, or the probe field 1.4.2, 2.1.2 and 2.4.7 read. */
+function channelApplicabilityOf(criterion: string, capture: CaptureEvidence):
   "applicable" | "empty" | "notProbed" | "unrecognised" {
   if (criterion === "1.4.2") {
     if (capture.media === undefined) return "notProbed";
@@ -395,9 +460,8 @@ function outcomeFor(criterion: string, input: OutcomeInput): CriterionOutcome {
         + "rather than clean.",
     };
   }
-  if (applies === "unrecognised") {
-    return { criterion, outcome: "cantTell", reason: unrecognisedRejectionReason(input.capture) };
-  }
+  const referred = referredOutcome(criterion, applies, input.capture);
+  if (referred) return referred;
   if (applies === "empty") {
     return {
       criterion, outcome: "inapplicable",
@@ -409,6 +473,17 @@ function outcomeFor(criterion: string, input: OutcomeInput): CriterionOutcome {
     criterion, outcome: "passed",
     reason: passedReason(criterion),
   };
+}
+
+/**
+ * The cantTell answers an applicability gives WITH something examined: #1519's unrecognised submit rejection, and #1378's
+ * probe that examined one control, one field or a short tab walk. Null for every other applicability.
+ */
+function referredOutcome(criterion: string, applies: string, capture: CaptureEvidence): CriterionOutcome | null {
+  if (applies === "unrecognised") return { criterion, outcome: "cantTell", reason: unrecognisedRejectionReason(capture) };
+  if (applies !== "examinedOne") return null;
+  return { criterion, outcome: "cantTell",
+    reason: EXAMINED_ONE_REASON[criterion] ?? "One control was examined, not the page, so this is undetermined rather than clean." };
 }
 
 /**
