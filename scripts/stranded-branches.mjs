@@ -41,7 +41,12 @@
 //   0  OK           -- pushed branches examined, none are candidates
 //   1  CANDIDATE(S) -- named, one line each; this repo's own convention (row-reachability, ready-label-
 //                      audit) of reporting rather than blocking anything
-//   2  CANNOT ASK   -- a lookup failed. INCONCLUSIVE, never a clean sweep over an unreadable board.
+//   2  CANNOT ASK   -- a lookup failed. INCONCLUSIVE, never a clean sweep over an unreadable board. With
+//                      --close, also a write that failed before any PR was commented on or closed: nothing
+//                      was changed (#1480).
+//   3  LANDED, THEN FAILED -- --close only: a PR had already been commented on or closed when a later `gh`
+//                      call failed. The error line names every PR closed and the one command that is safe to
+//                      run next, so a half-done sweep never reads as nothing done (#1480).
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
@@ -50,7 +55,7 @@ import { REPO } from "./repo-identity.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
 import { assertNoLeakInArgv } from "../packages/lab/src/packaging/leak-patterns.mjs";
 
-const EXIT = { OK: 0, CANDIDATES: 1, CANNOT_ASK: 2 };
+export const EXIT = { OK: 0, CANDIDATES: 1, CANNOT_ASK: 2, LANDED_THEN_FAILED: 3 };
 
 /** @type {(cmd: string, args: string[]) => string} */
 const defaultRun = (cmd, args) => {
@@ -58,6 +63,10 @@ const defaultRun = (cmd, args) => {
   return execFileSync(cmd, args,
     { encoding: "utf8", env: sandboxGitEnv(), stdio: ["ignore", "pipe", "pipe"] });
 };
+/** @param {string} line */
+const writeOut = (line) => { process.stdout.write(line); };
+/** @param {string} line */
+const writeErr = (line) => { process.stderr.write(line); };
 
 /**
  * Every branch pushed under `origin/agent/*` or `origin/lead/*` -- the two prefixes this repo's own
@@ -377,6 +386,32 @@ export function prForDecision(pr, now) {
 }
 
 /**
+ * #1480: A `--close` FAILURE SAYS WHAT HAD ALREADY LANDED. The closure comment and the close were two unguarded
+ * calls in a loop, so a throw on either escaped `main` and Node exited 1, the header's CANDIDATE(S), with PRs
+ * already commented on or closed and nothing saying which. The error carries the header's exit code:
+ * LANDED_THEN_FAILED when any write had landed, CANNOT_ASK when none had. Its remedy is the one that is safe to
+ * follow: a PR left commented but open needs only its close, since re-running `--close` would comment on it twice.
+ * @param {{ closed: number[], number: number, commented: boolean, error: unknown }} at
+ * @returns {Error & { exitCode: number }}
+ */
+function sweepFailure({ closed, number, commented, error }) {
+  const cause = error instanceof Error ? error.message.split("\n")[0] : String(error);
+  if (!commented && closed.length === 0) {
+    return Object.assign(new Error(`COULD NOT SWEEP: \`gh pr comment ${number}\` failed before any PR was `
+      + `commented on or closed -- nothing was changed.\n  ${cause}`, { cause: error }), { exitCode: EXIT.CANNOT_ASK });
+  }
+  const done = closed.length > 0 ? closed.map((n) => `#${n}`).join(", ") : "none";
+  const remedy = commented
+    ? `#${number} has its closure comment but is still OPEN. Run only \`gh pr close ${number}\` once the cause `
+      + `below is gone -- re-running --close would post a second comment on #${number}.`
+    : `Nothing was written to #${number}. Re-running --close once the cause below is gone is safe: the PRs `
+      + "already closed are no longer open.";
+  return Object.assign(new Error(`LANDED, THEN FAILED: \`gh pr ${commented ? "close" : "comment"} ${number}\` failed `
+    + `during --close. Closed with a comment, branch kept: ${done}. ${remedy}\n  ${cause}`, { cause: error }),
+  { exitCode: EXIT.LANDED_THEN_FAILED });
+}
+
+/**
  * THE LIFETIME SWEEP — B1. REPORTS BY DEFAULT; closing is opt-in.
  *
  * `corpus-prune-orphans.mjs` (#195) established the shape and it matters more here: closing a PR is the
@@ -402,44 +437,73 @@ export function sweepPullRequests({ now = new Date(), maxAgeHours = 4, close = f
   }
   if (!close || closing.length === 0) return closing;
 
+  /** @type {number[]} */
+  const closed = [];
   for (const { pr, decision } of closing) {
     // THE BRANCH IS KEPT: `gh pr close` without `--delete-branch`, said out loud because the flag's
     // absence is the whole safety property and an absent flag is invisible in review.
-    run("gh", ["pr", "comment", String(pr.number), "--body", staleClosureComment(pr, decision.why)]);
-    run("gh", ["pr", "close", String(pr.number)]);
+    try {
+      run("gh", ["pr", "comment", String(pr.number), "--body", staleClosureComment(pr, decision.why)]);
+    } catch (error) {
+      throw sweepFailure({ closed, number: pr.number, commented: false, error });
+    }
+    try {
+      run("gh", ["pr", "close", String(pr.number)]);
+    } catch (error) {
+      throw sweepFailure({ closed, number: pr.number, commented: true, error });
+    }
+    closed.push(pr.number);
     process.stdout.write(`  closed #${pr.number}, branch ${pr.headRefName} KEPT\n`);
   }
   return closing;
 }
 
-function main() {
-  refuseUnknownFlags(["--dry-run", "--close", "--max-age-hours="],
-    { entry: import.meta.url, command: "node scripts/stranded-branches.mjs" });
-  if (process.argv.includes("--dry-run") || process.argv.includes("--close")) {
-    const hours = flagValue(process.argv, "max-age-hours");
-    sweepPullRequests({
-      close: process.argv.includes("--close"),
-      maxAgeHours: hours ? Number(hours) : 4,
-    });
-    return;
+/**
+ * The `--dry-run`/`--close` half of `main`. A throw carrying the header's exit code is `sweepFailure`'s, already
+ * worded; any other throw (the `gh pr list` lookup) changed nothing, so it is CANNOT_ASK (#1480).
+ * @param {string[]} argv
+ * @param {{ run: typeof defaultRun, err: (line: string) => void }} deps
+ * @returns {number}
+ */
+function sweepCommand(argv, { run, err }) {
+  const hours = flagValue(argv, "max-age-hours");
+  try {
+    sweepPullRequests({ close: argv.includes("--close"), maxAgeHours: hours ? Number(hours) : 4, run });
+  } catch (error) {
+    const { exitCode, message } = /** @type {Error & { exitCode?: number }} */ (error);
+    err(`${exitCode === undefined ? `COULD NOT SWEEP: ${message}` : message}\n`);
+    return exitCode ?? EXIT.CANNOT_ASK;
   }
+  return EXIT.OK;
+}
+
+/**
+ * The CLI, returning the header's exit code, with `run` injectable so a `--close` that fails part-way is driven
+ * end to end without reaching GitHub (#1480).
+ * @param {string[]} [argv]
+ * @param {{ run?: typeof defaultRun, out?: (line: string) => void, err?: (line: string) => void }} [deps]
+ * @returns {number}
+ */
+export function main(argv = process.argv.slice(2), { run = defaultRun, out = writeOut, err = writeErr } = {}) {
+  refuseUnknownFlags(["--dry-run", "--close", "--max-age-hours="],
+    { entry: import.meta.url, argv, command: "node scripts/stranded-branches.mjs" });
+  if (argv.includes("--dry-run") || argv.includes("--close")) return sweepCommand(argv, { run, err });
   /** @type {string[]} */
   let pushed;
   /** @type {{ refs: Set<string>, calls: number, prs: number }} */
   let prs;
   try {
-    pushed = fetchPushedBranches();
-    prs = fetchAllPRHeadRefs();
+    pushed = fetchPushedBranches({ run });
+    prs = fetchAllPRHeadRefs({ run });
   } catch (error) {
-    process.stderr.write(`COULD NOT AUDIT: ${/** @type {Error} */ (error).message}\n`);
-    process.exitCode = EXIT.CANNOT_ASK;
-    return;
+    err(`COULD NOT AUDIT: ${/** @type {Error} */ (error).message}\n`);
+    return EXIT.CANNOT_ASK;
   }
 
   // WHAT THE FETCH SPENT, PRINTED WHETHER OR NOT ANYTHING IS FOUND. This listing was the heaviest
   // consumer in an audit pass that spent 816 calls against a 300 budget, and a cost nobody can see is a
   // cost nobody can attribute -- the pass was over budget for a week before the heaviest call was named.
-  process.stdout.write(`PR listing: ${prs.prs} PR(s), ${prs.refs.size} distinct head ref(s), `
+  out(`PR listing: ${prs.prs} PR(s), ${prs.refs.size} distinct head ref(s), `
     + `over ${prs.calls} REST call(s) `
     + `(core, ${PR_PAGE_SIZE}/page; \`gh pr list\` spent GraphQL and capped at ${PR_LIST_LIMIT})\n`);
 
@@ -447,29 +511,28 @@ function main() {
   const aheadCounts = new Map();
   for (const branch of noPR) {
     try {
-      aheadCounts.set(branch, aheadCount(branch));
+      aheadCounts.set(branch, aheadCount(branch, { run }));
     } catch (error) {
-      process.stderr.write(`COULD NOT AUDIT: ${/** @type {Error} */ (error).message}\n`);
-      process.exitCode = EXIT.CANNOT_ASK;
-      return;
+      err(`COULD NOT AUDIT: ${/** @type {Error} */ (error).message}\n`);
+      return EXIT.CANNOT_ASK;
     }
   }
   const candidates = strandedCandidates(noPR, aheadCounts);
 
   if (candidates.length === 0) {
-    process.stdout.write(`OK  ${pushed.length} pushed branch(es) examined, none are stranded-branch `
+    out(`OK  ${pushed.length} pushed branch(es) examined, none are stranded-branch `
       + `candidates (no PR of any state, and commits main does not have)\n`);
-    return;
+    return EXIT.OK;
   }
   for (const { branch, aheadCount: count } of candidates) {
-    process.stdout.write(`CANDIDATE  ${branch}  +${count} commit(s) ahead of main, no PR ever opened\n`);
+    out(`CANDIDATE  ${branch}  +${count} commit(s) ahead of main, no PR ever opened\n`);
   }
-  process.stderr.write(`\n${candidates.length} branch(es) are CANDIDATES for stranded work, out of `
+  err(`\n${candidates.length} branch(es) are CANDIDATES for stranded work, out of `
     + `${pushed.length} pushed. NOT a finding: a rebase whose content landed under a DIFFERENT branch's PR `
     + `produces the identical shape. Read each branch's own diff against main before opening a PR for it.\n`);
-  process.exitCode = EXIT.CANDIDATES;
+  return EXIT.CANDIDATES;
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
-  main();
+  process.exitCode = main();
 }
