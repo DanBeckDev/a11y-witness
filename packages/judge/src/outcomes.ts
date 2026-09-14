@@ -25,7 +25,7 @@
 import { WCAG_22_AA } from "@a11ign/evidence/wcag";
 
 import { assessedCriteria, criterionNumber } from "./coverage.js";
-import { hasEvidenceFor, type CaptureEvidence } from "./local-judge.js";
+import { hasEvidenceFor, unrecognisedSubmitRejection, type CaptureEvidence } from "./local-judge.js";
 import { EXAMINED_IN_FULL } from "./channel-comparison.js";
 import type { RequirementMapping } from "./judge.js";
 
@@ -293,7 +293,8 @@ function notExaminedOutcome(criterion: string, feeds: string[],
  * probe existed carries no `media` field at all. "The probe did not run" and "there is no media" must not
  * collapse into one answer — the first is `cantTell` and the second is `inapplicable`.
  */
-function applicabilityOf(criterion: string, capture: CaptureEvidence): "applicable" | "empty" | "notProbed" {
+function applicabilityOf(criterion: string, capture: CaptureEvidence):
+  "applicable" | "empty" | "notProbed" | "unrecognised" {
   if (criterion === "1.4.2") {
     if (capture.media === undefined) return "notProbed";
     return capture.media.length > 0 ? "applicable" : "empty";
@@ -315,7 +316,15 @@ function applicabilityOf(criterion: string, capture: CaptureEvidence): "applicab
     if (!focusEvents?.checked) return "notProbed";
     return (focusEvents.events ?? 0) > 0 ? "applicable" : "empty";
   }
-  return hasEvidenceFor(criterion, capture) ? "applicable" : "empty";
+  return hasEvidenceFor(criterion, capture) ? "applicable" : emptyChannelOf(criterion, capture);
+}
+
+/**
+ * #1519: a closed channel is not always an EMPTY one. A submit that was probed and stayed, with post-submit text nothing
+ * here recognises, closed 3.3.1's channel through the error-text veto, and there was something to judge.
+ */
+function emptyChannelOf(criterion: string, capture: CaptureEvidence): "empty" | "unrecognised" {
+  return criterion === "3.3.1" && unrecognisedSubmitRejection(capture) ? "unrecognised" : "empty";
 }
 
 /**
@@ -386,6 +395,9 @@ function outcomeFor(criterion: string, input: OutcomeInput): CriterionOutcome {
         + "rather than clean.",
     };
   }
+  if (applies === "unrecognised") {
+    return { criterion, outcome: "cantTell", reason: unrecognisedRejectionReason(input.capture) };
+  }
   if (applies === "empty") {
     return {
       criterion, outcome: "inapplicable",
@@ -395,8 +407,29 @@ function outcomeFor(criterion: string, input: OutcomeInput): CriterionOutcome {
   }
   return {
     criterion, outcome: "passed",
-    reason: "Content of the relevant kind was examined in full and no failure was found.",
+    reason: passedReason(criterion),
   };
+}
+
+/**
+ * #1519's reason, in counts only: which post-submit name is the error is not decidable here, and a reason must never
+ * quote a string it cannot stand behind. The judgement it defers is WCAG's own, in Understanding 3.3.1.
+ */
+function unrecognisedRejectionReason(capture: CaptureEvidence): string {
+  const { names, unheard } = unrecognisedSubmitRejection(capture) ?? { names: 0, unheard: 0 };
+  return `A submit was probed and the page stayed, but none of the ${names} names shown afterwards was recognised as `
+    + `error text (${unheard} of them were never spoken). Whether the page identified the error, including a browser's `
+    + "own validation message, whose accessibility support WCAG's Understanding 3.3.1 leaves to human judgement, "
+    + "needs a person.";
+}
+
+const PASSED_REASON = "Content of the relevant kind was examined in full and no failure was found.";
+
+/** #1519: 4.1.3 reads the page's own changes. A browser's validation message is the user agent's, so it is not judged there. */
+function passedReason(criterion: string): string {
+  return criterion === "4.1.3"
+    ? `${PASSED_REASON} A browser's own form validation message is not judged under 4.1.3.`
+    : PASSED_REASON;
 }
 
 /**
