@@ -560,6 +560,8 @@ depends on somebody remembering to record it does not get recorded.
   `--force`/`--force-with-lease`) is what keeps it safe — a simultaneous push from the owner's own worktree
   still wins the race, refused rather than overridden. The carry leaves a note on the PR naming who carried
   it and why, so the owner's next fetch explains itself.
+  *(2026-09-14, #1499: the account above is kept as it happened. Since #1432 `row-claim claim --branch
+  --worktree` creates the worktree itself; the current recipe is in the loop rules above.)*
 
 ## The measurement that decides whether this split was right
 
