@@ -31,6 +31,11 @@
  *   0  the queue was read (or the named PR merged)
  *   1  the named PR is NOT mergeable -- the reason is printed
  *   2  could not tell: `gh` missing, unauthenticated, or no PRs at all
+ *   3  the named PR MERGED, and a step after the merge failed (#1482) -- the merge stands and is not undone; the
+ *      message names it, and says the orphaned-branch record was not written and the branch not checked or deleted
+ *
+ * 3 IS DISTINCT FROM 1, AND THAT IS #1482. `gh pr merge` lands, and the orphaned-branch log write after it could throw
+ * uncaught -- which Node exits 1, this script's "NOT mergeable", for a PR that DID merge.
  *
  * 2 is distinct from 0 for this repo's most-recorded reason: "could not ask" and "asked and found
  * nothing" must never be the same answer. An empty queue reported as a clean read is a check that passes
@@ -45,6 +50,17 @@ import { gitCommonDir } from "./merge-guard.mjs";
 import { REPO } from "./repo-identity.mjs";
 import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 import { newestPerName } from "./newest-check-run.mjs";
+
+/** The exit codes the header documents, one name each (#1482). */
+export const EXIT = { DONE: 0, NOT_MERGEABLE: 1, CANNOT_TELL: 2, MERGED_THEN_STEP_FAILED: 3 };
+
+/**
+ * #1482: what `runMergeQueue` does its I/O through, so a test drives the entry point with every seam injected. The
+ * runner is named `gh` so the merge call keeps the call shape merge-method-is-one-fact.test.ts sweeps for, and that
+ * sweep still checks its merge method.
+ * @typedef {{ gh: (args: string[]) => string, append: (path: string, data: string) => void, logPath: () => string,
+ *   out: (text: string) => void, err: (text: string) => void }} QueueIo
+ */
 
 /** @param {string[]} args */
 function gh(args) {
@@ -167,10 +183,11 @@ export function orphanedCommitsFrom(compareResult) {
  * Never a silent no-op -- the record is the point, exactly like #201's disagreement log.
  * @param {string} path
  * @param {object} entry
+ * @param {(path: string, data: string) => void} [append]
  */
-function appendJsonl(path, entry) {
+function appendJsonl(path, entry, append = appendFileSync) {
   try {
-    appendFileSync(path, `${JSON.stringify(entry)}\n`);
+    append(path, `${JSON.stringify(entry)}\n`);
   } catch (error) {
     throw new Error(`could not write the orphaned-branch log at ${path}: `
       + `${/** @type {Error} */ (error).message}`, { cause: error });
@@ -188,77 +205,111 @@ export function orphanedBranchLogPath() {
  * agreement as well as disagreement: an absent line here would be indistinguishable from "never checked".
  *
  * @param {{number: number, headRefName: string}} pr
+ * @param {QueueIo} io
+ * @returns {number} the exit code
  */
-function mergeAndCheckOrphans(pr) {
-  process.stdout.write(gh(["pr", "merge", String(pr.number), "--merge"]));
-
-  const compareResult = lookup(() => JSON.parse(
-    gh(["api", `repos/${REPO}/compare/main...${pr.headRefName}`])));
-  const orphaned = orphanedCommitsFrom(compareResult);
-  appendJsonl(orphanedBranchLogPath(), {
-    prNumber: pr.number, branch: pr.headRefName, at: new Date().toISOString(),
-    orphanedCommitCount: orphaned?.count ?? null,
-  });
-
-  if (orphaned === null) {
-    process.stderr.write(`could not verify \`${pr.headRefName}\` was fully absorbed by #${pr.number} -- `
-      + "leaving the branch undeleted rather than guessing.\n");
-    return;
-  }
-  if (orphaned.count > 0) {
-    process.stderr.write(`WARNING: \`${pr.headRefName}\` has ${orphaned.count} commit(s) beyond what `
-      + `#${pr.number} just merged. NOT deleting it -- someone pushed to this branch after its own PR, `
-      + "and that work needs its own PR before the branch goes away:\n"
-      + orphaned.commits.map((c) => `  ${c.sha.slice(0, 10)} ${c.message}`).join("\n") + "\n");
-    return;
-  }
-
+function mergeAndCheckOrphans(pr, io) {
+  io.out(io.gh(["pr", "merge", String(pr.number), "--merge"]));
   try {
-    gh(["api", "-X", "DELETE", `repos/${REPO}/git/refs/heads/${pr.headRefName}`]);
-  } catch (error) {
-    process.stderr.write(`merged #${pr.number} cleanly, but could not delete \`${pr.headRefName}\`: `
-      + `${/** @type {Error} */ (error).message}\n`);
+    return checkOrphansAfterMerge(pr, io);
+  } catch (cause) {
+    // #1482: A FAILURE AFTER THE MERGE LANDED IS NOT "NOT MERGEABLE". Left uncaught, Node exits 1 -- this script's code
+    // for a PR that did not merge -- about a PR that did. So it is caught, the merge is NAMED as standing, what was not
+    // done is said, the error is quoted, and the check to finish by hand is given.
+    io.err(`#${pr.number} MERGED -- \`gh pr merge\` succeeded, and that is not undone -- but the step after it failed: `
+      + `${/** @type {Error} */ (cause).message}. The orphaned-branch record for \`${pr.headRefName}\` was NOT written, `
+      + "and the branch was NOT checked for commits the merge left behind, or deleted. Check it by hand: "
+      + `gh api repos/${REPO}/compare/main...${pr.headRefName} --jq .ahead_by\n`);
+    return EXIT.MERGED_THEN_STEP_FAILED;
   }
 }
 
-function main() {
-  // Guarded per #164: reads --merge; --json/--state go to gh.
-  refuseUnknownFlags(["--merge"], { entry: import.meta.url, command: "node scripts/merge-queue.mjs" });
-  const wanted = wantedPrNumber(process.argv);
+/**
+ * #1482: everything AFTER the merge landed -- the compare, the orphaned-branch record, and the branch deletion.
+ * @param {{number: number, headRefName: string}} pr
+ * @param {QueueIo} io
+ * @returns {number}
+ */
+function checkOrphansAfterMerge(pr, { gh: run, append, logPath, err }) {
+  const compareResult = lookup(() => JSON.parse(
+    run(["api", `repos/${REPO}/compare/main...${pr.headRefName}`])));
+  const orphaned = orphanedCommitsFrom(compareResult);
+  appendJsonl(logPath(), {
+    prNumber: pr.number, branch: pr.headRefName, at: new Date().toISOString(),
+    orphanedCommitCount: orphaned?.count ?? null,
+  }, append);
 
-  let raw = "";
+  if (orphaned === null) {
+    err(`could not verify \`${pr.headRefName}\` was fully absorbed by #${pr.number} -- `
+      + "leaving the branch undeleted rather than guessing.\n");
+    return EXIT.DONE;
+  }
+  if (orphaned.count > 0) {
+    err(`WARNING: \`${pr.headRefName}\` has ${orphaned.count} commit(s) beyond what `
+      + `#${pr.number} just merged. NOT deleting it -- someone pushed to this branch after its own PR, `
+      + "and that work needs its own PR before the branch goes away:\n"
+      + orphaned.commits.map((c) => `  ${c.sha.slice(0, 10)} ${c.message}`).join("\n") + "\n");
+    return EXIT.DONE;
+  }
+
   try {
-    raw = gh(["pr", "list", "--state", "open", "--json",
+    run(["api", "-X", "DELETE", `repos/${REPO}/git/refs/heads/${pr.headRefName}`]);
+  } catch (error) {
+    err(`merged #${pr.number} cleanly, but could not delete \`${pr.headRefName}\`: `
+      + `${/** @type {Error} */ (error).message}\n`);
+  }
+  return EXIT.DONE;
+}
+
+/**
+ * #1482: THE ENTRY POINT WITH ITS SEAMS INJECTED. `main` is this plus the unknown-flag refusal and `process.exitCode`,
+ * so a test drives the path `--merge` runs -- the order of the writes and the code the process exits with.
+ * @param {{ argv: string[] } & Partial<QueueIo>} args
+ * @returns {number} one of `EXIT`
+ */
+export function runMergeQueue({ argv, gh: run = gh, append = appendFileSync, logPath = orphanedBranchLogPath,
+  out = (text) => { process.stdout.write(text); }, err = (text) => { process.stderr.write(text); } }) {
+  const wanted = wantedPrNumber(argv);
+
+  /** @type {string} */
+  let raw;
+  try {
+    raw = run(["pr", "list", "--state", "open", "--json",
       "number,title,headRefName,mergeable,mergeStateStatus,isDraft,statusCheckRollup"]);
   } catch (error) {
-    process.stderr.write(`could not ask GitHub for the queue: ${/** @type {Error} */ (error).message}\n`);
-    process.exit(2);
+    err(`could not ask GitHub for the queue: ${/** @type {Error} */ (error).message}\n`);
+    return EXIT.CANNOT_TELL;
   }
 
   const prs = JSON.parse(raw);
   if (prs.length === 0) {
-    process.stderr.write("INCONCLUSIVE: no open PRs. An empty queue and an unread one are different.\n");
-    process.exit(2);
+    err("INCONCLUSIVE: no open PRs. An empty queue and an unread one are different.\n");
+    return EXIT.CANNOT_TELL;
   }
 
   if (!wanted) {
     for (const pr of prs) {
       const why = refusalFor(pr);
-      process.stdout.write(`${why ? "HELD " : "READY"}  #${pr.number}  ${pr.headRefName}\n`
-        + (why ? `        ${why}\n` : ""));
+      out(`${why ? "HELD " : "READY"}  #${pr.number}  ${pr.headRefName}\n` + (why ? `        ${why}\n` : ""));
     }
-    process.exit(0);
+    return EXIT.DONE;
   }
 
   const pr = prs.find((/** @type {{number: number}} */ p) => String(p.number) === wanted);
   if (!pr) {
-    process.stderr.write(`#${wanted} is not an open PR. The queue is the open PRs; nothing else merges.\n`);
-    process.exit(1);
+    err(`#${wanted} is not an open PR. The queue is the open PRs; nothing else merges.\n`);
+    return EXIT.NOT_MERGEABLE;
   }
   const why = refusalFor(pr);
   if (why) {
-    process.stderr.write(`REFUSING to merge #${pr.number}: ${why}\n`);
-    process.exit(1);
+    err(`REFUSING to merge #${pr.number}: ${why}\n`);
+    return EXIT.NOT_MERGEABLE;
   }
-  mergeAndCheckOrphans(pr);
+  return mergeAndCheckOrphans(pr, { gh: run, append, logPath, out, err });
+}
+
+function main() {
+  // Guarded per #164: reads --merge; --json/--state go to gh.
+  refuseUnknownFlags(["--merge"], { entry: import.meta.url, command: "node scripts/merge-queue.mjs" });
+  process.exitCode = runMergeQueue({ argv: process.argv });
 }
