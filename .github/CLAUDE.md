@@ -15,7 +15,7 @@ once swept up 19 files, 16 of them another agent's half-finished work, and pushe
   makes git commit the working tree, not your staged hunk).
 - `git status` before you start. Files already modified are not yours to commit.
 
-**THE PRIMARY CHECKOUT IS READ-ONLY EXCEPT FAST-FORWARD** — two hooks enforce it mechanically; `npm run primary:update` is the only sanctioned way to move it. [Why →](docs/operational-lessons.md#the-primary-checkout-is-read-only-except-fast-forward)
+**THE PRIMARY CHECKOUT IS READ-ONLY EXCEPT FAST-FORWARD** — two hooks enforce it mechanically; `npm run primary:update` is the only sanctioned way to move it, and **ceo or orchestrator move the primary, always and only to `origin/main` through that command** — never to a branch or a stale sha, and engineers never (ceo's ruling 2026-09-14, #912 5663195911: the orchestrator's deploy and rehearsal-check read-backs already moved it four times in one hour, every time to `origin/main`, so the rule now says what the practice is). [Why →](docs/operational-lessons.md#the-primary-checkout-is-read-only-except-fast-forward)
 
 Multiple peer sessions can be driven by one orchestrator if each unit's acceptance is a named command and work is partitioned by RESOURCE, not topic. [What worked →](docs/operational-lessons.md#and-more-than-one-agent-may-be-driven-by-another-what-worked-measured-2026-09-05)
 
