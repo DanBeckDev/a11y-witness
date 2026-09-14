@@ -14,8 +14,10 @@
  */
 import { strict as assert } from "node:assert";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 
-import { evidenceFor, findingsFromScores, hasEvidenceFor, judgeLocally, layerSummary } from "./local-judge.js";
+import { evidenceFor, findingsFromScores, hasEvidenceFor, judgeLocally, layerSummary, unrecognisedSubmitRejection } from "./local-judge.js";
+import { criterionOutcomes } from "./outcomes.js";
 
 /** The real capture that exposed the drift: heading + an unnamed button, nothing else. */
 const unnamedButton = {
@@ -424,4 +426,49 @@ test("with no subtype detail it falls back to the criterion, so older artifacts 
   const { findings, suppressed } = findingsFromScores({ predictions: { "4.1.2": true }, scores: { "4.1.2": 0.99 }, ruleOwned: ["4.1.2"] }, unnamedButton);
   assert.deepEqual(findings, []);
   assert.equal(suppressed[0].reason, "a deterministic rule decides this criterion");
+});
+
+// #1519: rehearsal 3's committed artifact (run 34774183433): the same w3.org search, rejected empty, with the same
+// unheard "Please fill out this field." as rehearsal 5's D10. Read from the CLI's fixture in place, never copied.
+const REHEARSAL3 = JSON.parse(readFileSync(
+  new URL("../../cli/src/fixtures/rehearsal3-34774183433-a11ign-result.json", import.meta.url), "utf8"));
+const outcomeOf = (capture: object, criterion: string) =>
+  criterionOutcomes({ capture: capture as never, findings: [] }).find((o) => o.criterion === criterion)!;
+const withSubmitText = (names: string[], transcript: string[] = REHEARSAL3.transcript) =>
+  ({ ...REHEARSAL3, transcript, interaction: { ...REHEARSAL3.interaction, postSubmitNames: names } });
+
+test("#1519: rehearsal 3's rejected w3.org search reads 3.3.1 cantTell, in counts, never quoting a name", () => {
+  assert.equal(REHEARSAL3.interaction.postSubmitNames.includes("Please fill out this field."), true, "the recorded shape");
+  assert.equal(REHEARSAL3.outcomes.find((o: { criterion: string }) => o.criterion === "3.3.1").outcome, "inapplicable",
+    "what the committed run recorded before this change");
+  assert.equal(hasEvidenceFor("3.3.1", REHEARSAL3), false, "the channel stays closed, so the scorer guard is unchanged");
+  assert.deepEqual(unrecognisedSubmitRejection(REHEARSAL3), { names: 190, unheard: 85 });
+  const outcome = outcomeOf(REHEARSAL3, "3.3.1");
+  assert.equal(outcome.outcome, "cantTell");
+  assert.match(outcome.reason, /none of the 190 names shown afterwards was recognised as error text \(85 of them were never spoken\)/);
+  assert.match(outcome.reason, /Understanding 3\.3\.1 leaves to human judgement/);
+  assert.doesNotMatch(outcome.reason, /fill out this field/i, "counts only: a reason never quotes a name it cannot stand behind");
+});
+
+test("#1519: a rejected submit whose error text the vocabulary recognises stays as today, heard or not", () => {
+  const heard = withSubmitText(["Enter a search term"], [...REHEARSAL3.transcript, "Enter a search term"]);
+  assert.equal(unrecognisedSubmitRejection(heard), null);
+  assert.equal(outcomeOf(heard, "3.3.1").outcome, "inapplicable", "announced, so nothing was shown and left unsaid");
+  const unheard = withSubmitText(["Enter a search term"]);
+  assert.equal(unrecognisedSubmitRejection(unheard), null);
+  assert.equal(hasEvidenceFor("3.3.1", unheard), true, "recognised and unheard opens the channel, exactly as before");
+});
+
+test("#1519: no submit, or a submit that navigated, stays inapplicable", () => {
+  assert.equal(unrecognisedSubmitRejection(unnamedButton), null);
+  assert.equal(outcomeOf(unnamedButton, "3.3.1").outcome, "inapplicable");
+  const navigated = { ...REHEARSAL3, interaction: { ...REHEARSAL3.interaction, navigatedOnSubmit: { checked: true, navigated: true } } };
+  assert.equal(unrecognisedSubmitRejection(navigated), null);
+  assert.equal(outcomeOf(navigated, "3.3.1").outcome, "inapplicable");
+});
+
+test("#1519: 4.1.3 stays passed on the page's own changes, and says a browser's validation message is not judged there", () => {
+  const outcome = outcomeOf(REHEARSAL3, "4.1.3");
+  assert.equal(outcome.outcome, "passed");
+  assert.match(outcome.reason, /A browser's own form validation message is not judged under 4\.1\.3\./);
 });
