@@ -125,8 +125,12 @@ for (const run of RUNS) {
 
   test(`#1363 ACCEPTANCE (run ${run}): the one-line log and the summary say so, over the cut pipeline's own findings`, () => {
     const result = resultOf(run);
-    // TODAY'S LINE, from the artifact as it was published: the control for the wording below.
-    assert.deepEqual(logLines(result, "never"), ["a11ign: 1 finding(s) (1 serious); fail-on=never"]);
+    // TODAY'S LINE, from the artifact as it was published: the control for the wording below. Since #1563 it is the
+    // LAST line, after the count of criteria resting on an examination known to be partial -- eight on this run.
+    assert.deepEqual(logLines(result, "never"), [
+      "a11ign: 8 criteria rest on an examination known to be partial -- see the artifact",
+      "a11ign: 1 finding(s) (1 serious); fail-on=never",
+    ]);
 
     // The findings come from the CUT capture, not from a filter on the word "YouTube": a post-excursion finding
     // that never names YouTube would pass such a filter (worker-judge's should-fix on #1376).
@@ -138,10 +142,13 @@ for (const run of RUNS) {
       verdict: { ...result.verdict, findings: findings as unknown as RunResult["verdict"]["findings"] },
       leftSite: { control: left!.control, to: left!.to, source: left!.source },
     };
-    const [first, second] = logLines(fixed, "never");
+    const lines = logLines(fixed, "never");
+    // The early end LEADS; the count of findings is always the LAST line, whatever #1387's or #1563's lines add between.
+    const [first] = lines;
+    const count = lines[lines.length - 1];
     assert.equal(first, `a11ign: examination ENDED -- left the site at ${JSON.stringify(EMBED)} `
       + "(to https://www.youtube.com); everything after it was NOT EXAMINED");
-    assert.match(second, new RegExp(`^a11ign: ${findings.length} finding\\(s\\) \\([^)]*\\) in what was examined; fail-on=never$`));
+    assert.match(count, new RegExp(`^a11ign: ${findings.length} finding\\(s\\) \\([^)]*\\) in what was examined; fail-on=never$`));
     assert.match(renderSummary(fixed), /\*\*The examination ended early\.\*\* Activating/);
   });
 }
