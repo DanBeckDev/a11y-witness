@@ -118,9 +118,12 @@ test("#835: the truncated branch's `establishes` must NOT claim what the complet
 // would produce.
 const IKEA_CAPTURE = fileURLToPath(
   new URL("../../../runs/witness/2026-09-09T14-31-43-041Z-www-ikea-com.json", import.meta.url));
+/** Why it skips, printed after `# SKIP` (#1415) -- a boolean `skip` prints nothing there. */
+const NO_IKEA_CAPTURE = existsSync(IKEA_CAPTURE) ? false
+  : `no IKEA capture at ${IKEA_CAPTURE} (runs/ is gitignored; local-only)`;
 
 test("#835 ACCEPTANCE 4: the real IKEA capture (10 of 16 sweep outcomes truncated by `deadline`) still "
-  + "keeps the two branches apart", { skip: !existsSync(IKEA_CAPTURE) }, () => {
+  + "keeps the two branches apart", { skip: NO_IKEA_CAPTURE }, () => {
   const record = JSON.parse(readFileSync(IKEA_CAPTURE, "utf8")) as { capture?: { diagnostics?: unknown[] } };
   const diagnostics = record.capture?.diagnostics ?? [];
   const sweeps = sweepOutcomes(diagnostics);
