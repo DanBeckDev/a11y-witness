@@ -75,6 +75,9 @@ test("CaptureResult declares every field a capture response carries, environment
       measuredAt: "", screenReader: "", screenReaderVersion: "", browser: "", browserVersion: "",
       guidepupVersion: "", screenReaderSettings: "", nodeVersion: "", windowsVersion: "", architecture: "",
       workerCode: "", captureProtocol: 0, provisionRevision: "",
+      // #1513: the CSS viewport the page was read at, per capture. Optional on the type -- a worker before it
+      // does not send them -- and named here so the published type cannot drop them without this failing tsc.
+      innerWidth: 0, innerHeight: 0, devicePixelRatio: 0,
     },
   };
   assert.deepEqual(Object.keys(declared).sort(), [...EMITTED_RESULT].sort());
