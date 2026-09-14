@@ -33,6 +33,18 @@
  * Deliberately not GitHub's PR assignees: `session:<name>` already marks a ROW as held and
  * `merge-guard` already parses it, so a PR hold reads through the same field with the same code. Two
  * spellings of one fact is the shape half this repo's defects share.
+ *
+ * ## Exit codes (#1481)
+ *
+ *   0  DONE -- the hold was taken or released as asked, or (no --session) reported
+ *   1  REFUSED -- somebody else holds it and --steal was not passed; nothing was written. An unexpected
+ *      failure BEFORE any label is written also exits 1, Node's own, with nothing written.
+ *   2  CANNOT_ASK -- usage, a lookup that could not be answered, or a write whose read-back disagreed;
+ *      each message names the state it found
+ *   3  DISPLACED_NOT_HELD -- a --steal REMOVED another session's hold, and a later label write then failed,
+ *      so this session's hold was not added. The message names every label that came off. Measured on
+ *      #1481 at `8244cf0f`: that failure escaped as an uncaught throw and Node exited 1, "nothing done",
+ *      after `hold:dispatcher` had already been removed.
  */
 import { execFileSync } from "node:child_process";
 import { realpathSync } from "node:fs";
@@ -42,7 +54,7 @@ import { refuseUnknownFlags, flagValue } from "@a11ign/worker-fleet/cli-flags";
 import { disarmVerdict, armVerdict, REARM_LABEL, HOLD_PREFIX, holdersOf } from "./pr-hold-state.mjs";
 import { REPO } from "./repo-identity.mjs";
 
-const EXIT = { DONE: 0, REFUSED: 1, CANNOT_ASK: 2 };
+const EXIT = { DONE: 0, REFUSED: 1, CANNOT_ASK: 2, DISPLACED_NOT_HELD: 3 };
 
 /** @param {string[]} args */
 const gh = (args) => execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
@@ -266,6 +278,37 @@ function holdLanded(number, session) {
 }
 
 /**
+ * #1481: THE DISPLACING WRITES, THEN THE TAKE -- and once a displacement has LANDED, a failure is REPORTED,
+ * naming every label that came off, never thrown. Thrown, it escaped `main` and Node exited 1, which this
+ * file's header defines as REFUSED, "nothing done", while another session's hold was already gone.
+ *
+ * A failure before any label came off is rethrown unchanged: nothing is known to have landed, so it stays
+ * the exit it always was. The displace-first ORDER stays too -- see `takeHold`'s own header for why.
+ *
+ * @param {number} number @param {string} session @param {string[]} displaces
+ * @returns {string | null} the operator-facing message for a partial write, or `null` when every write succeeded
+ */
+function displaceThenTake(number, session, displaces) {
+  /** @type {string[]} */
+  const removed = [];
+  try {
+    for (const displaced of displaces) {
+      writeLabel(number, displaced, "remove");
+      removed.push(`${HOLD_PREFIX}${displaced}`);
+    }
+    writeLabel(number, session, "add");
+    return null;
+  } catch (error) {
+    if (removed.length === 0) throw error;
+    return `#${number}: DISPLACED BUT NOT HELD (exit ${EXIT.DISPLACED_NOT_HELD}) -- removed ${removed.join(", ")}; `
+      + `the next label write failed, so ${HOLD_PREFIX}${session} was NOT added: `
+      + `${/** @type {Error} */ (error).message.trim()}\n`
+      + `  Read #${number}'s labels before acting, then take it again (\`npm run pr:hold -- ${number} `
+      + `--session=${session} --steal\`) or tell the displaced session its hold is gone.\n`;
+  }
+}
+
+/**
  * Take the hold, displacing anyone else who has it — and then PROVE the PR says so.
  *
  * DISPLACE FIRST, THEN TAKE, so a half-failed write leaves the PR UNHELD rather than doubly held. Unheld
@@ -279,8 +322,11 @@ function takeHold(number, session, holders, steal) {
   const decision = holdDecision({ holders, session, steal });
   process.stdout.write(`#${number}: ${decision.message}\n`);
   if (!decision.act) return decision.code;
-  for (const displaced of decision.displaces) writeLabel(number, displaced, "remove");
-  writeLabel(number, session, "add");
+  const partial = displaceThenTake(number, session, decision.displaces);
+  if (partial !== null) {
+    process.stderr.write(partial);
+    return EXIT.DISPLACED_NOT_HELD;
+  }
   const landed = holdLanded(number, session);
   if (landed !== null) {
     process.stderr.write(landed);
