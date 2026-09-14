@@ -262,10 +262,31 @@ export function buildConsumerGateWorkflow(jobsYaml) {
     throw new Error("buildConsumerGateWorkflow: the block does not open with `jobs:`, so check-pin has "
       + `nowhere to be spliced in -- it starts ${JSON.stringify(jobsYaml.split("\n")[0])} (#796, #1256)`);
   }
-  const withCheckPin = `${JOBS_ROOT}${checkPin}${jobsYaml.slice(JOBS_ROOT.length)}`
-    .replace(new RegExp(`^(  ${jobName}:\\n)`, "m"), `$1    needs: [check-pin]\n`);
+  // #1304: AND THE `needs:` SPLICE REFUSES A JOB LINE IT CANNOT ANCHOR -- the second anchor in this function, with
+  // the identical zero-match `replace`. `extractJobName` reads `  a11y: # gate` (valid YAML) or `  a11y: ` as the job
+  // `a11y`, but the splice anchored on exactly `  a11y:` + newline, matched nothing, and generated a check-pin job
+  // that nothing depended on, with no error. The anchor now takes what YAML allows after a block job key -- trailing
+  // spaces and a comment -- and a line it still cannot anchor (a flow mapping on the same line) is refused.
+  const jobLine = new RegExp(`^(  ${escapeRegExp(jobName)}:[ \\t]*(?:#.*)?\\n)`, "m");
+  const blockWithCheckPin = `${JOBS_ROOT}${checkPin}${jobsYaml.slice(JOBS_ROOT.length)}`;
+  if (!jobLine.test(blockWithCheckPin)) {
+    const line = jobsYaml.split("\n").find((l) => l.startsWith(`  ${jobName}:`)) ?? `  ${jobName}:`;
+    throw new Error(`buildConsumerGateWorkflow: the job line ${JSON.stringify(line)} is not a block key `
+      + "(only spaces or a comment may follow its colon), so `needs: [check-pin]` has nowhere to be spliced in "
+      + "and check-pin would gate nothing (#1304)");
+  }
+  const withCheckPin = blockWithCheckPin.replace(jobLine, `$1    needs: [check-pin]\n`);
 
   return `${header}\n${withCheckPin}\n${buildVerifyReportJob(jobName)}\n`;
+}
+
+/**
+ * A string matched literally inside a RegExp -- a job key is YAML, and YAML allows `.`, `+` and `-` in one.
+ * @param {string} text
+ * @returns {string}
+ */
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /** The `name:`/`on:` envelope every generated workflow needs, that README's own snippet omits. */
