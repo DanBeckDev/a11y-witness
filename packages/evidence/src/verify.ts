@@ -113,7 +113,8 @@ function announced(capture: CapturedAnnouncements): string {
     ...capture.transcript,
     ...(s?.headings ?? []), ...(s?.landmarks ?? []), ...(s?.formFields ?? []),
     ...(it?.controls ?? []),
-    ...(it?.stateChanges ?? []).map((x) => `${x.control} ${x.after}`),
+    // #1616: a failed re-read (`after: null`) contributes its control's name only, never the word "null".
+    ...(it?.stateChanges ?? []).map((x) => (x.after === null ? x.control : `${x.control} ${x.after}`)),
     ...(it?.postSubmitFields ?? []),
   ].join(" ").toLowerCase();
 }

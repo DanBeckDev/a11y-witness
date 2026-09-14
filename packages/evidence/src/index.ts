@@ -133,12 +133,20 @@ export interface CaptureStructure {
 }
 
 /** Screen-reader-derived results of operating controls. Empty `after` strings
- * are meaningful: they record that activation produced no announcement. */
+ * are meaningful: they record that activation produced no announcement. A `null`
+ * `stateChanges[].after` means something else: the re-read failed (#1616). */
 export interface CaptureInteraction {
   controls: string[];
   stateChanges: {
     control: string;
-    after: string;
+    /**
+     * What the screen reader said when the control was re-read after activation. `null` when that re-read FAILED: the
+     * disclosure probe's catch (`capture-probes.mjs:2343`) records the entry with `after: null` and `error` set rather
+     * than dropping it. So `null` means "we did not measure", never "nothing was heard" -- that is `""`. A reader must
+     * handle it explicitly, because a template string renders it as the word "null", as if the screen reader said it
+     * (#1616).
+     */
+    after: string | null;
     /**
      * Which question `after` answers. `"focus"` -- the only value written today -- means it is a read of whatever
      * held focus after activation, not a re-read of the activated element, so the two sides can describe two
@@ -148,8 +156,7 @@ export interface CaptureInteraction {
     afterSource?: string;
     /**
      * Set when the read after activation failed -- a failed measurement, never silence -- `capture-probes.mjs:2343`
-     * at `01290c2c` (#1603). That entry also writes `after: null`, which this type does not yet declare: a
-     * reading change for every consumer, not an additive field, and its own row: #1616.
+     * at `01290c2c` (#1603). That entry also writes `after: null`, declared above (#1616).
      */
     error?: string;
   }[];
