@@ -221,7 +221,7 @@ function outcomeSection(outcomes: RunResult["outcomes"]): string[] {
  * frame origin, so the marker claims no more than that. A single entry that is itself an array is a shadow-DOM path, not
  * a frame. A row with no nodes (an older result) cannot be told, so it is not marked.
  */
-function insideFrame(row: NonNullable<RunResult["ruleBased"]>[number]): boolean {
+export function insideFrame(row: NonNullable<RunResult["ruleBased"]>[number]): boolean {
   return (row.nodes ?? []).some((node) => Array.isArray(node.target) && node.target.length > 1);
 }
 
