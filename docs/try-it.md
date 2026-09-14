@@ -70,7 +70,7 @@ jobs:
 
 Save it as `.github/workflows/a11ign.yml`. It runs on every pull request, and `workflow_dispatch` also lets you start it by hand from the repository's Actions tab (or `gh workflow run a11ign.yml`).
 
-**Not on a pull request, no comment.** A run started by hand or by a push has nothing to comment on: the log shows one line (`a11ign: N finding(s)`), the report is in the run's job summary, and the full result, transcript included, is the `a11ign-result` artifact the upload step saves.
+**Not on a pull request, no comment.** A run started by hand or by a push has nothing to comment on: the log's last line is the count (`a11ign: N finding(s)`), with a line before it for anything that bounds that count (an examination that ended early, a capture spanning more than one document, criteria resting on an examination known to be partial), the report is in the run's job summary, and the full result, transcript included, is the `a11ign-result` artifact the upload step saves.
 
 **`task` is load-bearing.** It is what a user is trying to *do*, in plain words, and it changes what gets
 captured: a button whose announced name shares a meaningful word with the task gets activated, and
@@ -209,14 +209,14 @@ point the run at the page with the form on it.
 of shape, because the time is a screen reader reading and that is not parallelisable or recoverable. The
 range above it is not: the slowest measured run is seventy per cent longer than the fastest. A very large page can still exhaust our capture budget beyond that
 range, and if it does you will get a partial result that **says** it is partial rather than a short one
-that looks complete, **but it says so in the `a11ign-result` artifact, not in the log.** In the result JSON,
-every criterion resting on a sweep that fell short is `cantTell` in `outcomes`, and its `reason` names the
-sweep. A real run on `https://www.w3.org/WAI` read *"The link sweep said it reached the end having found far
-less than the page's census, so something held it, so this criterion rests on an examination known to be
-partial."* The `conformance` block's reach line sets what the screen reader reached against what the browser
-exposes, type by type. The one-line log (`a11ign: N finding(s)`) counts findings only and does not carry any
-of it, and the job summary counts those criteria under **Not determined** without saying why. On a large
-page, open the artifact before you read a low count as a clean page.
+that looks complete. The log adds a line above its count of findings,
+`a11ign: N criteria rest on an examination known to be partial -- see the artifact`, and the job summary's
+**Not determined** line counts those criteria apart. Which criteria, and why, is in the `a11ign-result`
+artifact: each is `cantTell` in `outcomes`, and its `reason` names the sweep that fell short. A real run on
+`https://www.w3.org/WAI` read *"The link sweep said it reached the end having found far less than the page's
+census, so something held it, so this criterion rests on an examination known to be partial."* The
+`conformance` block's reach line sets what the screen reader reached against what the browser exposes, type by
+type. On a large page, open the artifact before you read a low count as a clean page.
 
 ## YOUR PAGE — the one section that is not written yet
 
