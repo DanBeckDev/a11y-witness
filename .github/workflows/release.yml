@@ -208,6 +208,15 @@ jobs:
       - name: Pack every package, which is what a consumer receives
         run: npm run gate:isolation
 
+      # #1536: EVERY PUBLISHED MANIFEST MUST NAME THE REPOSITORY THIS RUN PUBLISHES FROM, and this asks before the
+      # registry does. Run 34816466408 passed every guard job and every step above, then npm's provenance check
+      # refused the PUT: each manifest's "repository.url" named a11ign/a11ign, not the repository the run came from
+      # (#915 5660524401). NO `if:`, deliberately: a dry run never reaches the registry, so this step is the only
+      # place a dry run can see the mismatch. Until the transfer (#63) a run from the pre-transfer repository goes
+      # red HERE by design -- the manifests already name a11ign/a11ign -- and that is not a regression.
+      - name: Every published manifest names the repository this run publishes from
+        run: node scripts/manifest-repository-check.mjs
+
       - name: Refuse to publish unless all seven guards agree
         if: inputs.dry-run == false
         run: |
