@@ -65,11 +65,17 @@ import { parseWalkScope, inScope } from "./walk-scope-declaration.mjs";
  * `import ... from "<spec>"` specifiers, in source order -- identical regex to
  * `pre-install-import-graph.test.ts`'s `specifiersOf`, which this repo already relies on to find every
  * import a script or test carries, `from` included as optional for a bare `import "./side-effect.mjs"`.
+ *
+ * #1527: AND `import("<spec>")`, the DYNAMIC form. The static regex needs whitespace after `import`, so
+ * `await import("../../scripts/check-real-page-findings.ts")` (`relocated-fixture-key.test.ts`) yielded no
+ * specifier, the walk never reached the script, and a change to it never selected that test (#1526).
  * @param {string} source
  * @returns {string[]}
  */
 function specifiersOf(source) {
-  return [...source.matchAll(/\bimport\s+(?:[\s\S]*?\s+from\s+)?["']([^"']+)["']/g)].map((m) => m[1]);
+  const staticSpecs = [...source.matchAll(/\bimport\s+(?:[\s\S]*?\s+from\s+)?["']([^"']+)["']/g)].map((m) => m[1]);
+  const dynamicSpecs = [...source.matchAll(/\bimport\s*\(\s*["']([^"']+)["']\s*\)/g)].map((m) => m[1]);
+  return [...staticSpecs, ...dynamicSpecs];
 }
 
 /**
@@ -474,11 +480,39 @@ function quotedLiterals(source) {
  * @returns {string[]}
  */
 export function pathStringReferences(changedFile, testFiles, repoRoot) {
-  const found = [];
-  for (const testFile of testFiles) {
-    if (literalsOf(join(repoRoot, testFile)).some((lit) => lit.includes(changedFile))) found.push(testFile);
-  }
-  return found;
+  return testFiles.filter((testFile) =>
+    literalsOf(join(repoRoot, testFile)).some((lit) => namesPath(lit, changedFile, testFile)));
+}
+
+/**
+ * The narrower question `pathStringReferences` answered before #1527: which tests name `changedFile` by its
+ * REPO-RELATIVE path. It still decides the non-package branch's FALLBACK, so resolving relative literals only
+ * ever ADDS tests. Measured on #1525's diff before this split: `real-page-unexaminable.json` is read only through
+ * `../../baselines/...`, so the relative match turned a whole-`lab` fallback into one test, and the tests that
+ * reach that file through the gate script's runtime read stopped running.
+ * @param {string} changedFile repo-relative
+ * @param {string[]} testFiles repo-relative
+ * @param {string} repoRoot
+ * @returns {string[]}
+ */
+export function repoPathReferences(changedFile, testFiles, repoRoot) {
+  return testFiles.filter((testFile) => literalsOf(join(repoRoot, testFile)).some((lit) => lit.includes(changedFile)));
+}
+
+/**
+ * Does one literal name `changedFile` -- as the repo-relative path anywhere inside it, or (#1527) as a path
+ * RELATIVE TO THE TEST FILE that resolves to it exactly? `capture-age-spread.test.ts` reads the gate script as
+ * `new URL("../../scripts/check-real-page-findings.ts", import.meta.url)`, a literal that never contains the
+ * repo-relative path, so a change to that script never selected the test that pins its source, and on #1526 it
+ * failed unseen. Exact resolution only: a relative literal naming a DIFFERENT file is not a reference.
+ * @param {string} literal
+ * @param {string} changedFile repo-relative
+ * @param {string} testFile repo-relative
+ * @returns {boolean}
+ */
+function namesPath(literal, changedFile, testFile) {
+  if (literal.includes(changedFile)) return true;
+  return /^\.\.?\//.test(literal) && join(dirname(testFile), literal) === changedFile;
 }
 
 /** @type {Map<string, string[]>} one comment-stripped read per test file, however many changed files ask */
@@ -486,6 +520,9 @@ const LITERALS = new Map();
 
 /** @param {string} absolutePath @returns {string[]} */
 function literalsOf(absolutePath) {
+  // A candidate that is not on disk names nothing. `main`'s candidates come from `git ls-files`; the unit tests
+  // that drive `selectTests` over a synthetic `/repo` reach this search since #1527 and read no file.
+  if (!existsSync(absolutePath)) return [];
   let literals = LITERALS.get(absolutePath);
   if (!literals) {
     literals = quotedLiterals(stripComments(readFileSync(absolutePath, "utf8")));
@@ -523,28 +560,29 @@ function buildReverseIndex(testFiles, closureOf, repoRoot) {
  *
  * @param {string} file repo-relative
  * @param {{ reverse: Map<string, Set<string>>, testFiles: string[], testPackages: string[],
- *   referenceCandidates: string[], referencesPath: (file: string, testFiles: string[]) => string[] }} ctx
+ *   referenceCandidates: string[], referencesPath: (file: string, testFiles: string[]) => string[],
+ *   referencesRepoPath: (file: string, testFiles: string[]) => string[] }} ctx
  * @returns {{ selectedBy: string[], fallbackPackages: string[] }}
  */
 function classifyOneFile(file, ctx) {
   if (/^packages\/([^/]+)\/src\/.*\.test\.ts$/.test(file)) return { selectedBy: [file], fallbackPackages: [] };
 
+  // #1527: EVERY BRANCH SELECTS BY BOTH KINDS OF REFERENCE. A test can depend on a file by importing it or by
+  // reading it by path, whatever kind of file it is: #1526 changed `packages/lab/scripts/check-real-page-findings.ts`,
+  // which the path-string branch alone decided, so `relocated-fixture-key.test.ts` (which IMPORTS it) was never
+  // looked up, and a source pin elsewhere was missed the other way. Each branch keeps its OWN fallback rule,
+  // unchanged -- the non-package branch's still counts only repo-relative literals (`repoPathReferences`) -- so
+  // this only ever adds tests to a selection and never removes a package fallback that fired before.
+  const imported = [...(ctx.reverse.get(file) ?? [])];
+  const read = ctx.referencesPath(file, ctx.referenceCandidates);
+  const selectedBy = [...new Set([...imported, ...read])];
+
   const pkgMatch = /^packages\/([^/]+)\/src\/.*$/.exec(file);
-  if (pkgMatch) {
-    const reachedBy = [...(ctx.reverse.get(file) ?? [])];
-    return reachedBy.length > 0
-      ? { selectedBy: reachedBy, fallbackPackages: [] }
-      : { selectedBy: [], fallbackPackages: [pkgMatch[1]] };
-  }
+  if (pkgMatch) return { selectedBy, fallbackPackages: imported.length > 0 ? [] : [pkgMatch[1]] };
 
   // #A1c: `scripts/*.mjs` -- BY IMPORT, the SAME reverse index every `packages/*\/src/` lookup uses.
-  if (/^scripts\/.*\.mjs$/.test(file)) {
-    const reachedBy = [...(ctx.reverse.get(file) ?? [])];
-    return reachedBy.length > 0
-      ? { selectedBy: reachedBy, fallbackPackages: [] }
-      // No "own package" for a file outside packages/ -- every implicated package is the honest fallback.
-      : { selectedBy: [], fallbackPackages: ctx.testPackages };
-  }
+  // No "own package" for a file outside packages/ -- every implicated package is the honest fallback.
+  if (/^scripts\/.*\.mjs$/.test(file)) return { selectedBy, fallbackPackages: imported.length > 0 ? [] : ctx.testPackages };
 
   // #A1c: anything else non-package, non-broad (a hook, a non-ci.yml workflow, a document) -- BY PATH STRING.
   //
@@ -553,10 +591,7 @@ function classifyOneFile(file, ctx) {
   // implicates that package. Measured on #1353's diff (README.md, two docs, a workflow, one lab test): only
   // `lab` was implicated, so `documented-criteria.test.ts` in `judge` -- which reads README.md and
   // action.yml by name -- was never a candidate, did not run on the PR, and turned main red at 16:10:46Z.
-  const referencedBy = ctx.referencesPath(file, ctx.referenceCandidates);
-  return referencedBy.length > 0
-    ? { selectedBy: referencedBy, fallbackPackages: [] }
-    : { selectedBy: [], fallbackPackages: ctx.testPackages };
+  return { selectedBy, fallbackPackages: ctx.referencesRepoPath(file, ctx.referenceCandidates).length > 0 ? [] : ctx.testPackages };
 }
 
 /**
@@ -570,7 +605,8 @@ function classifyOneFile(file, ctx) {
  * @param {string[]} changedFiles repo-relative
  * @param {{ closureOf: (testFile: string) => Set<string>, testFiles: string[], repoRoot: string,
  *   testPackages?: string[], referenceCandidates?: string[],
- *   referencesPath?: (file: string, testFiles: string[]) => string[] }} options
+ *   referencesPath?: (file: string, testFiles: string[]) => string[],
+ *   referencesRepoPath?: (file: string, testFiles: string[]) => string[] }} options
  *   `closureOf` -- injected so the caller builds it once per test file rather than this function
  *   re-walking the same test file once per changed source line. `testFiles` -- every candidate test file
  *   (repo-relative), the population `closureOf` and `referencesPath` may report against. `testPackages`
@@ -580,11 +616,16 @@ function classifyOneFile(file, ctx) {
  *   `closureOf` is, so a unit test never touches disk unless it deliberately wants to; defaults to the
  *   real `pathStringReferences`. `referenceCandidates` -- #1358: the population a BY-PATH-STRING file is
  *   searched across; `main` passes every test file in the repository, and it defaults to `testFiles`.
+ *   `referencesRepoPath` -- #1527: the repo-relative-only search that decides the non-package fallback; defaults
+ *   to the real `repoPathReferences`, or to an injected `referencesPath`, so a unit test that injects one keeps
+ *   one meaning for both.
  * @returns {{ selectedTests: string[], fallbackPackages: string[], uncoveredFiles: string[] }}
  */
 export function selectTests(changedFiles, options) {
-  const { closureOf, testFiles, repoRoot, testPackages = [], referenceCandidates = testFiles,
-    referencesPath = (file, candidates) => pathStringReferences(file, candidates, repoRoot) } = options;
+  const { closureOf, testFiles, repoRoot, testPackages = [], referenceCandidates = testFiles } = options;
+  const referencesPath = options.referencesPath ?? ((file, candidates) => pathStringReferences(file, candidates, repoRoot));
+  const referencesRepoPath = options.referencesRepoPath ?? (options.referencesPath
+    ? referencesPath : (file, candidates) => repoPathReferences(file, candidates, repoRoot));
   const reverse = buildReverseIndex(testFiles, closureOf, repoRoot);
 
   const selected = new Set();
@@ -592,12 +633,14 @@ export function selectTests(changedFiles, options) {
   /** @type {string[]} */
   const uncoveredFiles = [];
   for (const file of changedFiles) {
-    const verdict = classifyOneFile(file, { reverse, testFiles, testPackages, referenceCandidates, referencesPath });
+    const verdict = classifyOneFile(file,
+      { reverse, testFiles, testPackages, referenceCandidates, referencesPath, referencesRepoPath });
     for (const t of verdict.selectedBy) selected.add(t);
-    if (verdict.selectedBy.length === 0) {
-      for (const pkg of verdict.fallbackPackages) fallbackPackages.add(pkg);
-      uncoveredFiles.push(file);
-    }
+    // #1527: a fallback can now ride WITH a selection (a package file read only by path still falls back to
+    // its package, as it did when nothing selected it), so the fallback is read on its own, never inferred
+    // from an empty selection.
+    for (const pkg of verdict.fallbackPackages) fallbackPackages.add(pkg);
+    if (verdict.fallbackPackages.length > 0) uncoveredFiles.push(file);
   }
   return { selectedTests: [...selected].sort(), fallbackPackages: [...fallbackPackages].sort(), uncoveredFiles };
 }
