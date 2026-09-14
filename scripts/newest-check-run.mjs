@@ -30,14 +30,52 @@
 /** A run still in flight reports this rather than null, so it must not be read as a completion time. */
 export const ZERO_DATE = "0001-01-01T00:00:00Z";
 
-const real = (/** @type {string | undefined} */ v) => (v && v !== ZERO_DATE ? v : "");
+const real = (/** @type {string | null | undefined} */ v) => (v && v !== ZERO_DATE ? v : "");
 
 /**
  * When a run last said anything. `completedAt` if it has finished, else `startedAt`.
  * ISO-8601 sorts lexically, so string comparison is a real ordering here rather than a shortcut.
- * @param {{completedAt?: string, startedAt?: string}} check
+ * @param {{completedAt?: string | null, startedAt?: string | null}} check
  */
 const stampOf = (check) => real(check.completedAt) || real(check.startedAt) || "";
+
+/**
+ * The workflow run a check run belongs to, read from its `detailsUrl` (`.../actions/runs/<id>/job/<job>`) -- or
+ * `null` when the entry names none: a status context, a hand-built fixture, or a REST read that did not select
+ * the URL (`queue-table.mjs`'s `checksOnSha` selects only name, conclusion and completion time).
+ *
+ * Workflow run ids are issued in creation order and stay below 2^53, so they compare as numbers.
+ * @param {{detailsUrl?: string | null}} check
+ * @returns {number | null}
+ */
+export function workflowRunIdOf(check) {
+  const match = /\/actions\/runs\/(\d+)(?:[/?#]|$)/.exec(check?.detailsUrl ?? "");
+  return match ? Number(match[1]) : null;
+}
+
+/**
+ * IS `a` AT LEAST AS NEW AS `b`? THE ONE COMPARATOR FOR "THE NEWEST RUN OF A NAME" -- #1623.
+ *
+ * **By workflow run, when both entries name a different one; otherwise by time.** Completion time is the wrong
+ * clock when one attempt at a head supersedes another. Measured on #1617's head `84f684dd`, through the same
+ * `statusCheckRollup` `gh pr list` returns: `gate` in run 34858134371 was CANCELLED with `completedAt` 14:49:32Z,
+ * before it started, and `gate` in the OLDER run 34858130620 succeeded at 14:51:42Z. By time the success was
+ * newest, so every reader said SUCCESS, while GitHub held the PR BLOCKED on the newer run's cancelled gate.
+ * #1605's head had the pair the other way round (cancelled in run 34855015256, success in the later
+ * 34855153052), and run order and time agreed there.
+ *
+ * The fallback is today's rule exactly -- `completedAt`, else `startedAt`, the ZERO_DATE read as absence, and an
+ * untimed entry losing to a timed one. It applies to a MIXED pair (one run id, one not) and to two entries in the
+ * SAME run (a re-run job), because neither pair has an order the ids can state.
+ * @param {{completedAt?: string | null, startedAt?: string | null, detailsUrl?: string | null}} a
+ * @param {{completedAt?: string | null, startedAt?: string | null, detailsUrl?: string | null}} b
+ * @returns {boolean}
+ */
+export function isAtLeastAsNew(a, b) {
+  const [runA, runB] = [workflowRunIdOf(a), workflowRunIdOf(b)];
+  if (runA !== null && runB !== null && runA !== runB) return runA > runB;
+  return stampOf(a) >= stampOf(b);
+}
 
 /**
  * The newest run of each check NAME — never `find`, which returns the OLDEST because the rollup is a
@@ -55,9 +93,8 @@ export function newestPerName(rollup) {
   const best = new Map();
   for (const check of rollup ?? []) {
     if (!check?.name) continue;
-    const stamp = stampOf(check);
     const seen = best.get(check.name);
-    if (!seen || stamp >= stampOf(seen)) best.set(check.name, check);
+    if (!seen || isAtLeastAsNew(check, seen)) best.set(check.name, check);
   }
   return [...best.values()];
 }
