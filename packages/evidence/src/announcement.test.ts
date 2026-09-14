@@ -9,6 +9,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { announces, nameOf, parseAnnouncement, isLandmarkRole, CONTAINER_ROLES } from "./announcement.js";
+// A NAMESPACE import for #1498's predicate, so a missing export fails its own tests rather than this whole file.
+import * as announcement from "./announcement.js";
 
 test("transcript is role-first: the browse-mode reading order", () => {
   const parsed = parseAnnouncement("heading, level 1, Marina 022 schedule", "transcript");
@@ -310,4 +312,32 @@ test("an unnamed <form> announced as `section` is a CONTAINER, not part of the n
   // announces a named region the same way, and its name is context rather than noise.
   const named = parseAnnouncement("Booking details, section, Full name, edit", "sweep");
   assert.equal(named.containers[0]?.name, "Booking details");
+});
+
+/**
+ * #1498: IS THIS BEFORE/AFTER PAIR ABOUT ONE CONTROL? (#812) -- the one definition, used by the judge rule and the lab
+ * signal alike. The pairs are #1496's, verbatim from the parity test: the release gate's GOOD page, where focus moved to
+ * a different collapsed control, and the same control still collapsed.
+ */
+function sameControl(control: string | null | undefined, after: string | null | undefined): boolean {
+  const predicate = (announcement as Record<string, unknown>).sameControlAnnounced;
+  assert.equal(typeof predicate, "function", "@a11ign/evidence does not export sameControlAnnounced");
+  return (predicate as (c: typeof control, a: typeof after) => boolean)(control, after);
+}
+
+test("#1498: the release gate's GOOD page pair is TWO controls, and the failing pair is ONE", () => {
+  assert.equal(sameControl("Show delivery options, button, collapsed", "Show opening hours, button, focused, collapsed"),
+    false, "focus moved to a different collapsed control: both say collapsed, and that says nothing about either");
+  assert.equal(sameControl("Show delivery options, button, collapsed", "Show delivery options, button, focused, collapsed"),
+    true, "the positive control: the same control, re-read after activation");
+});
+
+test("#1498: identity is the NAME, never the role, and an empty name is not an identity", () => {
+  assert.equal(sameControl("Platform, button, collapsed", "Platform, menu button, focused, collapsed"), true,
+    "the same name under a different role is the same control");
+  assert.equal(sameControl("button, collapsed", "button, focused, collapsed"), false, "two unnamed controls");
+  assert.equal(sameControl("Show delivery options, button, collapsed", "button, focused, collapsed"), false,
+    "named before, unnamed after");
+  assert.equal(sameControl(null, "Platform, button, collapsed"), false, "no control read at all");
+  assert.equal(sameControl("Platform, button, collapsed", undefined), false, "no after read at all");
 });
