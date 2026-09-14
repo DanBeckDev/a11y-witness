@@ -15,7 +15,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { launchBrowser, axeAvailable, AxeLaunchError, AxeUnavailableError } from "./axe.js";
+import { launchBrowser, axeAvailable, AxeLaunchError, AxeUnavailableError, coverageFrom } from "./axe.js";
 
 /** A fake chromium whose `launch` behaves per a script: each call consumes the next scripted outcome. */
 function fakeChromium(outcomes: ("ok" | "throw")[]) {
@@ -93,4 +93,36 @@ test("axeAvailable answers true once launchBrowser succeeds, closing what it ope
 test("axeAvailable still answers false on the ORIGINAL defect: modules missing entirely", async () => {
   const answer = await axeAvailable({ loadAxe: async () => { throw new AxeUnavailableError(new Error("no module")); } });
   assert.equal(answer, false);
+});
+
+/**
+ * #1606: the coverage map names the axe rule ids that VIOLATED each criterion, so #1342's precedence reasons can say which
+ * rule axe reported. Built from each rule's own `id` and `tags`, the same object `coverageFrom` already reads.
+ */
+const axeRule = (id: string, criterion: string) => ({ id, tags: ["wcag2a", `wcag${criterion.replace(/\./g, "")}`] });
+
+test("#1606 a violated criterion carries the id of the rule that violated it", () => {
+  // The shape an imported violations-only file produces: `axe-results.ts` passes `{ violations }` with no other bucket.
+  assert.deepEqual(coverageFrom({ violations: [axeRule("link-name", "2.4.4")] }), { "2.4.4": { verdict: "violated", rules: ["link-name"] } });
+});
+
+test("#1606 CONTROL: a criterion violated by two rules names both, each once", () => {
+  const coverage = coverageFrom({ violations: [axeRule("link-name", "4.1.2"), axeRule("button-name", "4.1.2"), axeRule("link-name", "4.1.2")] });
+  assert.deepEqual(coverage["4.1.2"], { verdict: "violated", rules: ["link-name", "button-name"] });
+});
+
+test("#1606 a criterion that was not violated names no rule -- a passing or review-needed rule reported no failure", () => {
+  const coverage = coverageFrom({
+    passes: [axeRule("html-has-lang", "3.1.1")], incomplete: [axeRule("color-contrast", "1.4.3")], inapplicable: [axeRule("label", "2.5.3")],
+  });
+  assert.deepEqual(coverage, {
+    "3.1.1": { verdict: "clean", rules: [] }, "1.4.3": { verdict: "needsReview", rules: [] }, "2.5.3": { verdict: "clean", rules: [] },
+  });
+});
+
+test("#1606 a violation that outranks a pass and a review on one criterion names only the violating rule", () => {
+  const coverage = coverageFrom({
+    passes: [axeRule("html-has-lang", "3.1.1")], incomplete: [axeRule("html-lang-valid", "3.1.1")], violations: [axeRule("html-xml-lang-mismatch", "3.1.1")],
+  });
+  assert.deepEqual(coverage["3.1.1"], { verdict: "violated", rules: ["html-xml-lang-mismatch"] });
 });
