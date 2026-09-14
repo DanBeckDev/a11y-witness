@@ -23,7 +23,7 @@
  * on spacing). Validate any new announcement-string rule against our own captures,
  * not against a book's strings.
  */
-import type { Channel, CaptureStructure } from "@a11ign/evidence";
+import type { Channel, CaptureInteraction, CaptureStructure } from "@a11ign/evidence";
 import type { PageCensus, DomCensus, ProbeStates, Completeness } from "@a11ign/evidence/verify";
 import { parseAnnouncement, sameControlAnnounced } from "@a11ign/evidence";
 // The ONE list of criteria the rules may emit. Imported rather than restated: writing a second
@@ -87,7 +87,8 @@ export interface RuleInput {
   structure?: Partial<Pick<CaptureStructure, "formFields" | "headings" | "links" | "graphics" | "frames">>;
   interaction?: {
     controls?: string[];
-    stateChanges?: { control: string; after: string }[];
+    // Derived from the wire type -- known-gaps §15, one field over (#1603).
+    stateChanges?: CaptureInteraction["stateChanges"];
     /**
      * What each activated control announced. `kind` distinguishes a SUBMIT from a disclosure, and it has
      * travelled with the evidence since protocol 8 for exactly the reason 3.3.3 needs it: without it,
@@ -98,7 +99,9 @@ export interface RuleInput {
      * submit on a site we do not own is not a review. So a rule reading this cannot fire on a real page,
      * and must never read absence as a finding.
      */
-    formChanges?: { control?: string; after?: string | null; kind?: string }[];
+    // Derived, and looser than the wire on purpose: every field optional because a caller may build the entry by
+    // hand, and `after` admits `null` because the read below already treats `null` and `""` alike.
+    formChanges?: (Partial<Omit<CaptureInteraction["formChanges"][number], "after">> & { after?: string | null })[];
     /** The deliberate re-read of durable field state after a submit. Same probe, same absence rule. */
     postSubmitFields?: string[];
     /**

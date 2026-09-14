@@ -20,7 +20,7 @@
  * as fixtures in this repository does (counted when this was written).
  */
 
-import type { CaptureStructure } from "./index.js";
+import type { CaptureInteraction, CaptureStructure } from "./index.js";
 
 /** The steps a capture runs, and the evidence each one writes, in the worker's own order. */
 export type ProbePhase = "sweep" | "focus" | "configuredForm" | "routeChange";
@@ -54,8 +54,11 @@ export interface SiteBoundCapture {
   structure?: Partial<CaptureStructure>;
   interaction?: {
     controls?: unknown[];
-    stateChanges?: { control?: string }[];
-    formChanges?: { control?: string; kind?: string; after?: string | null }[];
+    // Derived from the wire type -- known-gaps §15, one field over (#1603). Looser on purpose: this module reads
+    // `control` alone off a state change, and every field is optional so the wire's own result stays assignable;
+    // a form change's `after` admits `null`, as the read in `cutTheFormFieldStep` already does.
+    stateChanges?: Partial<Pick<CaptureInteraction["stateChanges"][number], "control">>[];
+    formChanges?: (Partial<Omit<CaptureInteraction["formChanges"][number], "after">> & { after?: string | null })[];
     postSubmitFields?: unknown[];
     postSubmitNames?: unknown[];
     navigatedOnSubmit?: unknown;
@@ -225,12 +228,12 @@ function cutTheFormFieldStep(structure: Fields, interaction: Fields, left: LeftS
   structure.formFields = kept;
   if (Array.isArray(interaction.controls)) interaction.controls = [...kept];
   if (Array.isArray(interaction.formChanges)) {
-    const changes = interaction.formChanges as { control?: string; after?: string | null }[];
+    const changes = interaction.formChanges as NonNullable<NonNullable<SiteBoundCapture["interaction"]>["formChanges"]>;
     const through = changes.findIndex((c) => c.control === left.control && announcesANewWindow(c.after));
     interaction.formChanges = changes.slice(0, through < 0 ? changes.length : through + 1);
   }
   if (Array.isArray(interaction.stateChanges)) {
-    interaction.stateChanges = (interaction.stateChanges as { control?: string }[])
+    interaction.stateChanges = (interaction.stateChanges as NonNullable<NonNullable<SiteBoundCapture["interaction"]>["stateChanges"]>)
       .filter((s) => kept.includes(s.control));
   }
   return cut;
