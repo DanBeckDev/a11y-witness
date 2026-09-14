@@ -30,8 +30,8 @@ second reading. These come from the deterministic rule layer, which is exact on 
 
 *Referred* — the evidence is suggestive and the judgement is a human's. Whether a link named "Details" is
 adequate depends on context WCAG itself says may be off-screen; the tool reports `cantTell` in ACT and EARL's
-own vocabulary, quotes the announcement, and points you at it. Measured on 18 real pages whose publishers
-declare them conformant: **0 criteria asserted wrongly, 4 referred.**
+own vocabulary, quotes the announcement, and points you at it. How often each happens on real pages, and as of
+when, is stated in [What this tool claims](#what-this-tool-claims-with-the-number-it-was-measured-on) below.
 
 That split is deliberate. The trained scorer of our own is what does the referring — it **abstains** on pages
 unlike its training data and reports those criteria as *unchecked, not clean*, and it has **measured blind
@@ -526,7 +526,7 @@ carries the known limitations, stated plainly. `CLAUDE.md` is operational instru
      gate result recorded in docs/board/reported/. Do not TYPE a number here: a figure the report
      cannot source is a figure that outlives its measurement, and one already did. -->
 
-**On our own corpus of 1,405 conformant records the deterministic rules asserted no failures. The real-page figure is under re-measurement since 2026-09-06 and this page states none: a refreshed baseline produced four findings on pages an older baseline had passed, and until each is established as an assertion or a referral there is no honest number to give. The trained component refers, it never asserts, and a referral on a conformant page is expected rather than a defect.**
+**On our own corpus of 1,405 conformant records the deterministic rules asserted no failures. The real-page figure is under re-measurement since 2026-09-14. The last one published, from 2026-08-24 on the product path across 18 conformant real pages, was 0 criteria asserted wrongly and 4 referred, and it no longer describes the tool: a refreshed baseline on 2026-09-06 produced four findings on pages an older baseline had passed, and outcomes have changed since it was taken, so that some criteria which read as clean then read as undetermined now. A new figure is stated here, with its date, its denominator and the run it came from, once it is measured. The trained component refers, it never asserts, and a referral on a conformant page is expected rather than a defect.**
 
 <!-- CLAIM:END -->
 
