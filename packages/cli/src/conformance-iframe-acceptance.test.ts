@@ -52,13 +52,13 @@ test("#1438 ACCEPTANCE: with those findings, Requirement 2 names what EACH layer
   assert.doesNotMatch(text, /iframes?\s+(?:is\s+|are\s+)?not\s+entered/i,
     "\"not entered\" beside three findings from inside an iframe is the contradiction the rehearsals read");
   assert.match(text, /rule layer \(axe-core\) examines iframe documents too/i, "the layer that found them");
-  assert.match(text, /screen reader's read-through and sweeps can pass into a frame/i, "the layer that read into it");
+  assert.match(text, /screen reader\x27s read-through and sweeps can pass into a frame/i, "the layer that read into it");
   assert.match(text, /nothing inside a frame or embedded object is operated/i);
 });
 
 test("#1438 CONTROL: with no rule layer, the same capture still states the screen-reader scope and claims nothing for axe", () => {
   const text = textOf(fullPagesOf(null));
-  assert.match(text, /screen reader's read-through and sweeps can pass into a frame/i);
+  assert.match(text, /screen reader\x27s read-through and sweeps can pass into a frame/i);
   assert.match(text, /the rule layer did not run/i);
   assert.doesNotMatch(text, /axe-core\) examines iframe/i);
 });
