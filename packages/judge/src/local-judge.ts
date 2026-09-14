@@ -39,7 +39,7 @@
  */
 import { spawn } from "node:child_process";
 
-import type { CaptureStructure } from "@a11ign/evidence";
+import type { CaptureInteraction, CaptureStructure } from "@a11ign/evidence";
 import { annotateCapture } from "@a11ign/evidence";
 import { scorerPaths as artefact } from "@a11ign/scorer";
 
@@ -82,7 +82,12 @@ export interface CaptureEvidence {
    */
   structure?: Partial<CaptureStructure>;
   interaction?: {
-    controls?: string[]; stateChanges?: unknown[]; postSubmitFields?: string[];
+    controls?: string[]; postSubmitFields?: string[];
+    /**
+     * Only counted and serialised here, never read field by field -- so its values stay `unknown`, while its KEYS
+     * are the wire's (#1603): loose, but unable to name a field a state change does not carry.
+     */
+    stateChanges?: Partial<Record<keyof CaptureInteraction["stateChanges"][number], unknown>>[];
     /**
      * One entry per control this capture activated. `kind` distinguishes a disclosure from a task button
      * from a submit, and it is optional because captures made before protocol 3 do not carry it — code
@@ -94,7 +99,7 @@ export interface CaptureEvidence {
      * read site already treated the two identically (`change.after ?? ""`), so this closes a type that had
      * quietly stopped matching what flows, not a behaviour change.
      */
-    formChanges?: { control?: string; kind?: string; after?: string | null }[];
+    formChanges?: (Partial<Omit<CaptureInteraction["formChanges"][number], "after">> & { after?: string | null })[];
     /**
      * Set once `probeFormSubmit` runs. `checked: false` means `currentPageUrl()` failed on at least one
      * side (could not ask) — a different fact from `navigated: false` (asked, stayed put). Captures from
