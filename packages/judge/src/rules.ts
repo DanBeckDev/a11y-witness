@@ -54,6 +54,7 @@ import {
   comparableNames,
   namesExcluded,
   firstVisitEach,
+  fromDocumentEntry,
 } from "./channel-comparison.js";
 // Re-exported rather than repointing every consumer -- `rules.test.ts`, `sweep-completeness.test.ts` and
 // `name-normalisation.test.ts` (a cross-package test reaching this file by relative path) all import
@@ -1533,7 +1534,9 @@ function addBrokenFocusOrder(input: RuleInput, add: AddFinding): void {
   // READING order from the transcript, ordered by construction. `structure.formFields` is a count sweep
   // and cannot answer this — see `controlsInReadingOrder`.
   const reading = firstVisitEach(controlsInReadingOrder(input));
-  const tabbed = firstVisitEach(comparableNames(input.interaction?.focusOrder, input.truncated));
+  // #1514: the walk is read from where Tab ENTERS THE DOCUMENT, not from wherever the probe's first Tab landed.
+  const walk = fromDocumentEntry(input.interaction?.focusOrder, new Set(reading), input.truncated);
+  const tabbed = firstVisitEach(comparableNames(walk, input.truncated));
   if (reading.length < 2 || tabbed.length < 2) return; // absent or too short proves nothing
   // Only names that identify one control in BOTH sequences. A repeated name cannot be tracked between
   // them, and comparing it invents a reordering — see `unambiguous`.
