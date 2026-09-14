@@ -44,6 +44,29 @@ whether they are followed.
   drafts unasked, because every verdict from 14:02Z that day was engineer-to-engineer and a draft could
   wait thirty minutes between wake-ups for the clock to name someone.
 
+## Routing — who reads what (chairman's direction, 2026-09-14)
+
+- **`product-manager` is the first reader for rows, the queue and process, and rules on them:** filing and
+  amendments, Region and done-when wording, holds, lane labels, promotions, claim reports, merge close-outs,
+  host-run announcements. An engineer's completion or claim report goes to `product-manager`, never to
+  `ceo`. Three things come up from `product-manager` to `ceo`: a ruling they cannot make (a rule or ADR
+  conflict, a crossing into a `ceo` lane, the publish path); ONE state reading per `ceo` tick — utilisation,
+  queue, drafts awaiting a verdict, anything red — posted on #928 at :05/:25/:45 so the tick at :09/:29/:49
+  reads it; and anything for the chairman.
+- **`orchestrator` is the first reader for fleet and lab questions** — a capture's history, a worker fact,
+  a lab reading. Engineers ask directly; the answer is posted on the row.
+- **The author of a draft prompts its parity reviewer** the moment the PR opens and again after every push
+  that changes the head: `herdr --session org agent prompt reviewer "Draft #<n> (odd) …"` for odd numbers,
+  `reviewer-2` for even. `ceo`'s tick no longer does it; a draft with no verdict 30 minutes after the
+  author's prompt is reported to `product-manager`, who re-prompts once and then tells `ceo`.
+- **`ceo` keeps:** the publish order and every freeze decision, reviewer spot-checks, the board edition read,
+  rulings that reach it through `product-manager`, and the chairman.
+- **Why (measured 2026-09-14, ceo's own inbound):** about half of one night's messages to `ceo` were
+  read-backs and reports that needed a nod, not a decision; each cost a Fable turn and a tick's latency, and
+  reviewer nudges waited up to twenty minutes for a heartbeat that an author could have replaced with one
+  command. The rule that stays: the row is the state — a report to `product-manager` changes nothing until
+  the row, the PR and the API say so.
+
 ## Assertions
 
 - **An emptiness assertion names where its positive control lives.** `assert.deepEqual(offenders, [])`
