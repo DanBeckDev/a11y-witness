@@ -87,8 +87,11 @@ test("#1363: the cut keeps what ran before the excursion and names everything af
   for (const gone of ["postSubmitFields", "postSubmitNames", "navigatedOnSubmit", "focusOrder", "routeChange"]) {
     assert.equal(gone in within.interaction!, false, `${gone} ran on the other site`);
   }
+  // #1377: every channel of a step after the excursion, present or not -- the list used to name only the keys this
+  // shape happened to carry, which is how the focus pass's opt-in channels went missing on a live capture.
   assert.deepEqual(notExamined, ["formFields", "graphics", "links", "lists", "frames", "tableCells",
-    "navigatedOnSubmit", "postSubmitNames", "postSubmitFields", "focusOrder", "routeChange"]);
+    "navigatedOnSubmit", "postSubmitNames", "postSubmitFields", "focusContext", "focusReveal", "focusOrder",
+    "focusEvents", "dialogEscape", "arrowNavigation", "typedFeedback", "routeChange"]);
   assert.deepEqual(within.observed!.links, { asked: false, why: leftSiteReason(left) });
   assert.equal(leftSiteReason(left), `left the site at "${EMBED}"`);
   assert.equal(JSON.stringify(capture), before, "the input is not modified");
@@ -115,4 +118,68 @@ test("#1363: with the focus pass FIRST, a sweep excursion leaves the focus pass 
   assert.deepEqual(within.interaction!.focusOrder, capture.interaction!.focusOrder, "it ran before the sweep");
   assert.equal(notExamined.includes("focusOrder"), false);
   assert.equal(notExamined.includes("links"), true);
+});
+
+
+/**
+ * #1377: A SKIPPED STEP'S CHANNELS ARE NAMED WHETHER OR NOT THEIR KEYS ARE PRESENT.
+ *
+ * The worker's `interactionEvidence` writes `routeChange`, `typedFeedback`, `focusContext`, `focusReveal` and
+ * `focusEvents` only when truthy (capture-probes.mjs), so on a LIVE capture whose excursion happened in the sweep the
+ * skipped focus pass leaves those keys ABSENT. `removeStep` named a channel only `if (key in interaction)`, so they
+ * never reached `notExamined`, and 1.4.13, 3.2.1 and 3.2.2 read `inapplicable` ("the page exposed nothing of the
+ * kind") where they must read NOT EXAMINED (worker-judge's re-review of #1376, 5655101732).
+ *
+ * The worker's own `observed` marks cannot be the source: `CHANNELS_OF_A_SKIPPED_STEP.focus` (capture-pure.mjs) is
+ * `focusOrder` plus `FOCUS_DEPENDENT_PROBES` -- dialogEscape, arrowNavigation, typedFeedback, focusContext -- and
+ * names neither `focusReveal` nor `focusEvents`. So the step table here, which lists what each step writes, decides.
+ */
+const FOCUS_PASS = ["focusContext", "focusReveal", "focusOrder", "focusEvents", "dialogEscape", "arrowNavigation",
+  "typedFeedback"];
+
+/** A LIVE sweep excursion: recorded, and the skipped steps' opt-in keys ABSENT, as `interactionEvidence` leaves them. */
+function liveSweepExcursion(): SiteBoundCapture {
+  const shape = rehearsalShape();
+  const interaction = { ...shape.interaction } as Record<string, unknown>;
+  for (const key of ["routeChange", "typedFeedback", "focusContext", "focusReveal", "focusEvents"]) delete interaction[key];
+  interaction.leftSite = { control: EMBED, kind: "taskButton", phase: "sweep", from: shape.url, to: "https://www.youtube.com",
+    evidence: "Opening new window" };
+  return { ...shape, interaction: interaction as SiteBoundCapture["interaction"] };
+}
+
+test("#1377: on a live sweep excursion, the skipped focus pass is NOT EXAMINED even where its keys were never written", () => {
+  const capture = liveSweepExcursion();
+  const omitted = ["routeChange", "typedFeedback", "focusContext", "focusReveal", "focusEvents"];
+  const absent = omitted.filter((key) => !(key in (capture.interaction ?? {})));
+  assert.deepEqual(absent, omitted, "the positive control: the capture really lacks the keys interactionEvidence omits");
+  const left = leftSite(capture)!;
+  assert.equal(left.source, "recorded");
+  const { notExamined } = withinTheSite(capture, left);
+  for (const channel of ["focusReveal", "focusContext", "typedFeedback"]) {
+    assert.ok(notExamined.includes(channel), `${channel} feeds 1.4.13/3.2.1/3.2.2 and never ran: ${notExamined.join(",")}`);
+  }
+  for (const channel of [...FOCUS_PASS, "routeChange"]) {
+    assert.ok(notExamined.includes(channel), `${channel} belongs to a step after the excursion`);
+  }
+});
+
+test("#1377: an ABSENT sweep key is not named -- an older capture whose code had no such sweep was not cut short of it", () => {
+  const shape = liveSweepExcursion();
+  const structure = { ...shape.structure } as Record<string, unknown>;
+  delete structure.frames;
+  delete structure.tableCells;
+  const capture = { ...shape, structure: structure as SiteBoundCapture["structure"] };
+  const { notExamined } = withinTheSite(capture, leftSite(capture)!);
+  assert.equal(notExamined.includes("frames"), false, "no frames sweep existed to be cut short");
+  assert.equal(notExamined.includes("tableCells"), false);
+  assert.ok(notExamined.includes("links") && notExamined.includes("focusReveal"),
+    "the positive control: present sweeps and the skipped probes are still named");
+});
+
+test("#1377: the cut still names nothing twice, and still leaves what ran before the excursion", () => {
+  const { capture: within, notExamined } = withinTheSite(liveSweepExcursion(), leftSite(liveSweepExcursion())!);
+  assert.equal(new Set(notExamined).size, notExamined.length, `no channel is named twice: ${notExamined.join(",")}`);
+  assert.deepEqual(within.structure?.headings, ["W 3C Web Accessibility Initiative Home, heading, level 1"],
+    "the headings sweep ran before the excursion and is kept");
+  assert.equal(notExamined.includes("headings"), false);
 });
