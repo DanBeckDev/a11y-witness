@@ -6,7 +6,11 @@
  * passes when it should fail, is worse than no Action at all.
  */
 import { strict as assert } from "node:assert";
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import { conformanceScope } from "@a11ign/evidence/conformance";
@@ -16,9 +20,11 @@ import {
   logLines, partialExaminationCount, renderSummary, shouldFail, type RunFinding, type RunResult,
 } from "./summary.js";
 
-const finding = (severity: RunFinding["severity"], issue = "issue"): RunFinding => ({
-  issue, wcag: "4.1.2 Name, Role, Value", severity, evidence: "button", confidence: 0.9,
+const finding = (severity: RunFinding["severity"], issue = "issue", mapping?: RunFinding["mapping"]): RunFinding => ({
+  issue, wcag: "4.1.2 Name, Role, Value", severity, evidence: "button", confidence: 0.9, ...(mapping ? { mapping } : {}),
 });
+/** #1618: a finding whose evidence establishes the criterion is not met -- the only kind `fail-on` counts. */
+const asserted = (severity: RunFinding["severity"]): RunFinding => finding(severity, "issue", "conformance");
 
 const result = (over: Partial<RunResult> = {}): RunResult => ({
   url: "https://example.com/checkout",
@@ -31,25 +37,116 @@ const result = (over: Partial<RunResult> = {}): RunResult => ({
 });
 
 test("failing is OFF by default, because a tool that breaks builds on day one gets uninstalled", () => {
-  assert.equal(shouldFail([finding("blocker")], "never"), false);
+  assert.equal(shouldFail([asserted("blocker")], "never"), false);
 });
 
 test("'any' fails on a single finding of any severity", () => {
-  assert.equal(shouldFail([finding("minor")], "any"), true);
+  assert.equal(shouldFail([asserted("minor")], "any"), true);
   assert.equal(shouldFail([], "any"), false);
 });
 
 test("a severity threshold means THAT severity or worse", () => {
-  assert.equal(shouldFail([finding("moderate")], "serious"), false, "moderate is less severe than serious");
-  assert.equal(shouldFail([finding("serious")], "serious"), true);
-  assert.equal(shouldFail([finding("blocker")], "serious"), true, "blocker is worse than serious, so it must fail");
-  assert.equal(shouldFail([finding("minor")], "minor"), true, "the lowest threshold catches everything");
+  assert.equal(shouldFail([asserted("moderate")], "serious"), false, "moderate is less severe than serious");
+  assert.equal(shouldFail([asserted("serious")], "serious"), true);
+  assert.equal(shouldFail([asserted("blocker")], "serious"), true, "blocker is worse than serious, so it must fail");
+  assert.equal(shouldFail([asserted("minor")], "minor"), true, "the lowest threshold catches every asserted finding");
+});
+
+const THRESHOLDS = ["any", "blocker", "serious", "moderate", "minor"] as const;
+
+/**
+ * #1618 ACCEPTANCE, `ceo`'s ruling (a): `fail-on` counts ASSERTED findings only. Rehearsal 2's real result (run 34767932873,
+ * committed verbatim under `fixtures/`) carries one finding, rated `serious` and mapped `secondary`: the judge referred it,
+ * and #1366's log line already says "1 referred". Counted by severity alone it failed `fail-on: serious` all the same.
+ */
+test("#1618: rehearsal 2's real referred serious finding fails the run at NO threshold; the same finding asserted does", () => {
+  const file = new URL("../fixtures/rehearsal2-34767932873-a11ign-result.json", import.meta.url);
+  const { findings } = (JSON.parse(readFileSync(file, "utf8")) as RunResult).verdict;
+  assert.deepEqual(findings.map((f) => [f.severity, f.mapping]), [["serious", "secondary"]], "the fixture as committed");
+  for (const failOn of THRESHOLDS) {
+    assert.equal(shouldFail(findings, failOn), false, `a referral failed fail-on: ${failOn}`);
+  }
+  // CONTROL: the identical finding, asserted. Without it, a shouldFail that never fails would pass the loop above.
+  const assertedCopy = findings.map((f) => ({ ...f, mapping: "conformance" as const }));
+  assert.deepEqual(THRESHOLDS.map((failOn) => shouldFail(assertedCopy, failOn)), [true, false, true, true, true],
+    "any, serious, moderate and minor fail on an asserted serious finding; blocker does not");
+});
+
+test("#1618: a referral is any finding not mapped `conformance`, absent included, and it never outweighs an asserted one", () => {
+  for (const failOn of THRESHOLDS) {
+    assert.equal(shouldFail([finding("blocker"), finding("blocker", "issue", "secondary")], failOn), false,
+      `absent and secondary mappings are referrals, even rated blocker (fail-on: ${failOn})`);
+  }
+  const mixed = [finding("blocker", "referred"), asserted("minor")];
+  assert.equal(shouldFail(mixed, "serious"), false, "a referred blocker does not lift an asserted minor over serious");
+  assert.equal(shouldFail(mixed, "minor"), true, "the asserted minor alone meets minor");
+  assert.equal(shouldFail(mixed, "any"), true);
+});
+
+/** `ceo`'s wording (#1618), typed here rather than imported, so a change to the module's copy is a change this test sees. */
+const RULED = "fail-on counts asserted findings; referrals are listed and never fail the run";
+const REHEARSAL2 = new URL("../fixtures/rehearsal2-34767932873-a11ign-result.json", import.meta.url);
+
+test("#1618: the log states the rule as its own line when fail-on is a threshold, and the count line is unchanged", () => {
+  const rehearsal2 = JSON.parse(readFileSync(REHEARSAL2, "utf8")) as RunResult;
+  const partial = "a11ign: 8 criteria rest on an examination known to be partial -- see the artifact";
+  const count = "a11ign: 1 finding(s) (1 referred); fail-on=";
+  assert.deepEqual(logLines(rehearsal2, "never"), [partial, `${count}never`], "at never nothing can fail, so no rule line");
+  for (const failOn of THRESHOLDS) {
+    assert.deepEqual(logLines(rehearsal2, failOn), [partial, `${count}${failOn}`, `a11ign: ${RULED}`]);
+  }
+});
+
+/** The Action's own entry point, as the Report step runs it: its exit code is the contract a workflow reads. */
+function runAction(resultFile: string, failOn: string): { status: number | null; stderr: string } {
+  const env = { ...process.env };
+  delete env.GITHUB_STEP_SUMMARY;
+  const out = spawnSync(process.execPath,
+    ["--import", "tsx", fileURLToPath(new URL("./run.ts", import.meta.url)), `--result=${resultFile}`, `--fail-on=${failOn}`],
+    { encoding: "utf8", env });
+  return { status: out.status, stderr: out.stderr };
+}
+
+test("#1618: the Action's exit agrees with its log -- rehearsal 2's referral passes at serious, the asserted control fails", () => {
+  const referred = runAction(fileURLToPath(REHEARSAL2), "serious");
+  assert.equal(referred.status, 0, referred.stderr);
+  assert.ok(referred.stderr.includes(`a11ign: ${RULED}\n`), referred.stderr);
+  assert.doesNotMatch(referred.stderr, /failing the check/);
+
+  const dir = mkdtempSync(join(tmpdir(), "fail-on-1618-"));
+  try {
+    const rehearsal2 = JSON.parse(readFileSync(REHEARSAL2, "utf8")) as RunResult;
+    const assertedFile = join(dir, "asserted.json");
+    writeFileSync(assertedFile, JSON.stringify({ ...rehearsal2, verdict: { ...rehearsal2.verdict,
+      findings: rehearsal2.verdict.findings.map((f) => ({ ...f, mapping: "conformance" })) } }));
+    const control = runAction(assertedFile, "serious");
+    assert.equal(control.status, 1, control.stderr);
+    assert.ok(control.stderr.includes(`a11ign: ${RULED}\n`), control.stderr);
+    assert.ok(control.stderr.includes("a11ign: failing the check — asserted findings met the serious threshold.\n"), control.stderr);
+    const unset = runAction(assertedFile, "never");
+    assert.equal(unset.status, 0, unset.stderr);
+    assert.ok(!unset.stderr.includes(RULED), "at never the rule cannot decide the exit, so the log does not state it");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+const normalised = (text: string): string => text.replace(/[*`]/g, "").replace(/\s+/g, " ");
+
+test("#1618: the fail-on input's description and the Action guide each state the rule in ceo's words", () => {
+  const action = readFileSync(new URL("../../../../action.yml", import.meta.url), "utf8");
+  const block = /^ {2}fail-on:\n([\s\S]*?)^ {4}required:/m.exec(action)?.[1] ?? "";
+  assert.match(block, /never \| any \| blocker/, "CONTROL: the fail-on input's block was found, or this reads nothing");
+  assert.ok(normalised(block).includes(RULED), `action.yml's fail-on description:\n${block}`);
+  const guide = readFileSync(new URL("../../../../docs/github-action.md", import.meta.url), "utf8");
+  assert.ok(normalised(guide).includes(RULED), "docs/github-action.md does not state the rule");
 });
 
 test("an unknown threshold THROWS rather than defaulting to never failing", () => {
   // A typo in a workflow file must not silently produce a check that always passes. That is the failure
   // nobody notices, because green is exactly what they expected to see.
-  assert.throws(() => shouldFail([finding("blocker")], "srious" as never), /unknown fail-on/);
+  assert.throws(() => shouldFail([asserted("blocker")], "srious" as never), /unknown fail-on/);
+  assert.throws(() => shouldFail([], "srious" as never), /unknown fail-on/, "with nothing asserted, a typo still throws");
 });
 
 test("'not run' and '0 violations' are rendered differently for the rule layer", () => {

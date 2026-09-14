@@ -68,6 +68,7 @@ inputs:
   fail-on:
     description: >-
       never | any | blocker | serious | moderate | minor. A severity means "that or worse".
+      fail-on counts asserted findings; referrals are listed and never fail the run.
       Defaults to `never`: report first, and fail the build when your team asks for it. A tool that
       breaks builds the day it is installed gets uninstalled.
     required: false

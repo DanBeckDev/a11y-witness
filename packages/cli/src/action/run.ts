@@ -116,7 +116,7 @@ function main(): void {
   for (const line of logLines(result, failOn)) process.stderr.write(`${line}\n`);
 
   if (fail) {
-    process.stderr.write(`a11ign: failing the check — findings met the ${failOn} threshold.\n`);
+    process.stderr.write(`a11ign: failing the check — asserted findings met the ${failOn} threshold.\n`);
     process.exit(1);
   }
 }
