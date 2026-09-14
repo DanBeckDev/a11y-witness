@@ -99,13 +99,17 @@ test("an inapplicable RULE does not make the CRITERION inapplicable", () => {
   assert.equal(outcome?.assessor, "axe-core");
 });
 
-test("the screen-reader layer decides the criteria it covers, whatever axe said", () => {
-  // The precedence ADR 0021 requires, and the property the failed first draft accidentally discovered.
-  // 1.1.1 is the screen-reader layer's, so a rule-layer verdict must not reach it -- otherwise a DOM
-  // check could overrule an observation of what a real screen reader actually announced.
+test("axe never overrules what the screen reader observed on a criterion it covers -- a disagreement is referred", () => {
+  // 0535d146 (2026-09-02) pinned "the screen-reader layer decides the criteria it covers, whatever axe said". `ceo`'s ruling
+  // on #1342 (ADR 0021's 2026-09-14 addendum) keeps that where the screen reader OBSERVED something: this empty capture
+  // exposes nothing 1.1.1 applies to, which is an observation, so axe's image-alt violation beside it is a disagreement --
+  // cantTell, with no assessor asserting. Where the screen-reader layer could not decide at all, axe's violation is now
+  // `failed`; that row is pinned in the judge's own outcomes.test.ts.
   const outcome = outcomeOf("1.1.1", coverageFrom({ violations: [rule("image-alt", "1.1.1")] }));
   assert.notEqual(outcome?.assessor, "axe-core",
-    "a criterion the screen-reader layer covers must not be decided by the rule layer");
+    "an observation by the screen-reader layer must not be overruled into an axe assertion");
+  assert.equal(outcome?.outcome, "cantTell");
+  assert.match(outcome?.reason ?? "", /met nothing this criterion applies to; axe-core reported a violation of 1\.1\.1 in the DOM/);
 });
 
 test("a scan that examined nothing reports nothing as examined", () => {
