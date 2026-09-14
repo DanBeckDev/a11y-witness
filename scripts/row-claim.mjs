@@ -79,6 +79,7 @@ import { staleRuleReason } from "./row-claim/stale-rule-guard.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
 import { primaryWorktreeOf, unverifiedRecords } from "./prune-worktrees.mjs";
 import { CLAIM_LABEL, STARTED_LABEL } from "./claim-labels.mjs";
+import { worktreeOwner, stampWorktree } from "./worktree-owner.mjs";
 import { assertNoLeakInArgv } from "../packages/lab/src/packaging/leak-patterns.mjs";
 
 // #804: CLAIM_LABEL/STARTED_LABEL are IMPORTED (above) from the leaf claim-labels.mjs and re-exported
@@ -181,6 +182,19 @@ export function claimRecordFrom(comments) {
     return match ? match[1].trim() : null;
   };
   return { branch: read(CLAIM_RECORD_BRANCH), worktree: read(CLAIM_RECORD_WORKTREE), recorded: true };
+}
+
+/**
+ * #1432: Pure: the session the NEWEST claim-record comment was written by, or null -- null for no record, and for a
+ * RELEASE, which names who released it and claims nothing.
+ * @param {string[]} comments comment bodies, oldest first
+ * @returns {string | null}
+ */
+export function claimRecordSession(comments) {
+  const newest = comments.filter((c) => c.includes(CLAIM_RECORD_MARKER)).at(-1);
+  if (newest === undefined) return null;
+  const match = /\*\*Claim record\*\* -- claimed by `([^`]+)`/.exec(newest);
+  return match ? match[1] : null;
 }
 
 /**
@@ -907,6 +921,145 @@ export function claimRow(issueNumber, mySession, deps = {}) {
   return writeRowLabels(issueNumber, mySession, [STARTED_LABEL], deps);
 }
 
+// --- #1432: `claim` OWNS THE WORKTREE --------------------------------------------------------------------------------
+//
+// Twice on 2026-09-13 a hand-written claim chain continued after `git worktree add` FAILED on a path or branch a peer
+// had already created, and acted INSIDE the peer's worktree (wt-1408 at 20:49Z, wt-1398 about 21:00Z). `claim` only
+// RECORDED the branch and worktree it was given; it never created or checked them, so the chain that did was typed by
+// hand in every session, and a failed step left the next command running wherever the failure left it.
+//
+// So given `--branch` and `--worktree`, `claim` refuses before ANY write when the path or the branch already exists --
+// naming the owner where one is recorded -- and otherwise creates the worktree itself, stamps it, then claims.
+//
+// WORKER-JUDGE'S QUESTION, DECIDED: `claim` does NOT refuse when its cwd's branch differs from `--branch`. The worktree
+// is now created at `--worktree` by `claim` itself, so where `claim` runs no longer decides where the work lands; and
+// the normal recipe runs `claim` from the session's PREVIOUS worktree, whose branch is by definition a different one,
+// so that refusal would refuse every correct claim. The incident's danger was a chain acting in a tree it did not
+// create, and a claim that creates its own tree closes that.
+
+/**
+ * #1432: Pure: a claim given ONE of `--branch`/`--worktree` is refused -- `claim` creates the worktree from both, and
+ * recording one without the other is the half-claim the hand-written chain used to leave.
+ * @param {{ branch?: string, worktree?: string }} flags
+ * @returns {string | null}
+ */
+export function worktreeFlagsReason({ branch, worktree }) {
+  if (Boolean(branch) === Boolean(worktree)) return null;
+  return "--branch and --worktree go together (#1432): `claim` creates the worktree at --worktree on the new branch "
+    + "--branch, from origin/main. Give both, or neither for a row that changes no code.";
+}
+
+/** @param {unknown} error @returns {number | null} */
+function exitStatusOf(error) {
+  const status = /** @type {{ status?: unknown } | null} */ (error)?.status;
+  return typeof status === "number" ? status : null;
+}
+
+/**
+ * `git` answered "no such ref" (`absentStatus`) -> false; a zero exit -> true; ANY other failure throws, because
+ * "could not ask" is not "absent", and creating a branch on a guess is how the incident started.
+ * @param {string[]} args @param {number} absentStatus @param {string} what @param {typeof defaultRun} run
+ * @returns {boolean}
+ */
+function gitRefExists(args, absentStatus, what, run) {
+  try {
+    run("git", args);
+    return true;
+  } catch (cause) {
+    if (exitStatusOf(cause) === absentStatus) return false;
+    throw new Error(`row-claim: could not ask git whether ${what} exists -- refusing to create it on a guess. `
+      + `${/** @type {Error} */ (cause).message}`, { cause });
+  }
+}
+
+/**
+ * Who a branch belongs to, as far as the tracker records: the claim record of the row its trailing number names.
+ * A read that fails SAYS so; it is never turned into an owner or into "nobody".
+ * @param {string} branch @param {typeof defaultRun} run
+ * @returns {string}
+ */
+function branchOwnerText(branch, run) {
+  const match = /-(\d+)$/.exec(branch);
+  if (!match) return "its name carries no row number, so there is no claim record to name an owner";
+  const row = Number(match[1]);
+  try {
+    const comments = fetchClaimComments(row, { run });
+    const session = claimRecordSession(comments);
+    if (claimRecordFrom(comments).branch === branch && session) return `row #${row}'s claim record names \`${session}\``;
+    return `row #${row}'s newest claim record does not name this branch`;
+  } catch (cause) {
+    return `row #${row}'s claim record could not be read: ${/** @type {Error} */ (cause).message}`;
+  }
+}
+
+/**
+ * #1432: THE REFUSAL, BEFORE ANY WRITE: the target PATH exists, or the target BRANCH exists locally or on origin. Each
+ * names its owner where one is recorded -- the path's `.a11y-owner` stamp (#1128), the branch's claim record.
+ * @param {{ branch: string, worktree: string }} target
+ * @param {{ run?: typeof defaultRun, exists?: (path: string) => boolean, owner?: (worktree: string) => string | null }} [deps]
+ * @returns {string | null} the refusal, or null to go ahead
+ */
+export function worktreeTargetReason({ branch, worktree }, { run = defaultRun, exists = existsSync, owner = worktreeOwner } = {}) {
+  if (exists(worktree)) {
+    const who = owner(worktree);
+    return `--worktree=${worktree} ALREADY EXISTS, ${who ? `stamped by \`${who}\`` : "UNSTAMPED (nobody recorded an owner, which is not the same as free)"}. `
+      + "Refusing before any write: a claim that went on would act inside a tree it did not create.";
+  }
+  if (gitRefExists(["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`], 1, `branch ${branch} locally`, run)) {
+    return `--branch=${branch} ALREADY EXISTS locally (${branchOwnerText(branch, run)}). Refusing before any write.`;
+  }
+  if (gitRefExists(["ls-remote", "--exit-code", "--heads", "origin", branch], 2, `branch ${branch} on origin`, run)) {
+    return `--branch=${branch} ALREADY EXISTS on origin (${branchOwnerText(branch, run)}). Refusing before any write.`;
+  }
+  return null;
+}
+
+/**
+ * A claim that did not win leaves nothing behind: the worktree and branch this call created a moment ago are removed.
+ * A removal that fails is SAID, never swallowed.
+ * @param {{ branch: string, worktree: string }} target @param {typeof defaultRun} run
+ * @returns {string}
+ */
+function undoCreatedWorktree({ branch, worktree }, run) {
+  try {
+    run("git", ["worktree", "remove", "--force", worktree]);
+    run("git", ["branch", "-D", branch]);
+    return `the worktree ${worktree} and branch ${branch} it had just created were removed`;
+  } catch (cause) {
+    return `the worktree ${worktree} and branch ${branch} it had just created could NOT be removed: `
+      + `${/** @type {Error} */ (cause).message}`;
+  }
+}
+
+/**
+ * #1432: CLAIM, CREATING THE WORKTREE -- `row-claim claim --branch=<b> --worktree=<p>`. In order: refuse if the path or
+ * branch exists; fetch; `git worktree add -b <b> <p> origin/main`; stamp it; claim. A claim that is refused or loses
+ * its race removes what this created. A failure after the worktree landed carries it in #1399's landed list.
+ * @param {number} issueNumber
+ * @param {string} mySession
+ * @param {{ branch: string, worktree: string, run?: typeof defaultRun, exists?: (path: string) => boolean,
+ *   owner?: (worktree: string) => string | null, stamp?: (worktree: string, session: string) => void,
+ *   claim?: typeof claimRow, claimDeps?: Parameters<typeof claimRow>[2] }} args
+ * @returns {ReturnType<typeof claimRow>}
+ */
+export function claimWithWorktree(issueNumber, mySession, { branch, worktree, run = defaultRun, exists = existsSync,
+  owner = worktreeOwner, stamp = stampWorktree, claim = claimRow, claimDeps = {} }) {
+  const refusal = worktreeTargetReason({ branch, worktree }, { run, exists, owner });
+  if (refusal) return { claimed: false, reason: refusal };
+  /** @type {string[]} */
+  const landed = [];
+  return withLandedWrites(issueNumber, landed, () => {
+    run("git", ["fetch", "--quiet", "origin"]);
+    run("git", ["worktree", "add", "-b", branch, worktree, "origin/main"]);
+    landed.push(`created worktree ${worktree} on new branch ${branch} from origin/main`);
+    stamp(worktree, mySession);
+    landed.push(`stamped ${worktree} as ${mySession}'s`);
+    const result = claim(issueNumber, mySession, { run, ...claimDeps, branch, worktree });
+    if (result.claimed) return result;
+    return { claimed: false, reason: `${result.reason} -- and ${undoCreatedWorktree({ branch, worktree }, run)}` };
+  });
+}
+
 /**
  * #665: Is `worktreePath` clean (no uncommitted changes)? `{ clean: false }` names every dirty path --
  * the issue's own stated acceptance: "A dirty worktree is refused by name, listing the files." A path
@@ -1222,7 +1375,7 @@ function usage() {
     + "  node scripts/row-claim.mjs check <issue-number>                       (alias of --row=)\n"
     + "  node scripts/row-claim.mjs dispatch <issue-number> --session=<name>   (mark taken at dispatch)\n"
     + "  node scripts/row-claim.mjs claim <issue-number> --session=<name> [--branch=<name>] "
-    + "[--worktree=<path>] [--blocked-by=#N]  (mark started; #656/#665: records the branch and worktree "
+    + "[--worktree=<path>] [--blocked-by=#N]  (mark started; #1432: given both, CREATES the worktree at <path> on new branch <name> from origin/main, refusing first if either exists; #656/#665: records the branch and worktree "
     + "-- #987: in a claim COMMENT, so a path of ANY length works, where a label capped it at 41 characters, "
     + "so a future escalation can tell portable from held, and decline can remove the worktree safely; "
     + "#741: --blocked-by releases B2 only with a measurement comment already on this session's own open "
@@ -1407,6 +1560,17 @@ function claimLineFor(mode, issueNumber, mySession, { branch, worktree }) {
 }
 
 /**
+ * #1432: which write a `dispatch`/`claim` CLI makes -- a claim given a branch and worktree creates them first.
+ * @param {"dispatch" | "claim"} mode @param {number} issueNumber @param {string} mySession
+ * @param {{ branch?: string, worktree?: string, blockedBy?: string }} flags
+ */
+function claimOrDispatch(mode, issueNumber, mySession, { branch, worktree, blockedBy }) {
+  if (mode === "dispatch") return dispatchRow(issueNumber, mySession);
+  if (branch && worktree) return claimWithWorktree(issueNumber, mySession, { branch, worktree, claimDeps: { blockedBy } });
+  return claimRow(issueNumber, mySession, { blockedBy });
+}
+
+/**
  * @param {"dispatch" | "claim"} mode
  * @param {number} issueNumber
  * @param {string[]} rest
@@ -1431,9 +1595,14 @@ function runDispatchOrClaim(mode, issueNumber, rest) {
   // `--worktree=` do -- a dispatch precedes any of this session's own PR existing at all.
   const blockedByFlag = rest.find((a) => a.startsWith("--blocked-by="));
   const blockedBy = blockedByFlag?.slice("--blocked-by=".length);
+  const flagsReason = mode === "claim" ? worktreeFlagsReason({ branch, worktree }) : null;
+  if (flagsReason) {
+    process.stderr.write(`row-claim claim: ${flagsReason}\n`);
+    process.exitCode = 2;
+    return;
+  }
   try {
-    const result = mode === "dispatch" ? dispatchRow(issueNumber, mySession)
-      : claimRow(issueNumber, mySession, { branch, worktree, blockedBy });
+    const result = claimOrDispatch(mode, issueNumber, mySession, { branch, worktree, blockedBy });
     if (result.claimed) {
       const claimLine = claimLineFor(mode, issueNumber, mySession, { branch, worktree });
       if (result.statusMoved) {
