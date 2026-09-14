@@ -528,7 +528,9 @@ export function subjectAndRegionFacts(body, deps = {}) {
     if (symbolOnMain(name)) continue;
     const carriers = unique(refsCarryingSymbol(name, refs));
     if (carriers.length > 0) {
-      subjectsMissing.push({ name, refs: carriers.map((ref) => `${ref} (${prState(ref)})`) });
+      // #1566: the INJECTED state, as `heldRegionsFor` already takes it. Calling `prState` here left a `gh` spawn
+      // on the one path a test passing `state` believed it had replaced.
+      subjectsMissing.push({ name, refs: carriers.map((ref) => `${ref} (${stateOf(ref)})`) });
     }
   }
 
