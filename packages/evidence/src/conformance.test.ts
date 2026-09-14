@@ -228,6 +228,62 @@ test("requirement 2 admits one viewport, iframes, and single-URI application sta
   assert.match(fullPages.limitation, /without a URL change/i);
 });
 
+/**
+ * #1438: THE FRAME SCOPE IS STATED PER LAYER, in every branch of Requirement 2.
+ *
+ * All five sentences said "iframes not entered", and rehearsals 4 and 5 read it beside three axe findings addressed
+ * `["iframe", …]` and a transcript that went into the YouTube player's frame ("Video, frame, clickable" at line 101,
+ * "out of frame" at 110). Neither layer stays out of an iframe:
+ *   - the rule layer: `new AxeBuilder({ page }).analyze()` (packages/cli/src/scan/axe.ts), and @axe-core/playwright
+ *     "automatically injects into all frames";
+ *   - the screen-reader layer: its read-through and sweeps follow the screen reader into a frame, but the probe
+ *     operates nothing announced as a frame or embedded object (#1363), and the DOM counts read the top document
+ *     only (`document.querySelectorAll`).
+ * `conformanceScope` never sees findings, only whether the rule layer ran, so the rule clause turns on that.
+ */
+const REQUIREMENT_2_BRANCHES: { name: string, marker: RegExp, input: ConformanceScopeInput }[] = [
+  { name: "complete", marker: /examined in full/, input: CLEAN },
+  { name: "truncated", marker: /INCOMPLETE/,
+    input: { ...CLEAN, sweeps: [{ type: "heading", stop: "exhausted" }, { type: "graphic", stop: "deadline" }] } },
+  { name: "short of the census (#887)", marker: /fewer trips/,
+    input: { ...CLEAN, census: { link: 57 },
+      sweeps: [{ type: "link", stop: "exhausted", trips: 3, found: 2 }, { type: "link", stop: "exhausted", trips: 3, found: 2 }] } },
+  { name: "sealed inside a dialog (#897)", marker: /modal dialog was open/,
+    input: { ...CLEAN,
+      sweeps: [{ type: "link", stop: "exhausted", openDialog: "Hub Bot" }, { type: "link", stop: "exhausted", openDialog: "Hub Bot" }] } },
+  { name: "left the site (#1363)", marker: /examination ENDED/,
+    input: { ...CLEAN, leftSite: { control: "Video, frame, clickable", notExamined: ["links"] } } },
+];
+
+const requirement2 = (input: ConformanceScopeInput) => conformanceScope(input)[1];
+const both = (r: { establishes: string, limitation: string }) => `${r.establishes} ${r.limitation}`;
+
+test("#1438: no branch of requirement 2 says iframes were not entered, and each states the screen reader's frame scope", () => {
+  for (const { name, marker, input } of REQUIREMENT_2_BRANCHES) {
+    const text = both(requirement2(input));
+    assert.match(text, marker, `the positive control: the ${name} branch was actually reached`);
+    assert.doesNotMatch(text, /iframes?\s+(?:is\s+|are\s+)?not\s+entered/i, `${name}: "not entered" is false for both layers`);
+    assert.match(text, /screen reader's read-through and sweeps can pass into a frame/i, `${name}: the screen-reader layer's scope`);
+    assert.match(text, /nothing inside a frame or embedded object is operated/i, `${name}: what it does not do inside one`);
+    assert.match(text, /top document only/i, `${name}: what the element counts cover`);
+  }
+});
+
+test("#1438: when the rule layer ran, requirement 2 says axe examines iframe documents, in every branch", () => {
+  for (const { name, input } of REQUIREMENT_2_BRANCHES) {
+    assert.match(both(requirement2({ ...input, ruleLayerRan: true })), /rule layer \(axe-core\) examines iframe documents too/i, name);
+  }
+});
+
+test("#1438: when the rule layer did not run, requirement 2 says so instead, and still states the screen-reader scope", () => {
+  for (const { name, input } of REQUIREMENT_2_BRANCHES) {
+    const text = both(requirement2({ ...input, ruleLayerRan: false }));
+    assert.doesNotMatch(text, /axe-core\) examines iframe/i, `${name}: no claim for a layer that did not run`);
+    assert.match(text, /the rule layer did not run/i, name);
+    assert.match(text, /screen reader's read-through and sweeps can pass into a frame/i, `${name}: the positive control`);
+  }
+});
+
 test("requirement 3 admits third-party content, which §5.4 exists for", () => {
   const [, , processes] = conformanceScope(CLEAN);
   assert.match(processes.limitation, /third-party/i);
