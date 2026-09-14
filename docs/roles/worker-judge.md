@@ -63,8 +63,12 @@ this laptop's local corpus was a retired VM pool at a protocol nobody was asking
    region check below cannot see one: #28/#30 (2026-09-06) were each pulled twice by a region check that
    was clean and correct against a row already claimed with no file yet touched. Then check it is still
    open against `origin/main` PLUS every unmerged `agent/*` branch (never HEAD alone), check the region
-   for collision, and `node scripts/row-claim.mjs claim <n> --session=worker-judge` to take it — that
-   claims first and re-verifies after writing, so tell `dispatcher` what was taken once it confirms. Do
+   for collision, and, from a non-primary tree, `node scripts/row-claim.mjs claim <n> --session=worker-judge
+   --branch=agent/<branch> --worktree=/home/agent/repos/wt-<n>` to take it. Since #1432 that CREATES and
+   stamps the worktree itself, so never make it first: a pre-made path or branch is refused before any write
+   (`NOT CLAIMED: --worktree=<path> ALREADY EXISTS … Refusing before any write`). It then claims first and
+   re-verifies after writing; symlink `node_modules` and build in the tree it created, and tell `dispatcher`
+   what was taken once it confirms. Do
    not wait to be briefed
    — a brief afterward is a check on the choice, and a wrong choice costs a redirect, not an idle hour.
 2. **A ruling escalated to `dispatcher` is relayed back in the same turn it is settled.** That is
