@@ -276,9 +276,13 @@ trigger** — a completion arrives with its next row attached, in one message. *
 is reported the same way, naming what was checked**, which costs the dispatcher one message rather than
 costing the worker an hour.
 
-1. **A worker takes the top Ready row in its own lane itself.** First `node scripts/row-claim.mjs claim
-   <n> --session=<name>` — the CLAIM check, reading the board's `in-progress`/`session:*` labels, never
-   git history — then the collision and region rules, and says what it took. **The brief becomes a CHECK
+1. **A worker takes the top Ready row in its own lane itself.** From a non-primary tree, first
+   `node scripts/row-claim.mjs check <n>` — the CLAIM check, reading the board's `in-progress`/`session:*`
+   labels, never git history — and the collision and region rules; then
+   `node scripts/row-claim.mjs claim <n> --session=<name> --branch=agent/<branch> --worktree=<path>`. Since
+   #1432 that CREATES and stamps the worktree, so nobody makes it first: a pre-made path or branch is refused
+   before any write (`NOT CLAIMED: --worktree=<path> ALREADY EXISTS … Refusing before any write`). The worker
+   symlinks `node_modules`, builds in that tree, and says what it took. **The brief becomes a CHECK
    on that choice** — so a wrong choice costs a redirect, not an idle hour. **The claim check and the
    region check answer different questions and neither substitutes for the other**: #28 and #30
    (2026-09-06) were each pulled twice by workers who ran the region check correctly and got a true
