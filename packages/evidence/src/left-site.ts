@@ -236,13 +236,24 @@ function cutTheFormFieldStep(structure: Fields, interaction: Fields, left: LeftS
   return cut;
 }
 
+/**
+ * Remove a step that came after the excursion, and name what it would have filled (#1377).
+ *
+ * THE TWO HALVES ARE ASYMMETRIC, because the worker writes them differently.
+ *   - INTERACTION: every declared channel, present or not. The worker writes its opt-in fields (`routeChange`,
+ *     `typedFeedback`, `focusContext`, `focusReveal`, `focusEvents`) only when truthy, so a step the excursion SKIPPED
+ *     leaves them absent. Naming only present keys dropped them from `notExamined`, and 1.4.13, 3.2.1 and 3.2.2 read
+ *     "the page exposed nothing of the kind" about probes that never ran.
+ *   - STRUCTURE: only keys present. Every sweep a worker has writes its key, `[]` when it found nothing, so an ABSENT
+ *     structure key means the capture's code had no such sweep -- an older capture with no `frames` -- and naming it
+ *     "not examined because the examination ended" would give it a cause it did not have.
+ *
+ * The worker's own `observed` marks are not the source: its skipped-step list omits `focusReveal` and `focusEvents`
+ * (#1575). The step table above is what each step writes, so it decides.
+ */
 function removeStep(step: Step, structure: Fields, interaction: Fields): string[] {
-  const removed: string[] = [];
-  for (const key of step.structure) {
-    if (key in structure) { delete structure[key]; removed.push(key); }
-  }
-  for (const key of step.interaction) {
-    if (key in interaction) { delete interaction[key]; removed.push(key); }
-  }
-  return removed;
+  const swept = step.structure.filter((key) => key in structure);
+  for (const key of step.structure) delete structure[key];
+  for (const key of step.interaction) delete interaction[key];
+  return [...swept, ...step.interaction];
 }
