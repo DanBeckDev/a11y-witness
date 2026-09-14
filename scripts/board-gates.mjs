@@ -62,6 +62,12 @@ export function worstVerdict(gateOutput) {
  * identifier for the one check that scores real pages against the shipped rules -- `ansible/lab-job.yml`'s
  * own catalogue -- and is a fact about WHICH CHECK RAN, not an interpretation of what it said.
  *
+ * #1539: THE RELEASE GATE RUNS THE SAME CHECK AS ITS STAGE 11, and a record of that stage is the same reading. On
+ * 2026-09-14 the lab release gate at `8efe61c413ba` read `PASS — all 86 of 86` in stage 11 (`rules:real-pages`),
+ * recorded as `-e job=release-gate`, and this slot could not select it: a release-gate PASS would have lost to an
+ * older standalone `rules-real-pages` FAIL had no separate run followed. It counts when its output is EXACTLY that
+ * one stage -- see `isRulesRealPagesStage`.
+ *
  * @param {any} gate
  * @returns {boolean}
  */
@@ -69,7 +75,29 @@ export function isConformanceGate(gate) {
   // THE NAME ENDS AT WHITESPACE OR THE END -- never at `\b`, which let `rules-real-pages-update` through: the
   // catalogue job that REWRITES the baseline, sharing the verdict contract, so its PASS took the slot
   // (worker-capture's review of #946). A quoted value (`job="rules-real-pages"`) is the same job.
-  return /(?:^|\s)-e\s+job=(["']?)rules-real-pages\1(?=\s|$)/.test(String(gate?.command ?? ""));
+  return /(?:^|\s)-e\s+job=(["']?)rules-real-pages\1(?=\s|$)/.test(String(gate?.command ?? ""))
+    || (/(?:^|\s)-e\s+job=(["']?)release-gate\1(?=\s|$)/.test(String(gate?.command ?? ""))
+      && isRulesRealPagesStage(gate?.output));
+}
+
+/** npm's own banner for each script it runs: `> <package>@<version> <script>`, one line per `npm run`. */
+const NPM_SCRIPT_BANNER = /^> [^\s@]+@\S+ (\S+)$/gm;
+
+/**
+ * PURE. #1539: is this output ONE `rules:real-pages` stage and nothing else?
+ *
+ * Read from npm's banner -- WHICH SCRIPT RAN, the same kind of fact the job name above is -- never from the
+ * verdict's wording. Exactly one banner, and it names `rules:real-pages` (the whole name, so
+ * `rules:real-pages-update` is not it). A whole multi-stage journal is refused rather than read: the appendix
+ * renders `worstVerdict` over the ENTIRE output, so another stage's FAIL would be printed as the conformance
+ * result. Keeping the slot on an older standalone reading is the safe direction; mislabelling is not.
+ *
+ * @param {string | undefined} output
+ * @returns {boolean}
+ */
+export function isRulesRealPagesStage(output) {
+  const scripts = [...String(output ?? "").matchAll(NPM_SCRIPT_BANNER)].map((m) => m[1]);
+  return scripts.length === 1 && scripts[0] === "rules:real-pages";
 }
 
 /**
