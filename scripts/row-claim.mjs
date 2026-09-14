@@ -80,7 +80,7 @@ import { sandboxGitEnv } from "./git-env.mjs";
 import { primaryWorktreeOf, unverifiedRecords } from "./prune-worktrees.mjs";
 import { CLAIM_LABEL, STARTED_LABEL } from "./claim-labels.mjs";
 import { worktreeOwner, stampWorktree } from "./worktree-owner.mjs";
-import { primaryLaunchRefusal } from "./board-snapshot-scope.mjs";
+import { primaryLaunchDecision } from "./board-snapshot-scope.mjs";
 import { assertNoLeakInArgv } from "../packages/lab/src/packaging/leak-patterns.mjs";
 
 // #804: CLAIM_LABEL/STARTED_LABEL are IMPORTED (above) from the leaf claim-labels.mjs and re-exported
@@ -1735,9 +1735,10 @@ async function main() {
     "--blocked-by="], { entry: import.meta.url, command: "node scripts/row-claim.mjs" });
   // #1352: FIRST OF ALL, where it was launched. From the primary checkout or a plain clone this refuses before any read,
   // exit 2 -- the "could not determine at all" outcome every consumer already classifies, as the stale-rule guard does.
-  const fromPrimary = primaryLaunchRefusal("row-claim");
-  if (fromPrimary) {
-    process.stderr.write(`${fromPrimary}\n`);
+  const launch = primaryLaunchDecision("row-claim");
+  if (launch.notice) process.stderr.write(`${launch.notice}\n`);
+  if (launch.refusal) {
+    process.stderr.write(`${launch.refusal}\n`);
     process.exitCode = 2;
     return;
   }

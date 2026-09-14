@@ -99,7 +99,7 @@ import { leakRefusalReason } from "../packages/lab/src/packaging/leak-patterns.m
 import { missingTemplateFields, wholeSuiteAcceptanceReason } from "./row-claim/template-fields-rule.mjs";
 import { moveProjectStatus, filedByLine, fetchLabels as fetchIssueLabels, ensureLabelsExist } from "./row-claim.mjs";
 import { PROJECT_OWNER, PROJECT_NUMBER } from "./board-snapshot.mjs";
-import { primaryLaunchRefusal } from "./board-snapshot-scope.mjs";
+import { primaryLaunchDecision } from "./board-snapshot-scope.mjs";
 import { REPO } from "./repo-identity.mjs";
 import { declaredRegionFiles, directoryReservations, extractLabeledSection, extractRegionSection, slashlessDirectoryEntries, unrecognisedRegionPaths } from "./region-paths.mjs";
 import { loadLanes, inLane } from "./workflow-lane-check.mjs";
@@ -1149,9 +1149,10 @@ function main() {
     { entry: import.meta.url, command: "npm run row-file --" });
   // #1352: from the primary checkout or a plain clone, refuse before filing anything -- exit 1, createIssue's own
   // "refused, nothing filed" code.
-  const fromPrimary = primaryLaunchRefusal("row-file");
-  if (fromPrimary) {
-    process.stderr.write(`${fromPrimary}\n`);
+  const launch = primaryLaunchDecision("row-file");
+  if (launch.notice) process.stderr.write(`${launch.notice}\n`);
+  if (launch.refusal) {
+    process.stderr.write(`${launch.refusal}\n`);
     process.exitCode = 1;
     return;
   }
