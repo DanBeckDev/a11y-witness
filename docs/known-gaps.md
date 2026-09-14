@@ -244,27 +244,60 @@ prints its own timestamps in BST, so a verdict produced at 10:30 is stamped `09:
 exactly like the stale-journal defect this file records three times. It was the same moment in two zones.
 Settle it with the InvocationID the playbook already reports, not by comparing clocks.
 
-## 6. Two capture-path behaviours — DONE: one MEASURED AS NOT HAPPENING, one proven neutral
+## 6. Two capture-path behaviours — DONE: one BLOCKS FIVE CONFORMANT PAGES, declared and decided, one proven neutral
 
-### Cookie/consent overlays — detected, and never once blocking
+### Cookie/consent overlays — BLOCKING on five conformant pages, declared unexaminable, and nothing is pressed (ADR 0023)
 
-The entry said a page whose content sits behind a modal would be captured as the modal. **Measured across
-85 conformant real pages: it has never happened.** Every UK public-sector site opens with a cookie banner
-and the read-through walks straight past it — networkrail opens on Cookiebot and still reaches 69
-announcements and 11 headings.
+**CORRECTED 2026-09-14 (#1544).** **Five conformant real pages stop on a consent overlay in every run that can
+show it: 11 of 11 `rules:real-pages` runs since 2026-09-07T23:14:18Z** (orchestrator's journal read, #915 comment
+5658789598).
+- **The pages:** `www.historicenvironment.scot/visit/all/edinburgh-castle/`, `www.leeds.ac.uk/undergraduate`,
+  `www.nidirect.gov.uk/information-and-services/motoring/mot-and-vehicle-testing`, `www.nrscotland.gov.uk/publications/`
+  and `www.nrscotland.gov.uk/statistics-and-data/`.
+- **What their captures reach:** every heading announced is the overlay's own ("Manage your cookie preferences",
+  "Tell us whether you accept cookies", "How nidirect uses cookies", "Cookie settings"). The DOM holds headings the
+  capture never reached.
 
-The first version of that measurement said **50 of 86**, because it merged "has a banner" with "never got
-past one". The accessibility tree is the discriminator: a capture that reached the page has HEADINGS in
-its census. Corrected, the count is **0**.
+**Why the 2026-08-27 count below read 0.** On 2026-09-07 (#363) the detector stopped treating ANY announced heading as
+proof the page was reached, because an overlay marked up as a heading satisfies that. The run at 2026-09-07T12:26:04Z
+listed none of the five, and the run at 23:14:18Z, over the same captures, listed all five. So the pages did not
+change; the instrument stopped being fooled.
 
-So the honest state is: **detected, reported, and not occurring.** `rules:real-pages` names any capture
-that opened on an overlay and never reached a heading — and now does so on a PASS as well as a failure,
-because a bad capture that matches an equally bad baseline entry reads as stability rather than as the
-defect it is.
+**What was decided, and where it is recorded.**
+- **The decision:** [ADR 0023](./adr/0023-a-consent-banner-is-part-of-the-page.md) stands. The capture records the
+  page as it is and presses nothing to get past a banner. `ceo` ruled #1522 option (A) on 2026-09-14, recorded on
+  #1522 (comment 5661184766).
+- **The declarations:** the five are declared in `packages/lab/baselines/real-page-unexaminable.json`, so they leave
+  the real-page gate's denominator instead of making it inconclusive. The next lab gate read `PASS — all 86 of 86`
+  (orchestrator, #915 comment 5659154711).
+- **The removal condition:** each entry's `removedWhen` reads "the site stops blocking without a press, or ADR 0023
+  is superseded".
+- **The consent tools:** each entry records its page's tool, read from the served HTML on 2026-09-14 — Cookie Tractor
+  on both nrscotland pages, Drupal EU Cookie Compliance on nidirect, an in-house `uol-cookie-control.js` on leeds, and
+  unknown on historicenvironment (a plain GET returned 403).
+
+**The record, 2026-08-27 — superseded by the correction above, kept because what was believed is part of what it
+cost.** The section was headed "Cookie/consent overlays — detected, and never once blocking", and read:
+
+> The entry said a page whose content sits behind a modal would be captured as the modal. **Measured across
+> 85 conformant real pages: it has never happened.** Every UK public-sector site opens with a cookie banner
+> and the read-through walks straight past it — networkrail opens on Cookiebot and still reaches 69
+> announcements and 11 headings.
+>
+> The first version of that measurement said **50 of 86**, because it merged "has a banner" with "never got
+> past one". The accessibility tree is the discriminator: a capture that reached the page has HEADINGS in
+> its census. Corrected, the count is **0**.
+>
+> So the honest state is: **detected, reported, and not occurring.** `rules:real-pages` names any capture
+> that opened on an overlay and never reached a heading — and now does so on a PASS as well as a failure,
+> because a bad capture that matches an equally bad baseline entry reads as stability rather than as the
+> defect it is.
 
 **Nothing dismisses a banner, and that stays deliberate.** Clicking "accept all" on somebody's site is a
 consent decision this tool has no business making on their behalf, and the read-through does not need it.
-If a page ever IS blocked, the detector says so by name and the decision can be made about that page.
+The 2026-08-27 text promised that if a page were ever blocked, the detector would say so by name and the decision
+could be made about that page. **Both happened for these five:** the detector named them, and the decision was to
+keep ADR 0023 and declare them rather than press anything.
 
 ### Render readiness — fixed and PROVEN
 
