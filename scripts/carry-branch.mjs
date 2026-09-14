@@ -38,6 +38,14 @@
 //   - The ordinary case is untouched. An owner who is mid-flight keeps their branch -- nothing here
 //     checks a branch out or touches a worktree other than the throwaway one this carry creates and
 //     removes.
+//
+// EXIT CODES (#1477). Each one says whether the push reached the remote, because a caller reads the code first:
+//   0  CARRIED and NOTED -- the branch was pushed, and a note was left on its open PR
+//   1  NOT CARRIED -- nothing was pushed: the checkout, the fetch, the merge or the push itself failed
+//   2  usage -- nothing was attempted
+//   3  CARRIED, NOT NOTED -- the branch WAS pushed; finding its PR, or leaving the note, failed afterwards
+// A failure after the push must never read as 1. Measured on #1477 at `0830dd0e`: a failing `gh pr comment`
+// escaped as an uncaught throw, so Node exited 1 -- NOT CARRIED -- under stdout's own "CARRIED -- ... pushed."
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -57,6 +65,9 @@ const defaultRun = (cmd, args, opts = {}) => {
   assertNoLeakInArgv(cmd, args); // #1053: guarded in the SPAWN HELPER, not per call site
   return execFileSync(cmd, args, { ...opts, env: sandboxGitEnv(), encoding: "utf8" });
 };
+
+/** #1477: the exit codes this file's header documents, by name. */
+export const EXIT = Object.freeze({ CARRIED: 0, NOT_CARRIED: 1, USAGE: 2, CARRIED_NOT_NOTED: 3 });
 
 /** @param {unknown} error @returns {string} */
 function errMsg(error) {
@@ -187,8 +198,15 @@ export function noteCarryOnPr(branch, carrier, reason, { run = defaultRun } = {}
     return { commented: false, reason: `no open PR found for ${branch} -- nothing to comment on` };
   }
   const prNumber = /** @type {{ number: number }} */ (found[0]).number;
-  run("gh", ["pr", "comment", String(prNumber), "--repo", REPO, "--body",
-    `Carried by \`${carrier}\` from a detached checkout: ${reason}`]);
+  try {
+    run("gh", ["pr", "comment", String(prNumber), "--repo", REPO, "--body",
+      `Carried by \`${carrier}\` from a detached checkout: ${reason}`]);
+  } catch (error) {
+    // #1477: GUARDED, BECAUSE THIS RUNS AFTER THE PUSH LANDED. Unguarded, its throw escaped `main` and Node
+    // exited 1, which this script's header defines as NOT CARRIED. Reported, never thrown, like the lookup above.
+    return { commented: false,
+      reason: `found PR #${prNumber} for ${branch}, but could not post the note on it -- ${errMsg(error)}` };
+  }
   return { commented: true, prNumber };
 }
 
@@ -197,35 +215,66 @@ function usage() {
     + "  node scripts/carry-branch.mjs <branch> --carrier=<session> --reason=<text> [--repo-root=<dir>]\n";
 }
 
-async function main() {
+/** @param {string} text */
+const writeOut = (text) => { process.stdout.write(text); };
+/** @param {string} text */
+const writeErr = (text) => { process.stderr.write(text); };
+
+/**
+ * The carry's arguments, or `null` when the usage is not met.
+ * @param {string[]} argv
+ * @returns {{ branch: string, carrier: string, reason: string, repoRoot: string | undefined } | null}
+ */
+function carryArgs(argv) {
+  const flag = (/** @type {string} */ name) => {
+    const prefix = `--${name}=`;
+    return argv.find((a) => a.startsWith(prefix))?.slice(prefix.length);
+  };
+  const [branch] = argv;
+  const carrier = flag("carrier");
+  const reason = flag("reason");
+  if (!branch || branch.startsWith("--") || !carrier || !reason) return null;
+  return { branch, carrier, reason, repoRoot: flag("repo-root") };
+}
+
+/**
+ * #1477: THE CLI'S WHOLE DECISION, returning its exit code instead of setting `process.exitCode`, so a test
+ * drives the real entry path with an injected `run`. `main` below only guards the flags, reads argv and
+ * applies the code. See this file's header, and `EXIT`, for what each code means.
+ * @param {string[]} argv the arguments after the script's own path
+ * @param {{ run?: typeof defaultRun, stamp?: typeof stampWorktree, workDir?: string, cwd?: string,
+ *   out?: (text: string) => void, err?: (text: string) => void }} [deps]
+ * @returns {number}
+ */
+export function carryMain(argv, { run = defaultRun, stamp = stampWorktree, workDir, cwd = process.cwd(),
+  out = writeOut, err = writeErr } = {}) {
+  const args = carryArgs(argv);
+  if (args === null) {
+    err(usage());
+    return EXIT.USAGE;
+  }
+  const { branch, carrier, reason, repoRoot } = args;
+  const result = carryBranch(repoRoot ?? cwd, branch, { run, stamp, workDir });
+  if (!result.carried) {
+    err(`NOT CARRIED: ${result.reason}\n`);
+    if (result.diffstat) err(`(the merge itself had already produced:\n${result.diffstat})\n`);
+    return EXIT.NOT_CARRIED;
+  }
+  out(`CARRIED -- ${branch} merged with origin/main and pushed.\n${result.diffstat}\n`);
+  const note = noteCarryOnPr(branch, carrier, reason, { run });
+  if (note.commented) {
+    out(`Noted on PR #${note.prNumber}.\n`);
+    return EXIT.CARRIED;
+  }
+  err(`CARRIED, NOT NOTED (exit ${EXIT.CARRIED_NOT_NOTED}) -- ${branch} WAS pushed; no note was left on its PR: `
+    + `${note.reason}\n`);
+  return EXIT.CARRIED_NOT_NOTED;
+}
+
+function main() {
   refuseUnknownFlags(["--carrier=", "--reason=", "--repo-root="],
     { entry: import.meta.url, command: "node scripts/carry-branch.mjs" });
-  const argv = process.argv.slice(2);
-  const branch = argv[0];
-  const carrier = argv.find((a) => a.startsWith("--carrier="))?.slice("--carrier=".length);
-  const reason = argv.find((a) => a.startsWith("--reason="))?.slice("--reason=".length);
-  const repoRootFlag = argv.find((a) => a.startsWith("--repo-root="))?.slice("--repo-root=".length);
-  if (!branch || branch.startsWith("--") || !carrier || !reason) {
-    process.stderr.write(usage());
-    process.exitCode = 2;
-    return;
-  }
-  const repoRoot = repoRootFlag ?? process.cwd();
-  const result = carryBranch(repoRoot, branch);
-  if (!result.carried) {
-    process.stderr.write(`NOT CARRIED: ${result.reason}\n`);
-    if (result.diffstat) process.stderr.write(`(the merge itself had already produced:\n${result.diffstat})\n`);
-    process.exitCode = 1;
-    return;
-  }
-  process.stdout.write(`CARRIED -- ${branch} merged with origin/main and pushed.\n${result.diffstat}\n`);
-  const note = noteCarryOnPr(branch, carrier, reason);
-  if (note.commented) {
-    process.stdout.write(`Noted on PR #${note.prNumber}.\n`);
-  } else {
-    process.stderr.write(`Carried, but could not leave a note on the PR: ${note.reason}\n`);
-    process.exitCode = 3;
-  }
+  process.exitCode = carryMain(process.argv.slice(2));
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
