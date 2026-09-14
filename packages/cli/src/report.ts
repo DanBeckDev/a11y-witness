@@ -16,6 +16,7 @@ import { layerOf, orderByLayer, LAYER_LABEL, type ExperienceLayer } from "@a11ig
 import { notAConformanceClaim, type ConformanceRequirement }
   from "@a11ign/evidence/conformance";
 import { outcomeTally, type CriterionOutcome } from "@a11ign/judge/outcomes";
+import { documentsSpannedSentence } from "./action/summary.js";
 
 /** How much offending markup to quote as evidence. Enough to recognise the element, not the page. */
 const EVIDENCE_CHARS = 100;
@@ -332,6 +333,12 @@ function findingsSection(
   return lines;
 }
 
+/** Two lines -- a gap, then the note -- when the capture named more than one document; none otherwise. */
+function documentsSpannedLead(conformance: Report["conformance"]): string[] {
+  const sentence = documentsSpannedSentence(conformance);
+  return sentence ? ["", `NOTE: this capture's evidence spans more than one document. ${sentence}`] : [];
+}
+
 /** The whole report, ready to print. */
 export function reportLines(
   { url, task, screenReader, announcements, verdict, axe, conformance, outcomes, environment }: Report,
@@ -342,6 +349,9 @@ export function reportLines(
     "===================",
     `URL:   ${url}`,
     `Task:  ${task}`,
+    // #1387: the same lead the Action's summary gives, from the same sentence. §5.2 below still carries it,
+    // but that is the last section a reader meets, and every finding in between may describe either page.
+    ...documentsSpannedLead(conformance),
     "",
     ...howToReadThisSection(),
     "",
