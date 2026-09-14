@@ -421,10 +421,12 @@ export function proveOriginMainReadable(deps) {
  * (128 for an unreadable revision, say) is a genuine failure and must reach `main()`'s CANNOT_ASK path
  * rather than being read as "not on main".
  * @param {string} name
+ * @param {{ run?: (args: string[]) => string }} [deps] (#1566) the same git runner `subjectAndRegionFacts` injects,
+ *   so the subject half can be driven over a synthetic repository instead of this checkout's `origin/main`.
  */
-export function symbolOnMain(name) {
+export function symbolOnMain(name, { run = git } = {}) {
   try {
-    git(["grep", "-q", "-F", "-e", name, "origin/main"]);
+    run(["grep", "-q", "-F", "-e", name, "origin/main"]);
     return true;
   } catch (error) {
     if (/** @type {{ status?: number }} */ (error).status === 1) return false;
@@ -442,13 +444,14 @@ export function symbolOnMain(name) {
  * the ref's whole tree is the same fix as `symbolOnMain`, aimed at "wait for it" instead of "is it here".
  * @param {string} symbol
  * @param {string[]} refs
+ * @param {{ run?: (args: string[]) => string }} [deps] (#1566) as `symbolOnMain`.
  */
-export function refsCarryingSymbol(symbol, refs) {
+export function refsCarryingSymbol(symbol, refs, { run = git } = {}) {
   /** @type {string[]} */
   const carrying = [];
   for (const ref of refs) {
     try {
-      git(["grep", "-q", "-F", "-e", symbol, ref]);
+      run(["grep", "-q", "-F", "-e", symbol, ref]);
       carrying.push(ref);
     } catch (error) {
       // #772: "no match" AND "could not read this ref" ARE NOT THE SAME ANSWER, and the comment that used
@@ -525,10 +528,12 @@ export function subjectAndRegionFacts(body, deps = {}) {
   const present = (declared ?? []).filter((path) => onMain(path, { run }));
   const subjectsMissing = [];
   for (const name of symbols) {
-    if (symbolOnMain(name)) continue;
-    const carriers = unique(refsCarryingSymbol(name, refs));
+    if (symbolOnMain(name, { run })) continue;
+    const carriers = unique(refsCarryingSymbol(name, refs, { run }));
     if (carriers.length > 0) {
-      subjectsMissing.push({ name, refs: carriers.map((ref) => `${ref} (${prState(ref)})`) });
+      // #1566: the INJECTED state, as `heldRegionsFor` already takes it. Calling `prState` here left a `gh` spawn
+      // on the one path a test passing `state` believed it had replaced.
+      subjectsMissing.push({ name, refs: carriers.map((ref) => `${ref} (${stateOf(ref)})`) });
     }
   }
 
