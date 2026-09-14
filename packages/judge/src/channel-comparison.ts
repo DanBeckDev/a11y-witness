@@ -749,3 +749,50 @@ export function firstVisitEach(names: string[]): string[] {
   const seen = new Set<string>();
   return names.filter((name) => (seen.has(name) ? false : (seen.add(name), true)));
 }
+
+/**
+ * THE BROWSER'S ADDRESS BAR, as NVDA reads it -- #1514.
+ *
+ * A COPY of `SPOKEN_ADDRESS` in `packages/evidence/src/left-site.ts`. That one is private to its package, and a
+ * worktree resolves `@a11ign/evidence` to a built `dist`, so an export added there could not be proven from here
+ * without rebuilding shared state (product-manager's ruling on #1514, route B). `focus-order-cycle.test.ts` pins the
+ * two equal through the published `leftSite()`. #1559 replaces this copy with one exported from evidence.
+ */
+const SPOKEN_ADDRESS_BAR = /\bAddress and search bar\b.*?\b(https?): slash slash ((?:[a-z0-9-]+ dot )+[a-z]{2,})\b/i;
+
+/** The scheme and host an address-bar stop names, in `leftSite().to`'s shape, or `null` for any other stop. */
+export function addressBarHost(entry: string): string | null {
+  const match = SPOKEN_ADDRESS_BAR.exec(String(entry));
+  return match ? `${match[1].toLowerCase()}://${match[2].toLowerCase().replace(/ dot /g, ".")}` : null;
+}
+
+/**
+ * The recorded Tab walk, rotated to start where Tab ENTERS THE DOCUMENT -- #1514.
+ *
+ * `firstVisitEach` reads the walk as a line from its first stop, which is the page's first control only when the
+ * walk began there. On `ico.org.uk/action-weve-taken/enforcement/` (2026-09-14) it began at "Skip to main content",
+ * left the page through the browser's own controls, and re-entered at "Cookie options", the page's FIRST control in
+ * Tab order. The line reading made it last, so 2.4.3 reported a reordering the page does not have.
+ *
+ * THE ADDRESS BAR IS THE MARKER. Tab passes through the browser's controls between the page's last control and its
+ * first, so the walk is rotated to the first stop after the LAST address-bar stop that names a control the page
+ * reads. With no address-bar stop there is no marker, and the walk comes back unchanged: a control first in reading
+ * order and last in the walk may then be genuinely last in Tab order, and in a cycle the two positions cannot be told
+ * apart without the marker.
+ *
+ * Browser-UI stops need no removal: none shares a name with the reading order, so the comparison's intersection
+ * already leaves them out.
+ */
+export function fromDocumentEntry(
+  entries: string[] | undefined, pageNames: ReadonlySet<string>, truncated?: string[],
+): string[] {
+  const walk = entries ?? [];
+  let lastAddressBar = -1;
+  walk.forEach((entry, index) => { if (addressBarHost(entry) !== null) lastAddressBar = index; });
+  if (lastAddressBar < 0) return walk;
+  for (let index = lastAddressBar + 1; index < walk.length; index += 1) {
+    const [name] = comparableNames([walk[index]], truncated);
+    if (name && pageNames.has(name)) return [...walk.slice(index), ...walk.slice(0, index)];
+  }
+  return walk;
+}
