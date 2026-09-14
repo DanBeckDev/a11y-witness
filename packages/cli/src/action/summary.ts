@@ -63,6 +63,31 @@ export interface RunResult {
    * page, and on results written before the check existed.
    */
   leftSite?: { control: string; to: string | null; source: "recorded" | "derived" } | null;
+  /**
+   * WCAG §5.2's five conformance requirements, as `cli.ts --json` emits them (`@a11ign/evidence/conformance`).
+   * Declared for one sentence only (#1387): Requirement 2 names a capture that spanned more than one document,
+   * and until this field was declared the summary could not show it. Absent on older results, which say nothing.
+   */
+  conformance?: { number: number; name: string; establishes: string; limitation: string }[];
+}
+
+/**
+ * The conformance scope's own sentence for a capture whose marks named more than one document -- #1387.
+ *
+ * READ, never rephrased: `@a11ign/evidence`'s `document-identity.ts` writes it into Requirement 2, and the
+ * JSON already carries it, so the summary quotes what the evidence layer concluded rather than deciding again.
+ * Rehearsals 3 and 5 each named two documents, and only a reader who opened the artifact could find out.
+ * `summary.test.ts` takes the wording from the real producer, so a change to it fails there rather than here
+ * going quiet. Null when no requirement carries it, including a result with no conformance at all.
+ */
+const DOCUMENTS_SPANNED = /THIS CAPTURE NAMED MORE THAN ONE DOCUMENT.*?more than one page\./;
+
+export function documentsSpannedSentence(conformance: RunResult["conformance"]): string | null {
+  for (const requirement of conformance ?? []) {
+    const found = requirement.limitation?.match(DOCUMENTS_SPANNED);
+    if (found) return found[0];
+  }
+  return null;
 }
 
 /** Ordered worst-first, so a threshold can be "this severity or worse". */
@@ -254,6 +279,11 @@ export function logLines(result: RunResult, failOn: FailOn): string[] {
     lines.push(`a11ign: examination ENDED -- left the site at ${JSON.stringify(left.control)}`
       + `${left.to ? ` (to ${left.to})` : ""}; everything after it was NOT EXAMINED`);
   }
+  // #1387: rehearsal 5's reader found nothing about it "in the log, the count, or the three documents".
+  if (documentsSpannedSentence(result.conformance)) {
+    lines.push("a11ign: this capture named MORE THAN ONE DOCUMENT -- its evidence was gathered across more "
+      + "than one page (see the summary)");
+  }
   lines.push(`a11ign: ${findings.length} finding(s) (${breakdown})${left ? " in what was examined" : ""}; `
     + `fail-on=${failOn}`);
   return lines;
@@ -305,6 +335,12 @@ export function renderSummary(result: RunResult, options: SummaryOptions = {}): 
     return lines.join("\n");
   }
   if (result.leftSite) lines.push(...leftSiteLead(result.leftSite));
+  const spanned = documentsSpannedSentence(result.conformance);
+  // #1387: said above the heading, like the early end above, because every finding below may describe either page.
+  if (spanned) {
+    lines.push(`> **This capture's evidence spans more than one document.** ${spanned} So what follows is not `
+      + "only about the page requested.", "");
+  }
   lines.push(
     "## a11ign — what a screen reader actually experienced",
     "",
