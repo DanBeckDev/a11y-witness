@@ -10,6 +10,7 @@
 export type Severity = "blocker" | "serious" | "moderate" | "minor";
 
 import type { CaptureInteraction } from "@a11ign/evidence";
+import type { announcedStateChanges } from "@a11ign/judge/rules";
 
 export interface RunFinding {
   issue: string;
@@ -294,16 +295,11 @@ function ruleSection(ruleBased: RunResult["ruleBased"], limit: number): string[]
 }
 
 /**
- * #1391: ONE STATE CHANGE ANNOUNCED CORRECTLY -- `@a11ign/judge`'s `announcedStateChanges` shape, restated here as a
- * type only, because this renderer imports nothing (`taskQuestion` below says why). `from` and `to` are the
- * expandable-state words the rule reads; `control` and `after` are the two announcements, verbatim.
+ * #1391: ONE STATE CHANGE ANNOUNCED CORRECTLY -- exactly the judge's `announcedStateChanges` element type, taken from
+ * it by a type-only import (erased at runtime; this renderer still loads nothing), so the shape has one definition.
+ * `from` and `to` are the expandable-state words the rule reads; `control` and `after` are the two announcements.
  */
-export interface ObservedStateChange {
-  control: string;
-  after: string;
-  from: string;
-  to: string;
-}
+export type ObservedStateChange = ReturnType<typeof announcedStateChanges>[number];
 
 export interface SummaryOptions {
   /** Rows per table. Bounded because a job summary has a hard size limit and truncation must be stated. */
