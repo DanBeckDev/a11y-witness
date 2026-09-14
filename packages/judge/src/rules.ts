@@ -498,9 +498,8 @@ function readDisclosurePair(change: { control?: string; after?: string | null })
  *
  * A model finding carries no `mapping`, which `RequirementMapping` defines as `secondary` — so
  * `criterionOutcomes` reports it `cantTell`, "needs human confirmation". A rule may be CONFORMANCE-mapped
- * and assert. On the product path's last published measurement (2026-08-24, 18 conformant real pages) the
- * tool asserted nothing at all from the model: 0 asserted, 4 referred -- under re-measurement since
- * 2026-09-14 (#1579).
+ * and assert. Measured 2026-09-14 on the 41 conformant real pages of the calibration set at the shipped floor
+ * (run 2f9c51aa), the tool asserted nothing wrongly: 0 criteria asserted wrongly, 422 referred (#1579).
  *
  * And `compare-layers.mjs` names this exact criterion as the differentiator against a static scanner —
  * "axe can see that `aria-expanded` EXISTS; it cannot see that it never CHANGES". So the one finding this
