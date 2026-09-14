@@ -13,6 +13,8 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { conformanceScope } from "@a11ign/evidence/conformance";
+import { documentIdentity } from "@a11ign/evidence/document-identity";
 import { reportLines, type Report } from "../report.js";
 import { renderSummary, type RunResult } from "./summary.js";
 
@@ -56,4 +58,41 @@ test("#796: neither renderer prints a bare yes/no for the shipped local scorer -
   const expectedCount = "none; 2 finding(s) below that severity";
   assert.ok(reportOutput.includes(expectedCount), `report.ts did not state the count: ${reportOutput}`);
   assert.ok(summaryOutput.includes(expectedCount), `summary.ts did not state the count: ${summaryOutput}`);
+});
+
+/**
+ * #1387: BOTH renderers lead with the multi-document sentence, from ONE conformance the real producer wrote.
+ *
+ * `report.ts` already printed it -- inside §5.2's Requirement 2 `limit:` line, the last section a reader meets.
+ * `summary.ts` did not print it at all. Fixing one consumer is #801/#808's shape, so both are pinned here: the
+ * sentence sits directly under the report's URL/Task lines, and above the summary's heading.
+ */
+test("#1387: both renderers lead with the same 'more than one document' sentence", () => {
+  const documentsFrom = (titles: string[]) => conformanceScope({
+    assessedCriteria: [], screenReader: "NVDA", ruleLayerRan: true,
+    documentIdentity: documentIdentity({
+      diagnostics: titles.map((title) => ({ event: "titleSource", title, source: "document" })),
+    } as never),
+  });
+  const verdict = { taskCompletable: true, confidence: 0.9, summary: "s", findings: [] };
+  const render = (conformance: ReturnType<typeof documentsFrom>) => ({
+    report: reportLines({ url: "https://example.com", task: "t", screenReader: "NVDA", announcements: 10,
+      verdict: verdict as unknown as Report["verdict"], axe: null, conformance }),
+    summary: renderSummary({ url: "https://example.com", task: "t", screenReader: "NVDA", transcript: [],
+      ruleBased: [], verdict, conformance }),
+  });
+
+  const conformance = documentsFrom(["Search | WAI", "How to Change Text Size | WAI"]);
+  const sentence = conformance.map((r) => r.limitation.match(/THIS CAPTURE NAMED MORE THAN ONE DOCUMENT.*?more than one page\./)?.[0])
+    .find(Boolean);
+  assert.ok(sentence, "the positive control: the producer writes the sentence for two titles");
+  const { report, summary } = render(conformance);
+  const lead = report.findIndex((line) => line.includes(sentence));
+  assert.equal(lead, report.indexOf("Task:  t") + 2, `report.ts must lead with it under URL/Task: ${report.join("\n")}`);
+  assert.ok(summary.indexOf(sentence) !== -1 && summary.indexOf(sentence) < summary.indexOf("## a11ign"),
+    `summary.ts must lead with it above its heading: ${summary}`);
+
+  const single = render(documentsFrom(["Search | WAI", "Search | WAI"]));
+  assert.doesNotMatch(single.report.join("\n"), /more than one document/i, "one document: report.ts says nothing");
+  assert.doesNotMatch(single.summary, /more than one document/i, "one document: summary.ts says nothing");
 });
