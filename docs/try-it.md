@@ -111,7 +111,7 @@ that time is not parallelisable or recoverable.
 overlay and read almost none of the page. **Under four minutes is a finding, not a success**; see the
 consent-banner section below before you judge how long your own run took.
 
-**Those are capture times, not the job you are billed for.** Setup comes on top. On the V1 rehearsal's cold run (2026-09-13) setup was 85.3 s, capture and judging 7 m 30 s, and the whole job 9 m 20 s; with warm caches the job was 8 m 27 s. Budget runner time for the job, not the capture.
+**Those are capture times, not the job you are billed for.** Setup comes on top. The two most recent jobs measured at a single build, both at `3bb1fddf` with warm caches (V1 rehearsal 4, runs 34781484432 and 34782000257, 2026-09-13), took 6 m 42 s and 5 m 56 s for the whole job. The only cold-cache job measured is older and at a different build, `0e809d13` (V1 rehearsal 1, run 34764686304, the same day): setup 85.3 s, capture and judging 7 m 30 s, and 9 m 20 s for the whole job. Budget runner time for the job, not the capture.
 
 ## The other route: run it from the repository
 
