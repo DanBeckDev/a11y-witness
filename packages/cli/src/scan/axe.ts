@@ -57,6 +57,10 @@ export interface AxeFinding {
  * "this RULE found no elements to test"; the criterion may still have aspects no axe rule covers, so the
  * page having no images tells you nothing about the rest of 1.1.1. Reporting the criterion inapplicable
  * from a rule's inapplicability would be a claim about the criterion drawn from a claim about one rule.
+ *
+ * Each entry also names the axe rule ids that VIOLATED the criterion (#1606), so a reason can say which rule axe reported.
+ * A criterion that was not violated names none. An imported file carrying only `violations` records only violated
+ * criteria here, now with their ids, because `axe-results.ts` passes its buckets straight through.
  */
 export function coverageFrom(buckets: {
   violations?: readonly AxeViolation[];
@@ -64,11 +68,11 @@ export function coverageFrom(buckets: {
   passes?: readonly AxeViolation[];
   inapplicable?: readonly AxeViolation[];
 }): RuleLayerCoverage {
-  const out: Record<string, RuleLayerVerdict> = {};
+  const out: MutableCoverage = {};
   const record = (rules: readonly AxeViolation[] | undefined, verdict: RuleLayerVerdict) => {
     for (const rule of rules ?? []) {
       for (const criterion of criteriaFromTags(Array.isArray(rule.tags) ? rule.tags.map(str) : [])) {
-        if (!RANK[out[criterion]] || RANK[verdict] > RANK[out[criterion]]) out[criterion] = verdict;
+        recordRule(out, criterion, verdict, str(rule.id));
       }
     }
   };
@@ -81,6 +85,20 @@ export function coverageFrom(buckets: {
 }
 
 const RANK: Record<string, number> = { clean: 1, needsReview: 2, violated: 3 };
+
+type MutableCoverage = Record<string, { verdict: RuleLayerVerdict; rules: string[] }>;
+
+/**
+ * #1606: a stronger verdict replaces a criterion's entry and starts its rule list afresh, and a violating rule adds its id
+ * once. Only VIOLATING rules are named: the ids exist so a reason can say which rule axe reported, and a passing or
+ * review-needed rule reported no failure.
+ */
+function recordRule(out: MutableCoverage, criterion: string, verdict: RuleLayerVerdict, id: string): void {
+  const current = out[criterion];
+  if (!current || RANK[verdict] > RANK[current.verdict]) out[criterion] = { verdict, rules: [] };
+  const entry = out[criterion];
+  if (verdict === "violated" && entry.verdict === "violated" && id && !entry.rules.includes(id)) entry.rules.push(id);
+}
 
 /** axe tags include "wcag143" for SC 1.4.3; extract criterion numbers. */
 function criteriaFromTags(tags: string[]): string[] {
