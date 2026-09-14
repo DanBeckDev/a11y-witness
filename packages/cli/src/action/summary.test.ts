@@ -6,9 +6,12 @@
  * passes when it should fail, is worse than no Action at all.
  */
 import { strict as assert } from "node:assert";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { renderSummary, shouldFail, type RunFinding, type RunResult } from "./summary.js";
+import { conformanceScope } from "@a11ign/evidence/conformance";
+import { documentIdentity } from "@a11ign/evidence/document-identity";
+import { logLines, renderSummary, shouldFail, type RunFinding, type RunResult } from "./summary.js";
 
 const finding = (severity: RunFinding["severity"], issue = "issue"): RunFinding => ({
   issue, wcag: "4.1.2 Name, Role, Value", severity, evidence: "button", confidence: 0.9,
@@ -245,6 +248,62 @@ test("AN OLDER RESULT WITH NO OUTCOMES SAYS NOTHING, rather than a tally of zero
     verdict: { taskCompletable: true, summary: "", findings: [], confidence: 1 },
   } as never);
   assert.doesNotMatch(md, /Not determined/);
+});
+
+/**
+ * #1387: A CAPTURE THAT SPANS MORE THAN ONE DOCUMENT SAYS SO ON THE REPORT, not only in the JSON.
+ *
+ * Rehearsals 3 and 5 ran the documented page and task. The probe submitted W3C's search form and followed a
+ * link, and the result's conformance Requirement 2 said "THIS CAPTURE NAMED MORE THAN ONE DOCUMENT" -- which
+ * the job summary never showed, so the outside user found it only by opening the artifact.
+ *
+ * The sentence is taken from `@a11ign/evidence`'s real `conformanceScope`, never retyped: if its wording
+ * changes, the positive control below goes red here rather than the summary quietly going silent.
+ */
+const SENTENCE = /THIS CAPTURE NAMED MORE THAN ONE DOCUMENT.*?more than one page\./;
+
+/** Conformance as the producer writes it, for a capture whose title marks read `titles` in order. */
+function conformanceFor(titles: string[]): NonNullable<RunResult["conformance"]> {
+  const diagnostics = titles.map((title) => ({ event: "titleSource", title, source: "document" }));
+  return conformanceScope({
+    assessedCriteria: [], screenReader: "NVDA", ruleLayerRan: true,
+    documentIdentity: documentIdentity({ diagnostics } as never),
+  });
+}
+
+const producerSentence = (conformance: NonNullable<RunResult["conformance"]>) =>
+  conformance.map((requirement) => requirement.limitation.match(SENTENCE)?.[0]).find(Boolean);
+
+test("#1387: a capture that named two documents LEADS the summary with the producer's own sentence", () => {
+  const conformance = conformanceFor(["Search | WAI", "How to Change Text Size | WAI"]);
+  const sentence = producerSentence(conformance);
+  assert.ok(sentence, "the positive control: the producer writes the sentence for two titles");
+  const out = renderSummary(result({ conformance }));
+  assert.ok(out.includes(sentence), `the summary must carry the sentence: ${out}`);
+  assert.ok(out.indexOf(sentence) < out.indexOf("## a11ign"), "near the top: before the summary's own heading");
+});
+
+test("#1387: one stable document renders no such lead -- the control for the absence", () => {
+  const conformance = conformanceFor(["Search | WAI", "Search | WAI"]);
+  assert.equal(producerSentence(conformance), undefined, "one title is one document, so the producer is silent");
+  assert.doesNotMatch(renderSummary(result({ conformance })), /more than one document/i);
+  assert.doesNotMatch(renderSummary(result()), /more than one document/i, "and a result with no conformance says nothing");
+});
+
+/**
+ * #1387 ACCEPTANCE: rehearsal 3's real `a11ign-result.json` (run 34774183433, committed verbatim under `fixtures/`),
+ * which named "Search Web Accessibility Initiative (WAI) W 3C" then "How to Change Text Size or Colors …".
+ */
+test("#1387: rehearsal 3's real result leads its summary AND its log with the two documents", () => {
+  const file = new URL("../fixtures/rehearsal3-34774183433-a11ign-result.json", import.meta.url);
+  const rehearsal3 = JSON.parse(readFileSync(file, "utf8")) as RunResult;
+  const out = renderSummary(rehearsal3);
+  const heading = out.indexOf("## a11ign");
+  for (const title of ["Search Web Accessibility Initiative (WAI) W 3C", "How to Change Text Size or Colors"]) {
+    assert.ok(out.indexOf(title) !== -1 && out.indexOf(title) < heading, `${title} must be named above the heading`);
+  }
+  const [first] = logLines(rehearsal3, "never");
+  assert.match(first, /more than one document/i, "the log is what a reader sees without opening the summary");
 });
 
 test("a run where everything WAS determined adds no noise", () => {
