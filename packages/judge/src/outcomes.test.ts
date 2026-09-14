@@ -368,3 +368,83 @@ test("#1255: focusEvents missing entirely is cantTell too -- absent and unconfir
   assert.equal(find(criterionOutcomes({ capture: focusCapture(undefined), findings: [] }), "2.4.7").outcome,
     "cantTell");
 });
+
+// --- #1378: 1.4.13, 3.2.1 and 3.2.2 read their PROBE'S OWN VERDICT -- three states, never a pass ---
+//
+// Every shape is a producer's own return, not one assembled to suit an assertion: `probeFocusContext`,
+// `probeTypedFeedback` and `probeFocusReveal` in `capture-probes.mjs`, and `focusRevealVerdict` in `capture-pure.mjs`.
+// Before this, all of them -- absent included -- read `inapplicable`, "The page exposed nothing of the kind".
+const probeCapture = (key: string, value: unknown) =>
+  ({ ...RICH, interaction: { ...RICH.interaction, ...(value === undefined ? {} : { [key]: value }) } }) as unknown as
+    Parameters<typeof criterionOutcomes>[0]["capture"];
+
+const NOT_COLLECTED = /not collected/;
+const NOTHING_OF_THE_KIND = /exposed nothing of the kind/;
+const ONE_EXAMINED = /examined, not the page/;
+type ProbeState = { criterion: string; key: string; name: string; value: unknown; outcome: string; reason: RegExp };
+
+const PROBE_STATES: ProbeState[] = [
+  { criterion: "3.2.1", key: "focusContext", name: "absent: the probe never ran", value: undefined,
+    outcome: "cantTell", reason: NOT_COLLECTED },
+  { criterion: "3.2.1", key: "focusContext", name: "nothing focusable",
+    value: { focused: false, control: "", titleBefore: null, titleAfter: null }, outcome: "inapplicable", reason: NOTHING_OF_THE_KIND },
+  { criterion: "3.2.1", key: "focusContext", name: "one control focused, no change",
+    value: { focused: true, control: "Email address, edit", titleBefore: "Sign up", titleAfter: "Sign up" },
+    outcome: "cantTell", reason: ONE_EXAMINED },
+  { criterion: "3.2.2", key: "typedFeedback", name: "absent: the probe never ran", value: undefined,
+    outcome: "cantTell", reason: NOT_COLLECTED },
+  { criterion: "3.2.2", key: "typedFeedback", name: "no edit field on this page",
+    value: { typed: false, focusBefore: "", echoed: "", announced: "", titleBefore: null, titleAfter: null },
+    outcome: "inapplicable", reason: NOTHING_OF_THE_KIND },
+  { criterion: "3.2.2", key: "typedFeedback", name: "focus not in an editable control: could not tell",
+    value: { typed: false, focusBefore: "Sign up, button", echoed: "", announced: "", titleBefore: null, titleAfter: null },
+    outcome: "cantTell", reason: NOT_COLLECTED },
+  { criterion: "3.2.2", key: "typedFeedback", name: "one field typed into, no change",
+    value: { typed: true, focusBefore: "Email address, edit", echoed: "a", announced: "", titleBefore: "Sign up", titleAfter: "Sign up" },
+    outcome: "cantTell", reason: ONE_EXAMINED },
+  { criterion: "1.4.13", key: "focusReveal", name: "absent: the probe never ran", value: undefined,
+    outcome: "cantTell", reason: NOT_COLLECTED },
+  { criterion: "1.4.13", key: "focusReveal", name: "nothing focusable",
+    value: { asked: true, revealed: null, why: "nothing focusable on this page" }, outcome: "inapplicable", reason: NOTHING_OF_THE_KIND },
+  { criterion: "1.4.13", key: "focusReveal", name: "census unavailable: could not tell",
+    value: { asked: true, why: "census unavailable", revealed: null }, outcome: "cantTell", reason: NOT_COLLECTED },
+  { criterion: "1.4.13", key: "focusReveal", name: "baseline not untouched: could not tell (rehearsal 2's own verdict)",
+    value: { asked: true, revealed: null, why: "a control held focus from an earlier probe, so the baseline was not the "
+      + "untouched document -- content already revealed before this probe began cannot appear in its delta" },
+    outcome: "cantTell", reason: NOT_COLLECTED },
+  { criterion: "1.4.13", key: "focusReveal", name: "walked, nothing appeared (rehearsal 3's own verdict)",
+    value: { asked: true, revealed: false, timeSeparated: true, why: "nothing appeared on focus" },
+    outcome: "cantTell", reason: ONE_EXAMINED },
+  { criterion: "1.4.13", key: "focusReveal", name: "revealed and dismissed",
+    value: { asked: true, revealed: true, revealedBy: ["Help"], revealedNames: ["Help"], timeSeparated: true, focusHeld: true,
+      dismissed: true, vanished: false },
+    outcome: "cantTell", reason: ONE_EXAMINED },
+];
+
+test("#1378: each probe criterion reads NOT COLLECTED, NOTHING TO PROBE or ONE EXAMINED from its probe's own verdict", () => {
+  for (const state of PROBE_STATES) {
+    const outcome = find(criterionOutcomes({ capture: probeCapture(state.key, state.value), findings: [] }), state.criterion);
+    assert.equal(outcome.outcome, state.outcome, `${state.criterion}, ${state.name}: ${outcome.reason}`);
+    assert.match(outcome.reason, state.reason, `${state.criterion}, ${state.name}`);
+  }
+});
+
+test("#1378: no probe state makes 1.4.13, 3.2.1 or 3.2.2 PASSED -- one control never shows the page conforms", () => {
+  const outcomes = PROBE_STATES.map((state) =>
+    find(criterionOutcomes({ capture: probeCapture(state.key, state.value), findings: [] }), state.criterion).outcome);
+  assert.ok(outcomes.includes("inapplicable") && outcomes.includes("cantTell"), "the positive control: the states really differ");
+  assert.equal(outcomes.includes("passed"), false);
+});
+
+test("#1378 CONTROL: 2.1.2, 2.4.7 and 1.4.2 are untouched -- still NOT COLLECTED on a capture without their probes", () => {
+  // Three separate facts, each read by its own branch in `channelApplicabilityOf` (focusOrder, focusEvents, media) -- asserted
+  // one by one rather than looped over a typed list, which `criterion-list-duplication.test.ts` would rightly ask about.
+  const outcomes = criterionOutcomes({ capture: probeCapture("focusContext", undefined), findings: [] });
+  const notCollected = (criterion: string) => {
+    assert.equal(find(outcomes, criterion).outcome, "cantTell", criterion);
+    assert.match(find(outcomes, criterion).reason, NOT_COLLECTED, criterion);
+  };
+  notCollected("2.1.2");
+  notCollected("2.4.7");
+  notCollected("1.4.2");
+});
