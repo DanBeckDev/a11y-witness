@@ -148,9 +148,11 @@ for (const run of RUNS) {
     const result = resultOf(run);
     // TODAY'S LINE, from the artifact as it was published: the control for the wording below. Since #1563 it is the
     // LAST line, after the count of criteria resting on an examination known to be partial -- eight on this run.
+    // #1366 MOVED IT from "(1 serious)" to "(1 referred)": the one finding is mapped `secondary` and its criterion's
+    // outcome is `cantTell`, so the log counts it as a referral rather than as a failure of its severity.
     assert.deepEqual(logLines(result, "never"), [
       "a11ign: 8 criteria rest on an examination known to be partial -- see the artifact",
-      "a11ign: 1 finding(s) (1 serious); fail-on=never",
+      "a11ign: 1 finding(s) (1 referred); fail-on=never",
     ]);
 
     // The findings come from the CUT capture, not from a filter on the word "YouTube": a post-excursion finding
