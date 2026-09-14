@@ -11,7 +11,10 @@ import test from "node:test";
 
 import { conformanceScope } from "@a11ign/evidence/conformance";
 import { documentIdentity } from "@a11ign/evidence/document-identity";
-import { logLines, renderSummary, shouldFail, type RunFinding, type RunResult } from "./summary.js";
+import { criterionOutcomes } from "@a11ign/judge/outcomes";
+import {
+  logLines, partialExaminationCount, renderSummary, shouldFail, type RunFinding, type RunResult,
+} from "./summary.js";
 
 const finding = (severity: RunFinding["severity"], issue = "issue"): RunFinding => ({
   issue, wcag: "4.1.2 Name, Role, Value", severity, evidence: "button", confidence: 0.9,
@@ -304,6 +307,63 @@ test("#1387: rehearsal 3's real result leads its summary AND its log with the tw
   }
   const [first] = logLines(rehearsal3, "never");
   assert.match(first, /more than one document/i, "the log is what a reader sees without opening the summary");
+});
+
+/**
+ * #1563: AN EXAMINATION KNOWN TO BE PARTIAL IS COUNTED IN THE LOG AND THE SUMMARY, not only in the JSON.
+ *
+ * Rehearsal 2's real result carries eight `cantTell` reasons saying the examination was partial, and its log read
+ * `a11ign: 1 finding(s) (1 serious)` with no word of them. The sentences come from `@a11ign/judge`'s real
+ * `criterionOutcomes`, never retyped: if the producer's wording changes, the positive control goes red here rather
+ * than the count going quietly to zero.
+ */
+const outcomesFrom = (over: Partial<Parameters<typeof criterionOutcomes>[0]>) =>
+  criterionOutcomes({ capture: {} as never, findings: [], ...over });
+
+test("#1563: both of the producer's partial-examination sentences are counted", () => {
+  // A link sweep that ended having reached less than the census, and a formField sweep that stopped before the page.
+  const outcomes = outcomesFrom({ completeness: { link: "elsewhere" }, truncatedSweeps: [{ type: "formField" }] });
+  const held = outcomes.find((o) => o.criterion === "2.4.4")!;
+  const stopped = outcomes.find((o) => o.criterion === "3.3.2")!;
+  assert.equal(held.outcome, "cantTell", held.reason);
+  assert.equal(stopped.outcome, "cantTell", stopped.reason);
+  assert.notEqual(held.reason, stopped.reason, "the two producer sentences, not one of them twice");
+  assert.equal(partialExaminationCount([held]), 1, `the held sweep's sentence: ${held.reason}`);
+  assert.equal(partialExaminationCount([stopped]), 1, `the stopped sweep's sentence: ${stopped.reason}`);
+});
+
+test("#1563: the producer's OTHER undetermined reasons are not counted -- the control for the absence", () => {
+  const outcomes = outcomesFrom({
+    ruleLayer: { "1.4.3": "clean" }, abstained: false,
+    notExamined: { control: "YouTube Home, link", channels: ["link"] },
+  });
+  const undetermined = outcomes.filter((o) => o.outcome === "cantTell");
+  assert.ok(undetermined.length >= 2, "the population is not empty: the rule layer's and the left-site reasons");
+  assert.equal(partialExaminationCount(outcomes), 0, undetermined.map((o) => o.reason).join("\n"));
+  const result = withOutcomes(outcomes);
+  assert.equal(logLines(result, "never").length, 1, "no partial line in the log");
+  assert.doesNotMatch(renderSummary(result), /known to be partial/);
+  assert.equal(partialExaminationCount(undefined), 0, "and a result with no outcomes counts nothing");
+});
+
+/**
+ * #1563 ACCEPTANCE: rehearsal 2's real `a11ign-result.json` (run 34767932873, committed verbatim under `fixtures/`):
+ * 55 outcomes, 19 referred, 8 of them resting on an examination known to be partial.
+ */
+/** Every WCAG 2.2 A/AA success criterion gets an outcome, so a whole result carries this many. */
+const WCAG_22_AA_CRITERIA = 55;
+
+test("#1563: rehearsal 2's real result counts its eight partial criteria in the log AND the summary", () => {
+  const file = new URL("../fixtures/rehearsal2-34767932873-a11ign-result.json", import.meta.url);
+  const rehearsal2 = JSON.parse(readFileSync(file, "utf8")) as RunResult;
+  assert.equal(rehearsal2.outcomes?.length, WCAG_22_AA_CRITERIA, "the fixture as committed");
+  assert.deepEqual(logLines(rehearsal2, "never"), [
+    "a11ign: 8 criteria rest on an examination known to be partial -- see the artifact",
+    "a11ign: 1 finding(s) (1 serious); fail-on=never",
+  ]);
+  const md = renderSummary(rehearsal2);
+  assert.match(md, /\*\*Not determined:\*\* 19 criteria we cover were referred/);
+  assert.match(md, /\*\*8 of the referred criteria rest on an examination known to be partial:\*\*/);
 });
 
 test("a run where everything WAS determined adds no noise", () => {
