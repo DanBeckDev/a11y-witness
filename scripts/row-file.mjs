@@ -91,7 +91,7 @@
 // one `gh issue create` actually reads, which is `refuseUnknownFlags`'s whole job everywhere else in this
 // tree, applied to a wrapped external tool instead of to this file's own flags.
 import { execFileSync } from "node:child_process";
-import { fleetOrLabAcceptance } from "./acceptance-commands.mjs";
+import { extractAcceptanceSection, fleetOrLabAcceptance } from "./acceptance-commands.mjs";
 import { readFileSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
@@ -372,6 +372,38 @@ export function openCheckTranscriptRefusal(body) {
 }
 
 /**
+ * #1488: THE ACCEPTANCE MUST READ AS ONE SECTION, TO THE PARSER CI'S ACCEPTANCE JOB USES.
+ *
+ * `missingTemplateFields` asks whether a `## Acceptance` heading exists; it never asks what the heading
+ * holds. product-manager's fixed floor checker found 22 open rows carrying `## Acceptance` followed by an
+ * `Acceptance: none — …` line, which `extractAcceptanceSection` reads as TWO headers -- `duplicate`, the
+ * outcome #540 made fail the job -- and `row-file` had filed every one. Reproduced at `bb8a5168` on #1466's
+ * real body: `duplicate`, and `fileRefusalReason` returned `null`.
+ *
+ * THE PARSER IS CALLED, NEVER COPIED: which lines count as a header is `acceptance-commands.mjs`'s rule,
+ * already fixed five times for forms authors keep writing, and a second copy here would drift from the one
+ * CI runs. So this refuses exactly what that parser cannot read -- `duplicate` and `missing` -- and names
+ * the one-header forms that pass, so following the refusal files.
+ *
+ * @param {string} body @returns {string | null}
+ */
+export function acceptanceShapeRefusal(body) {
+  const section = extractAcceptanceSection(body);
+  if (section.kind === "duplicate") {
+    const where = section.occurrences.map((o) => `line ${o.line}: \`${o.text}\``).join("; ");
+    return `REFUSING to file -- the Acceptance section has ${section.occurrences.length} headers, which CI's `
+      + `acceptance parser reads as DUPLICATE and fails on: ${where}. Keep exactly one: \`## Acceptance: none — `
+      + "<reason>` on the heading line itself, or a `## Acceptance` heading followed by a fenced command block.";
+  }
+  if (section.kind === "missing") {
+    return "REFUSING to file -- the Acceptance section is present, but CI's acceptance parser finds nothing in it "
+      + "(MISSING): no command under the heading, or `none` with no reason. Put a command under `## Acceptance` "
+      + "in a fenced block, or write `## Acceptance: none — <reason>` with the reason stated.";
+  }
+  return null;
+}
+
+/**
  * THE VERDICT, PURE -- `null` means proceed. Reuses #707's `missingTemplateFields` outright rather than
  * re-deriving it; see this file's header for why that matters here specifically.
  * @param {string | null} body
@@ -405,6 +437,9 @@ export function fileRefusalReason(body) {
   // row whose Acceptance names the whole suite has the section and cannot be run from it, and the two
   // refusals must not be collapsed -- the fix for each is different, which is the same argument
   // `missingTemplateFields` makes for naming each missing field rather than counting them.
+  // #1488: and the section must PARSE as one -- see `acceptanceShapeRefusal`.
+  const acceptance = acceptanceShapeRefusal(body);
+  if (acceptance) return `row-file: ${acceptance}`;
   return wholeSuiteAcceptanceReason(body, "row-file");
 }
 
