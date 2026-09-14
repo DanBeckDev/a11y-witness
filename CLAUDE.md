@@ -38,8 +38,9 @@ assistive-technology experience: the WCAG failures that rule scanners structural
 
 **A finding is either ASSERTED or REFERRED, and knowing which is decided by which layer owns the subtype.**
 This paragraph used to say the trained scorer "assesses the judgment-based WCAG failures" — it does not
-assess them in the sense of concluding anything. Measured on the product path, 18 conformant real pages:
-**0 criteria asserted wrongly, 4 referred.**
+assess them in the sense of concluding anything. The product-path real-page figure is under re-measurement since
+2026-09-14 (#1579): the last one published, 2026-08-24 on 18 conformant real pages, read
+**0 criteria asserted wrongly, 4 referred.** README's claim block carries the current statement.
 
 | | |
 |---|---|
