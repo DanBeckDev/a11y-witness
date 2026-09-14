@@ -122,3 +122,24 @@ A conformant page whose disclosure legitimately announces the same state after a
 already open, or one whose activation is not Enter. The rule would assert wrongly there, and the narrow
 state set is what bounds that risk. `npm run rules:gate` scores it against every conformant record on every
 run; a single false positive there is the signal to narrow it further or hand it back.
+
+## Addendum, 2026-09-14: axe-core precedence against the screen-reader layer (#1342)
+
+`ceo`'s ruling on #1342, recorded here as this decision's record of it. The table, verbatim from the row:
+
+- violated+cantTell → `failed` (axe-core);
+- violated+passed → `cantTell` (disagreement);
+- violated+inapplicable → `cantTell` (disagreement; "inapplicable" is an observation, so it sits with passed, not with silence);
+- violated+failed → `failed` (screen-reader layer);
+- no violation → unchanged;
+- a rule-layer pass outranks nothing.
+
+**Why it belongs to this ADR.** This decision's "layers" are the trained scorer and the deterministic rules, per subtype, and
+it said nothing about axe-core. Commit `0535d146` (2026-09-02) nonetheless cited it for "the screen-reader layer decides the
+criteria it covers, whatever axe said". The ruling keeps that intent where the screen reader observed something, and
+reverses it where the screen-reader layer could not decide: what the screen reader met is the evidence, and a DOM rule may
+override silence, not a contrary lived reading.
+
+Implemented in `packages/judge/src/outcomes.ts` (`besideTheRuleLayer`). Each row is pinned in `outcomes.test.ts`, and the
+inapplicable row also in `packages/cli/src/scan/rule-layer-coverage.test.ts`. The reasons name the criterion, not the axe rule,
+until the coverage map carries rule ids (#1606).
