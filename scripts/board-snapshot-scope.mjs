@@ -139,6 +139,20 @@ export function primaryLaunchDecision(command, { cwd = process.cwd(), fs = LIVE_
 }
 
 /**
+ * #1352: THE GATE EACH POLICY SCRIPT'S ENTRY POINT CALLS -- one call, so an entry point pays one branch for it (row-claim's
+ * `main` sits at the complexity limit). Writes the override notice or the refusal, and says whether to stop.
+ * @param {string} command
+ * @param {{ write?: (text: string) => void, cwd?: string, fs?: GitFs, env?: Record<string, string | undefined> }} [deps]
+ * @returns {boolean} true when the launch was refused and the caller must exit
+ */
+export function launchGate(command, { write = (text) => { process.stderr.write(text); }, ...deps } = {}) {
+  const { refusal, notice } = primaryLaunchDecision(command, deps);
+  if (notice) write(`${notice}\n`);
+  if (refusal) write(`${refusal}\n`);
+  return refusal !== null;
+}
+
+/**
  * The refusal itself, before any override is considered.
  * @param {string} command @param {{ cwd: string, fs: GitFs }} deps
  * @returns {string | null}
