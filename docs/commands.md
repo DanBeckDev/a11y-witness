@@ -41,6 +41,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/install-git-hooks.mjs` — point git at this repo's tracked hooks; run automatically by npm install via prepare
 - `node scripts/isolation-gate.mjs` — prove a published package installs and works standalone, by actually installing and running it
 - `node scripts/known-gaps-index.mjs` — regenerate docs/known-gaps.md's own index of open sections from its headings
+- `node scripts/manifest-repository-check.mjs` — refuse a publish whose manifests name a different repository than the run publishing them
 - `node scripts/mark-primary-checkout.mjs` — mark or query whether this checkout is the fleet-driving primary, which the hooks read
 - `node scripts/merge-guard.mjs` — ask whether a PR's checks actually ran and passed, never trusting mergeStateStatus alone
 - `node scripts/merge-queue.mjs` — refuse any route onto main other than the open-PR merge queue
