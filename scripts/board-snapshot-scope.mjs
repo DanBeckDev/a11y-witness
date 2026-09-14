@@ -12,14 +12,120 @@
 // board mutation in `scripts/` is one item's Status (`row-claim.mjs`'s `moveProjectStatus`); #399's accident was a
 // FIELD rewrite that no script sends. A full sweep before each one-item edit cost 6 GraphQL pages at 555 items plus
 // the ready-issue list, and the account's GraphQL budget ran out twice on 2026-09-13.
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { REPO } from "./repo-identity.mjs";
 // #1425: the classifier the close path already uses. That module imports nothing, so this file stays free of `gh`.
 import { refusalCause, PROJECT_UNREADABLE } from "./settle-closed-status.mjs";
 
 export const PROJECT_OWNER = REPO.split("/")[0];
 export const PROJECT_NUMBER = 2;
-export const SNAPSHOT_DIR = "runs/board-snapshots";
+/**
+ * #1352: the filesystem reads `commonGitDirOf` and `primaryLaunchRefusal` make, injectable so a test drives them with
+ * the shapes git writes. No spawn: git's worktree files are plain text, and reading them keeps this module free of
+ * every command, not only `gh`.
+ * @typedef {{ exists: (path: string) => boolean, isDirectory: (path: string) => boolean, read: (path: string) => string }} GitFs
+ */
+/** @type {GitFs} */
+const LIVE_FS = {
+  exists: existsSync,
+  isDirectory: (path) => lstatSync(path).isDirectory(),
+  read: (path) => readFileSync(path, "utf8"),
+};
+
+/**
+ * #1352: THE REPOSITORY'S COMMON GIT DIRECTORY, as seen from the checkout at `root` -- the same answer from every
+ * worktree of one repository. A `.git` DIRECTORY is the common dir itself: the primary checkout, or a plain clone.
+ * A `.git` FILE is a linked worktree's `gitdir: <path>` line; that gitdir's `commondir` file names the common dir
+ * relative to it (`../..` for `git worktree add`). Measured on this host: wt-1352's `.git` names
+ * `…/a11y-witness/.git/worktrees/wt-1352`, whose `commondir` is `../..` -- `/home/agent/repos/a11y-witness/.git`,
+ * exactly what `git rev-parse --git-common-dir` answers from both trees. `null` when `root` holds no `.git` at all.
+ * @param {string} root @param {GitFs} [fs]
+ * @returns {string | null}
+ */
+export function commonGitDirOf(root, fs = LIVE_FS) {
+  const dotGit = join(root, ".git");
+  if (!fs.exists(dotGit)) return null;
+  if (fs.isDirectory(dotGit)) return dotGit;
+  const match = /^gitdir:\s*(.+)$/m.exec(fs.read(dotGit));
+  if (!match) return null;
+  const gitDir = resolve(root, match[1].trim());
+  const commondir = join(gitDir, "commondir");
+  return fs.exists(commondir) ? resolve(gitDir, fs.read(commondir).trim()) : gitDir;
+}
+
+/**
+ * #1352: WHERE BOARD SNAPSHOTS LIVE -- the common dir's checkout, plus `runs/board-snapshots`. So a policy script run
+ * from ANY worktree writes into ONE directory, the primary checkout's (gitignored, and the lifetime of the repository
+ * rather than of whichever worktree ran the script). It was the cwd-relative literal `runs/board-snapshots`: 77 files
+ * in the primary, 52 in wt-pm-rows, 4 in wt-1315, 2 in wt-orch-rows and one each in wt-tooling-rows and wt-1482 at
+ * 00:41Z on 2026-09-14, and a removed worktree took its snapshots with it (#1373). A plain clone -- CI, the lab --
+ * resolves to its own root, which is where it wrote before. With no `.git` found, the checkout root itself.
+ * @param {string} root @param {GitFs} [fs]
+ * @returns {string}
+ */
+export function snapshotDirFor(root, fs = LIVE_FS) {
+  const common = commonGitDirOf(root, fs);
+  return join(common === null ? root : dirname(common), "runs", "board-snapshots");
+}
+
+/** Resolved once, from THIS script's own checkout -- never from the directory a caller happened to launch in. */
+export const SNAPSHOT_DIR = snapshotDirFor(fileURLToPath(new URL("../", import.meta.url)));
+
+/** #1352: the local git config key `npm run primary:mark` sets on the fleet-driving checkout. */
+export const PRIMARY_MARK_KEY = "a11y.primaryCheckout";
+
+/**
+ * The nearest directory at or above `cwd` holding a `.git`, or null outside any checkout.
+ * @param {string} cwd @param {GitFs} [fs]
+ * @returns {string | null}
+ */
+export function launchCheckoutOf(cwd, fs = LIVE_FS) {
+  for (let dir = resolve(cwd); ; dir = dirname(dir)) {
+    if (fs.exists(join(dir, ".git"))) return dir;
+    if (dirname(dir) === dir) return null;
+  }
+}
+
+/**
+ * Pure: whether git config text sets `a11y.primaryCheckout` true -- section and key case-insensitive, as git reads them.
+ * @param {string} configText
+ * @returns {boolean}
+ */
+function primaryMarkSet(configText) {
+  let inA11y = false;
+  for (const line of configText.split("\n")) {
+    const section = /^\s*\[\s*([^\]\s]+)\s*\]\s*$/.exec(line);
+    if (section) { inA11y = section[1].toLowerCase() === "a11y"; continue; }
+    if (inA11y && /^\s*primarycheckout\s*=\s*true\s*$/i.test(line)) return true;
+  }
+  return false;
+}
+
+/**
+ * #1352: A POLICY SCRIPT REFUSES WHEN LAUNCHED OUTSIDE A LINKED WORKTREE -- ceo's ruling, detection (i). The launch
+ * directory's checkout has a `.git` DIRECTORY: the primary checkout, or a plain clone. Both are shared or not a
+ * session's own, and the 2026-09-11 rule says policy scripts run from a worktree; three sessions had been told it and
+ * the primary still held 77 snapshots. When the checkout also carries the `a11y.primaryCheckout` mark, the refusal
+ * says so as a second reason, so the mark's ABSENCE (this host's primary is unmarked) never weakens it.
+ * @param {string} command the entry point's name, for the message
+ * @param {{ cwd?: string, fs?: GitFs }} [deps]
+ * @returns {string | null} the refusal, or null to go ahead
+ */
+export function primaryLaunchRefusal(command, { cwd = process.cwd(), fs = LIVE_FS } = {}) {
+  const top = launchCheckoutOf(cwd, fs);
+  if (top === null) return null;
+  const dotGit = join(top, ".git");
+  if (!fs.isDirectory(dotGit)) return null;
+  const config = join(dotGit, "config");
+  const marked = fs.exists(config) && primaryMarkSet(fs.read(config));
+  return `${command}: REFUSED -- launched from ${top}, which is not a linked worktree: its .git is a directory`
+    + (marked ? `, and it carries ${PRIMARY_MARK_KEY}=true, the fleet-driving primary checkout` : "")
+    + ". Policy scripts run from your own worktree, never the primary checkout or a plain clone (the 2026-09-11 "
+    + "rule, #1352): what they write -- a board snapshot, an Acceptance run -- would land in a tree other sessions "
+    + "share. Nothing was read or written. Run it from a worktree (`git worktree list` names them).";
+}
 
 /**
  * One `gh` invocation without `gh` itself: its arguments in, its stdout out. `board-snapshot.mjs` supplies a request
