@@ -216,6 +216,24 @@ const errorEvidencePermits = (c: CaptureEvidence): boolean =>
 const statusShownButNotAnnounced = (c: CaptureEvidence): boolean => shownButNotAnnounced(c, STATUS_TEXT);
 
 /**
+ * #1519: A PROBED SUBMIT THAT STAYED, WHOSE POST-SUBMIT TEXT HOLDS NOTHING THE ERROR VOCABULARY KNOWS.
+ *
+ * The veto above then closes 3.3.1's channel, and the outcomes read that as "the page exposed nothing of the kind". It
+ * had: rehearsal 5 submitted w3.org's empty search, the page stayed, and the browser's own "Please fill out this field."
+ * sat in the tree unheard. WCAG's Understanding 3.3.1 leaves whether native browser validation is accessibility
+ * supported to human judgement, and picking the browser's sentence out of the names would need a locale-bound list of
+ * browser strings, so this shape is UNDETERMINED, never detected. Text the vocabulary does recognise, heard or not, is
+ * left exactly as before. Counts only: which post-submit name is the error is not decidable here.
+ */
+export function unrecognisedSubmitRejection(c: CaptureEvidence): { names: number; unheard: number } | null {
+  const names = c.interaction?.postSubmitNames ?? [];
+  if (names.length === 0 || !submitWasProbed(c) || !submitDidNotNavigate(c)) return null;
+  if (names.some((name) => ERROR_TEXT.test(name))) return null;
+  const heard = spokenText(c);
+  return { names: names.length, unheard: names.filter((name) => !heard.includes(name.toLowerCase())).length };
+}
+
+/**
  * Which channel of the capture each criterion is ABOUT.
  *
  * Deliberately about the CHANNEL, not the verdict: it asks "is there anything of the right kind here to
