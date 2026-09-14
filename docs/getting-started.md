@@ -214,7 +214,7 @@ That is a working install. `--json` gives you the full transcript alongside the 
 | `nvda.start failed: NVDA is not supported` | You ran the capture in **session 0** — `utmctl exec` and SSH both land there and cannot drive NVDA. Use a scheduled task with `LogonType Interactive` |
 | VM state `unknown`, worker unreachable, but the bundle is there | **UTM is not running.** `utmctl` is a client for the app, not a daemon; `worker-ctl.sh` launches it for you. `pgrep -x UTM` to confirm |
 | It worked a minute ago and now nothing responds | Something else is driving the worker. There is **one** VM and **one** NVDA here, so another shell, agent, or a `capture-check` run restarts it out from under you. `worker-ctl.sh status` before assuming breakage |
-| Findings that look wrong | Check the `evidence` line against the transcript in `--json`. If the evidence is not in the transcript, that is a bug here — please report it |
+| Findings that look wrong | Check the `evidence` line against `--json`. A finding read from the announcements quotes a line in `transcript`. A finding about activating a control or pressing Tab reads that probe's record in `interaction` instead, for example `interaction.routeChange` when a link changed the page but not its title. Some findings count or compare what they read, and some read `structure`. If the evidence is not borne out by `transcript`, `interaction` or `structure`, that is a bug here — please report it |
 
 On a Windows worker, `packages/worker-fleet/src/provisioning/diagnose-nvda-worker.ps1` checks six layers and prints
 PASS/FAIL with the fix for each. The error-string-to-real-cause table is in
