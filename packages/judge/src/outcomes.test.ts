@@ -448,3 +448,66 @@ test("#1378 CONTROL: 2.1.2, 2.4.7 and 1.4.2 are untouched -- still NOT COLLECTED
   notCollected("2.4.7");
   notCollected("1.4.2");
 });
+
+/**
+ * #1342: a criterion BOTH layers cover, one test per row of `ceo`'s table (ADR 0021's 2026-09-14 addendum).
+ *
+ * Every row drives 2.4.4 twice, without and with axe's violation, and asserts the screen-reader outcome first: a row whose
+ * premise did not hold would be testing a shape it never built.
+ */
+const AXE_VIOLATED = { "2.4.4": "violated" } as const;
+const NO_LINKS = { ...RICH, transcript: ["heading, level 1, Newsletter"], structure: { ...RICH.structure, links: [] } };
+const besideAxe = (input: Parameters<typeof criterionOutcomes>[0]) => ({
+  screenReader: find(criterionOutcomes(input), "2.4.4"),
+  withAxe: find(criterionOutcomes({ ...input, ruleLayer: AXE_VIOLATED }), "2.4.4"),
+});
+
+test("#1342 violated + cantTell: FAILED, asserted by axe-core, and the reason keeps both facts", () => {
+  // The rehearsal's own shape: axe's link-name violation beside a link sweep that stopped early.
+  const { screenReader, withAxe } = besideAxe({ capture: RICH, findings: [], truncatedSweeps: [{ type: "link" }] });
+  assert.equal(screenReader.outcome, "cantTell", "the row's premise: the screen-reader layer could not decide 2.4.4");
+  assert.equal(withAxe.outcome, "failed");
+  assert.equal(withAxe.assessor, "axe-core");
+  assert.match(withAxe.reason,
+    /^axe-core reported a violation of 2\.4\.4; the screen-reader layer could not decide it because the link sweep stopped before the page did/);
+});
+
+test("#1342 violated + passed: the two layers DISAGREE, so it is cantTell and no assessor asserts", () => {
+  const { screenReader, withAxe } = besideAxe({ capture: RICH, findings: [] });
+  assert.equal(screenReader.outcome, "passed", "the row's premise: the screen-reader layer examined 2.4.4 in full");
+  assert.equal(withAxe.outcome, "cantTell");
+  assert.equal(withAxe.assessor, undefined);
+  assert.match(withAxe.reason,
+    /^axe-core reported a violation of 2\.4\.4; the screen-reader layer examined it in full and found no failure — the two layers disagree\.$/);
+});
+
+test("#1342 violated + inapplicable: meeting nothing is an observation too, so it is a cantTell disagreement", () => {
+  const { screenReader, withAxe } = besideAxe({ capture: NO_LINKS, findings: [] });
+  assert.equal(screenReader.outcome, "inapplicable", "the row's premise: the screen-reader layer met no links");
+  assert.equal(withAxe.outcome, "cantTell");
+  assert.equal(withAxe.assessor, undefined);
+  assert.match(withAxe.reason,
+    /^The screen-reader layer met nothing this criterion applies to; axe-core reported a violation of 2\.4\.4 in the DOM\.$/);
+});
+
+test("#1342 violated + failed: the screen-reader layer's own failure stands, not attributed to axe", () => {
+  const { screenReader, withAxe } = besideAxe({ capture: RICH, findings: [{ wcag: "2.4.4", mapping: "conformance" }] });
+  assert.equal(screenReader.outcome, "failed", "the row's premise: the screen-reader layer's own finding fails 2.4.4");
+  assert.deepEqual(withAxe, screenReader);
+});
+
+test("#1342 no violation: a clean or needs-review rule layer leaves every screen-reader outcome exactly as it was", () => {
+  const shapes = [
+    { capture: RICH, findings: [], truncatedSweeps: [{ type: "link" }] },
+    { capture: RICH, findings: [] },
+    { capture: NO_LINKS, findings: [] },
+  ];
+  // The positive control: the three shapes really are the three outcomes a violation would change.
+  assert.deepEqual(shapes.map((input) => find(criterionOutcomes(input), "2.4.4").outcome), ["cantTell", "passed", "inapplicable"]);
+  for (const verdict of ["clean", "needsReview"] as const) {
+    for (const input of shapes) {
+      assert.deepEqual(find(criterionOutcomes({ ...input, ruleLayer: { "2.4.4": verdict } }), "2.4.4"),
+        find(criterionOutcomes(input), "2.4.4"), verdict);
+    }
+  }
+});
