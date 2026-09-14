@@ -301,7 +301,7 @@ export interface CaptureBackend {
  * share. It was seven partial copies across three languages until 2026-08-24; one of them is the whole point.
  */
 export {
-  parseAnnouncement, nameOf, announces, annotateCapture, CONTAINER_ROLES, CONTROL_ROLES,
+  parseAnnouncement, nameOf, announces, sameControlAnnounced, annotateCapture, CONTAINER_ROLES, CONTROL_ROLES,
 } from "./announcement.js";
 export type { Channel, ParsedAnnouncement, ParsedObject } from "./announcement.js";
 

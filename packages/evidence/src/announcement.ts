@@ -493,6 +493,47 @@ export function announces(raw: string, role: string, channel: Channel): boolean 
 }
 
 /**
+ * IS THIS BEFORE/AFTER PAIR ABOUT ONE CONTROL? — #812.
+ *
+ * ONE DEFINITION, HERE (#1498). The judge's `addSilentStateChanges` and the lab's `stateChangeIsSilent` both ask it
+ * before comparing states. Until #1498 each held its own copy, pinned equal by `cross-boundary-predicate-parity.test.ts`
+ * after the lab copy lacked this step and fired on a GOOD page (#1496). It lives beside `parseAnnouncement`, which
+ * both already import from this package, so neither side can change the decision alone.
+ *
+ * `probeDisclosure` activates a control and then records `after` from `reportCurrentFocus`, which
+ * announces **whatever holds focus afterwards** — not a re-read of the control it activated. The two
+ * coincide only when activation leaves focus put, which is why this held for 2,000+ corpus captures and
+ * broke on a menu that moves focus into what it reveals. Measured on the V1 rehearsal artefact:
+ *
+ *     control  "…, list, with 6 items, Platform, button, collapsed"   -> name "Platform"
+ *     after    "Outline, menu button, focused, collapsed, sub Menu"   -> name "Outline"
+ *
+ * Both carry `collapsed`, so the state comparison passed **across two different controls**. That is not a
+ * near-miss in the state check; it is the state check being asked a question it cannot answer.
+ *
+ * **The guard is about IDENTITY, never about the state word.** A pair whose identity cannot be
+ * established produces no finding — the capture never made the observation such a finding would rest on,
+ * and "we could not tell" must not read as "the state did not change".
+ *
+ * NAME, NOT ROLE. A control's role can be announced differently in two contexts (`button` here,
+ * `menu button` there) without being a different element, so requiring role equality would refuse
+ * genuine pairs. The name is what identifies the control to the user, which is also what 4.1.2 is about.
+ *
+ * AN EMPTY NAME IS NOT AN IDENTITY. `parseAnnouncement` returns `""` when NVDA announced no name, and two
+ * unnamed controls would then compare equal — establishing identity from the absence of the thing that
+ * establishes it. Unnamed controls are 4.1.2 findings in their own right (`addUnnamedControls`); they are
+ * not evidence about each other.
+ */
+export function sameControlAnnounced(control: string | null | undefined, after: string | null | undefined): boolean {
+  const nameIn = (raw: string | null | undefined): string =>
+    (typeof raw === "string" && raw
+      ? parseAnnouncement(raw, "sweep").objects.map((object) => object.name).find(Boolean) ?? ""
+      : "");
+  const before = nameIn(control);
+  return before !== "" && before === nameIn(after);
+}
+
+/**
  * Attach the parse to a capture, so a consumer that cannot run this code reads FIELDS instead of guessing.
  *
  * The featurizer is Python and computed `form_field_named`/`form_field_unnamed` with its own anchored
