@@ -68,7 +68,7 @@ import { existsSync, globSync, readFileSync, realpathSync, statSync } from "node
 import { createRequire } from "node:module";
 import { basename, delimiter, join } from "node:path";
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
-import { localImports, importedNamesFor, stripComments } from "./local-import-closure.mjs";
+import { localImports, importedNamesFor, stripComments } from "../packages/guards/src/local-import-closure.mjs";
 
 /** @typedef {{ verdict: "runnable" } | { verdict: "refused", reason: string } | { verdict: "prose", reason: string }} Classification */
 /** @typedef {{ kind: "missing" } | { kind: "none", reason: string } | { kind: "commands", commands: string[] } | { kind: "duplicate", occurrences: { line: number, text: string }[] }} Section */
@@ -149,7 +149,7 @@ const CORPUS_PATTERNS = /** @type {[RegExp, string][]} */ ([
   [/\bscorer:shortcuts\b/, "reads runs/, which is gitignored and absent in CI"],
 ]);
 
-// #516: `npm run mutate` (`scripts/mutation-check.mjs`) AND `Refutation:` HAVE OPPOSITE EXIT CONVENTIONS.
+// #516: `npm run mutate` (`packages/guards/src/mutation-check.mjs`) AND `Refutation:` HAVE OPPOSITE EXIT CONVENTIONS.
 // `mutate`'s own contract (see that file's header) is exit 0 = the guard BITES -- the GOOD outcome.
 // `Refutation:` reads success as any NON-ZERO exit (#438) -- so a `Refutation:` line naming `mutate`
 // inverts the verdict, and the dangerous half is not the confusing red: a guard that DID NOT bite exits 1,
@@ -377,7 +377,7 @@ function writeDeclarationHolds(codeOnly, writesPath) {
 // the fourth instance in two days of the identical shape #382 already named: "an opt-in declaration
 // cannot catch the file whose author did not know there was something to declare, which is the whole
 // population that matters." So this job's capability check no longer trusts the header alone; it walks
-// the SAME local-import closure `gh-token-jobs.test.ts` already walks (`scripts/local-import-closure.mjs`,
+// the SAME local-import closure `gh-token-jobs.test.ts` already walks (`packages/guards/src/local-import-closure.mjs`,
 // shared rather than reimplemented -- see that module's header) and asks each file in it a factual
 // question about what it DOES, never about what it merely mentions.
 //
@@ -1113,7 +1113,7 @@ export function testFileArgumentsResolve(command) {
   // #728: WHAT THIS CANNOT PARSE, IT MUST NOT MAKE CLAIMS ABOUT.
   //
   // `tsxTestFileArgs` splits the WHOLE line on whitespace, so on
-  // `node scripts/tree-wide-guards.mjs | xargs npx tsx --test` it reported
+  // `node packages/guards/src/tree-wide-guards.mjs | xargs npx tsx --test` it reported
   // `matched no file: node, |, xargs` -- a claim about the filesystem, and a false one. `|` is not a
   // filename at all, and a reader following that message goes looking for missing test files.
   //

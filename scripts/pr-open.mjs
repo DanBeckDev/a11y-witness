@@ -37,7 +37,7 @@ import { readFileSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { acceptanceReport, closesDeclarationReport } from "./acceptance-commands.mjs";
 import { leakRefusalReason } from "../packages/lab/src/packaging/leak-patterns.mjs";
-import { sandboxGitEnv } from "./git-env.mjs";
+import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 import { REPO } from "./repo-identity.mjs";
 import { launchGate } from "./board-snapshot-scope.mjs";
 

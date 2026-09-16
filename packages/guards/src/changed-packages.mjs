@@ -38,9 +38,9 @@ import { changedFiles } from "./changed-files.mjs";
 // Guarding this file (#164) is what surfaced it: the census had never walked `scripts/`, so nothing had
 // ever asked whether these two could import the guard at all. The answer is yes, by the path that does
 // not need `node_modules` — the file is plain JS, so importing straight from `src` costs nothing.
-import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
+import { refuseUnknownFlags } from "../../worker-fleet/src/cli-flags.mjs";
 
-const REPO = fileURLToPath(new URL("..", import.meta.url));
+const REPO = fileURLToPath(new URL("../../../", import.meta.url));
 
 /**
  * `packages/<name>` for every changed path, deduped and sorted -- pure, given the diff's own output.

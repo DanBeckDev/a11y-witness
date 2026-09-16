@@ -808,7 +808,7 @@ The first published version of `a11ign`. Everything below landed before it: the 
   every diff exactly as today, because the failure mode of a wrong narrowing is a guard that silently stops
   running. The narrowed guards are reported **by name** beside `alwaysRunCount`, never folded into it.
 
-  **The declaration is checked by the guard's own run, never trusted.** `scripts/walk-scope.mjs`, imported
+  **The declaration is checked by the guard's own run, never trusted.** `packages/guards/src/walk-scope.mjs`, imported
   first, records every path the process lists, opens or tests — sync, callback and `fs.promises` alike, plus
   `git` by its pathspecs. **A read it cannot see fails closed**: any other child process, a shell pipeline, an
   unknown `git` subcommand and a listing of the repository root all count as the whole repository.

@@ -21,7 +21,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { sandboxGitEnv } from "./git-env.mjs";
 import { localImports, stripComments } from "./local-import-closure.mjs";
-import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
+import { refuseUnknownFlags } from "../../worker-fleet/src/cli-flags.mjs";
 
 /** Exported so the discovery's own test can construct a fixture that genuinely resolves to this module,
  *  rather than guessing at the path a real `localImports` call would compute. */

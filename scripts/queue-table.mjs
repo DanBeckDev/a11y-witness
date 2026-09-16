@@ -42,7 +42,7 @@ import { pathToFileURL } from "node:url";
 import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { behindByCount } from "./queue-stalled.mjs";
 import { REPO } from "./repo-identity.mjs";
-import { sandboxGitEnv } from "./git-env.mjs";
+import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 import { newestPerName } from "./newest-check-run.mjs";
 import { holdersOf } from "./pr-hold-state.mjs";
 
@@ -215,7 +215,8 @@ export function renderBranchPrefixes(census) {
  * be rate-limited out from under the table.
  *
  * @param {{number: number, headRefName: string, headRefOid: string,
- *   armed: boolean, holders?: string[], updatedAt: string, redChecks: string[] | null}} pr
+ *   armed: boolean, holders?: string[], updatedAt: string, redChecks: string[] | null,
+ *   draft?: boolean | null}} pr
  * @param {number | null} behind
  * @param {Date} now
  */
@@ -229,6 +230,13 @@ export function prRow(pr, behind, now) {
     armed: pr.armed,
     holders: pr.holders ?? [],
     idleMinutes,
+    // CARRIED THROUGH, because `openPRs()` reading the field is not the same as a caller being able to
+    // see it: everything downstream reads THIS row, so a field added there and dropped here is a field
+    // nobody has. ABSENT IS `null`, NEVER `false` -- a payload that did not carry the flag is a read this
+    // row could not make, and answering "not a draft" for it would be wrong in the reassuring direction
+    // (it reads as armed-and-ready work rather than as an unanswered question), which is the direction
+    // this file's own `armed` note says is the only one that matters in a table people scan.
+    draft: pr.draft ?? null,
     // A PR can be stalled by being behind and untouched, which is the state `update-branch` skips
     // because it only carries GREEN PRs -- so a red PR that nobody pushes is invisible to the train.
     stalled: (behind ?? 0) > 0 && idleMinutes >= STALL_MINUTES,
@@ -331,6 +339,14 @@ export function openPRs() {
     headRefOid: pr.head?.sha ?? "",
     updatedAt: pr.updated_at,
     armed: Boolean(pr.auto_merge),
+    // THE DRAFT FLAG COMES BACK ON THE SAME PAYLOAD, so reading it costs nothing -- the same reason
+    // `holders` is read below. It was dropped here until #912's gate needed it: "every open pull request
+    // that is a draft and has no verdict at its current head" is the reviewer's whole lane
+    // (docs/roles/reviewer.md), and with this field absent NO script in the tree could answer it, so the
+    // two reviewer sessions polled `gh pr list` on a clock to ask a question this payload already knew.
+    // `?? null`, NOT `Boolean()`: absent must stay distinguishable from false, for the reason `prRow`
+    // states where it carries this field on.
+    draft: pr.draft ?? null,
     // THE HOLD LABEL COMES BACK ON THE SAME PAYLOAD, so reading it costs nothing. It has to be read,
     // because a held PR is DISARMED ON PURPOSE (`pr-hold.mjs` disarms as part of taking the hold) and
     // "UNARMED" for a held PR is a true word for the wrong reason -- it reads as nobody has got to it

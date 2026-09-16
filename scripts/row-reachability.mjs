@@ -41,7 +41,7 @@ import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 import { REPO } from "./repo-identity.mjs";
-import { sandboxGitEnv } from "./git-env.mjs";
+import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 import { regionPathsFromBody, declaredRegionFiles } from "./region-paths.mjs";
 
 const EXIT = { STARTABLE: 0, BLOCKED: 1, CANNOT_ASK: 2 };

@@ -310,7 +310,7 @@ days (#382, #619).
 
 **So the check now DERIVES a test's requirements from its import closure, checked before the header.**
 `acceptance-commands.mjs` walks the same local-import closure `gh-token-jobs.test.ts` already walks for
-its own question (shared via `scripts/local-import-closure.mjs`, never a second independently-drifting
+its own question (shared via `packages/guards/src/local-import-closure.mjs`, never a second independently-drifting
 copy of the walk), and asks each file in it a factual question about what it DOES:
 
 | what a module in the closure does | implies |

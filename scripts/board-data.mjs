@@ -24,12 +24,15 @@
 // It writes to stdout by default. `--post` publishes it as a comment on the board-report issue, so the
 // generating and the publishing are separate acts and a bad report can be seen before it is posted.
 import { execFileSync } from "node:child_process";
-import { sandboxGitEnv } from "./git-env.mjs";
-import { changedFiles } from "./changed-files.mjs";
+import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
+import { changedFiles } from "../packages/guards/src/changed-files.mjs";
 import { readFileSync, existsSync, readdirSync} from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { REPO } from "./repo-identity.mjs";
+// A LEAF module with no imports of its own (#804), so this cannot form a cycle -- the same property that
+// let `close-rows-for-merged-pr.mjs` import it under the no-`npm ci` constraint.
+import { READY_LABEL } from "./claim-labels.mjs";
 // The gate predicates live in `board-gates.mjs` (#429), a module with no process in it, so a test of the
 // selection runs where a test of this file cannot. Re-exported: no importer of this file changes.
 import { latestVerdictGate } from "./board-gates.mjs";
@@ -196,6 +199,28 @@ export function unclassified(list) {
 /** @param {any} i */
 function labelsOf(i) {
   return i.labelNames ?? i.labels?.map((/** @type {any} */ l) => l.name) ?? [];
+}
+
+/**
+ * The rows that are PICKABLE -- `ready` and nothing has claimed them yet.
+ *
+ * ONE DERIVATION, because there were about to be two. `board-report.mjs` carried
+ * `open.filter(i => i.labelNames.includes("ready"))` inline, and #912's work-gate needs the identical
+ * question to decide whether an idle engineer has anything to be woken FOR. A second copy would be the
+ * fact-stated-twice shape this file's own header names as the repo's most-repeated defect -- and worse
+ * than usual here, because the two readers would disagree about whether the org has work while each
+ * reported confidently.
+ *
+ * THE LITERAL COMES FROM `claim-labels.mjs`, never from here. That leaf module exists (#804) precisely
+ * because `"ready"` had been spelled in three files; the inline copy in `board-report.mjs` was a fourth
+ * that predated it. Importing the constant means this follows a rename by construction.
+ *
+ * `labelsOf` rather than `i.labelNames` directly: the inline version threw on any payload carrying
+ * `labels[].name` instead, which is the shape `issues()` returns from a different query.
+ * @param {any[]} list
+ */
+export function readyRows(list) {
+  return list.filter((i) => labelsOf(i).includes(READY_LABEL));
 }
 
 /** The rows the document COUNTS. `issues()` stays complete -- a meta row still needs its state resolved.

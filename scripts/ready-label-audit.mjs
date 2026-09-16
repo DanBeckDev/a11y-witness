@@ -50,7 +50,7 @@ import { fetchBoardItems, PROJECT_NUMBER } from "./board-snapshot.mjs";
 // the three states it is instead.
 import { fetchClosedRowEvents, unattributableClosedRows, reportableUnattributable, attributionFor,
   fetchClosingPullRequest, PROVENANCE_REQUIRED_FROM } from "./claim-provenance.mjs";
-import { sandboxGitEnv } from "./git-env.mjs";
+import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 import { READY_LABEL, WAS_READY_LABEL } from "./claim-labels.mjs";
 // #782: THE PURE DECISION ONLY -- `labelsToStrip` classifies a label, it never calls `gh`. Importing it
 // does NOT give this file a mutation capability; the header above's ruling ("this audit REPORTS the

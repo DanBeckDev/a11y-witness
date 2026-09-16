@@ -29,7 +29,7 @@
 // `session:` label at all) leaves no event to find.
 import { execFileSync } from "node:child_process";
 import { REPO } from "./repo-identity.mjs";
-import { sandboxGitEnv } from "./git-env.mjs";
+import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 
 // `maxBuffer` is RAISED because the projected event log is a few hundred KB today and grows with the
 // repository; the default 1 MB is a cliff that would turn a complete read into a thrown ENOBUFS on some

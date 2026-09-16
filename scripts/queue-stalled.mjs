@@ -49,7 +49,7 @@
 //   2  a lookup failed. INCONCLUSIVE, never "fine".
 import { execFileSync } from "node:child_process";
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
-import { sandboxGitEnv } from "./git-env.mjs";
+import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { newestConclusion, newestRun, headQuietSeconds, normaliseConclusion, SUCCESS }

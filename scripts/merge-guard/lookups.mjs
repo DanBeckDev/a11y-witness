@@ -16,7 +16,7 @@
 // files made the omission visible rather than introducing it.
 import { execFileSync } from "node:child_process";
 import { REPO } from "../repo-identity.mjs";
-import { sandboxGitEnv } from "../git-env.mjs";
+import { sandboxGitEnv } from "../../packages/guards/src/git-env.mjs";
 import { assertNoLeakInArgv } from "../../packages/lab/src/packaging/leak-patterns.mjs";
 
 /** @param {string[]} args */

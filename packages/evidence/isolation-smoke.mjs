@@ -1,5 +1,5 @@
 // @ts-check
-// Run by `scripts/isolation-gate.mjs` from a throwaway directory OUTSIDE this repository, against the
+// Run by `packages/guards/src/isolation-gate.mjs` from a throwaway directory OUTSIDE this repository, against the
 // installed tarball. Imports by PACKAGE NAME on purpose: a relative import would resolve inside the repo and
 // prove nothing.
 //

@@ -76,7 +76,7 @@ import { resolveBlockedByOverride, blockedByExceptionNote } from "./row-claim/bl
 import { fileOverlapReason, lookupMyRegionFiles, lookupOpenPrFiles } from "./row-claim/file-overlap-rule.mjs";
 import { templateFieldsReason, lookupIssueBody } from "./row-claim/template-fields-rule.mjs";
 import { staleRuleReason } from "./row-claim/stale-rule-guard.mjs";
-import { sandboxGitEnv } from "./git-env.mjs";
+import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 import { primaryWorktreeOf, unverifiedRecords } from "./prune-worktrees.mjs";
 import { CLAIM_LABEL, STARTED_LABEL } from "./claim-labels.mjs";
 import { worktreeOwner, stampWorktree } from "./worktree-owner.mjs";

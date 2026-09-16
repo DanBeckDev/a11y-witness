@@ -6,11 +6,10 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 
 - `node scripts/acceptance-commands.mjs` — run a PR's own stated Acceptance/Refutation command(s) and report RAN/REFUSED/MISSING
 - `node scripts/arm-pr.mjs` — arm-pr -- enable auto-merge on ONE pull request, unless it is held
-- `node scripts/assert-glob-not-empty.mjs` — refuse a test glob that resolves to zero files instead of passing silently
+- `node packages/guards/src/assert-glob-not-empty.mjs` — refuse a test glob that resolves to zero files instead of passing silently
 - `node scripts/auto-arm-sweep.mjs` — arm auto-merge on open PRs that predate auto-arm.yml and were never armed
 - `node scripts/board-discussion.mjs` — say whether today's board edition exists as a Discussion (exit 0 yes, 1 no, 2 could not ask)
 - `node scripts/board-document.mjs` — render the board's PDF from the same data the daily GitHub report reads
-- `node scripts/board-only-check.mjs` — print true/false: is this branch's diff against origin/main board-only
 - `node scripts/board-record.mjs` — write an achievement record, refusing when it would displace one — #577
 - `node scripts/board-report.mjs` — generate the daily board report from GitHub and git, never from what an agent said
 - `node scripts/board-schedule-liveness.mjs` — say whether the board report's cron is still arriving, and comment once if not
@@ -19,15 +18,13 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/branch-inventory-report.mjs` — produce the #623 four-fact inventory of every branch on origin with no open PR and commits
 - `node scripts/build-packages.mjs` — run tsc --build across every package under packages/ in dependency order
 - `node scripts/carry-branch.mjs` — carry a stalled agent/* branch from a DETACHED checkout -- merge origin/main in and push,
-- `node scripts/changed-files.mjs` — list the paths a range changed, BOTH SIDES OF A RENAME
-- `node scripts/changed-packages.mjs` — list which packages/<name> directories a branch touched against origin/main
-- `node scripts/changeset-precise.mjs` — say whether this diff touches a file npm pack actually ships for a published package
+- `node packages/guards/src/changed-files.mjs` — list the paths a range changed, BOTH SIDES OF A RENAME
+- `node packages/guards/src/changed-packages.mjs` — list which packages/<name> directories a branch touched against origin/main
 - `node scripts/check-retired-heads.mjs` — refuse a candidate whose scorer head set shrank without declaring what it retired
 - `node scripts/check-scheduled-jobs.mjs` — compare every job this repo claims to schedule against its actual installed state
 - `node scripts/check-schema-migration.mjs` — refuse a release while a declared schema migration is still open
 - `node scripts/check-transfer-urls.mjs` — check-transfer-urls -- walk the tree for every URL naming PRODUCT_REPO (a11ign/a11ign) and
 - `node scripts/ci-changed.mjs` — classify what a PR's diff touches, so CI's conditional jobs know whether to run
-- `node scripts/close-merged-rows.mjs` — close the tracker rows a merge landed, or refuse and say why
 - `node scripts/close-rows-for-merged-pr.mjs` — close the issues a merged PR declared, because a bot merge does not close them itself
 - `node scripts/close-rows-sweep.mjs` — close the rows every PR merged in the window declared, riding trunk.yml's push and nightly's hourly cron
 - `node scripts/closes-mismatch-check.mjs` — refuse when a PR's declared Closes line disagrees with what GitHub will actually close
@@ -39,18 +36,18 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/history-purge-rehearsal.mjs` — rehearse deleting non-standard refs and rewriting git history ahead of the org transfer
 - `node scripts/history-secret-scan.mjs` — scan every blob reachable from every ref for internal addresses and secret-shaped strings
 - `node scripts/install-git-hooks.mjs` — point git at this repo's tracked hooks; run automatically by npm install via prepare
-- `node scripts/isolation-gate.mjs` — prove a published package installs and works standalone, by actually installing and running it
+- `node packages/guards/src/isolation-gate.mjs` — prove a published package installs and works standalone, by actually installing and running it
 - `node scripts/known-gaps-index.mjs` — regenerate docs/known-gaps.md's own index of open sections from its headings
 - `node scripts/manifest-repository-check.mjs` — refuse a publish whose manifests name a different repository than the run publishing them
 - `node scripts/mark-primary-checkout.mjs` — mark or query whether this checkout is the fleet-driving primary, which the hooks read
 - `node scripts/merge-guard.mjs` — ask whether a PR's checks actually ran and passed, never trusting mergeStateStatus alone
 - `node scripts/merge-queue.mjs` — refuse any route onto main other than the open-PR merge queue
-- `node scripts/mutation-check.mjs` — prove a guard actually bites: mutate a file, confirm its test fails, restore, confirm it passes
+- `node packages/guards/src/mutation-check.mjs` — prove a guard actually bites: mutate a file, confirm its test fails, restore, confirm it passes
 - `node scripts/npm-token-liveness.mjs` — say whether the first-publish npm token is still present after it should have been revoked
 - `node scripts/org-watch.mjs` — org-watch -- the org's clock. Hourly by default; `--weekly` renders the cost table.
 - `node scripts/owned-path-signoff.mjs` — check a PR touching a corpus-invalidating path named the facts its own body must state
 - `node scripts/parent-recheck-summary.mjs` — read a node:test TAP log and print its failing subtests by name -- #744, never a fixed tail
-- `node scripts/piped-exit-status-guard.mjs` — detect a piped command whose exit status was read from the wrong side of the pipe
+- `node packages/guards/src/piped-exit-status-guard.mjs` — detect a piped command whose exit status was read from the wrong side of the pipe
 - `node scripts/pr-hold.mjs` — take or release a hold on a pull request, the record merge-guard reads before treating it as free
 - `node scripts/pr-open.mjs` — check a PR body's Acceptance/Closes with the tree's own parser before gh pr create/edit sends it
 - `node scripts/prune-stale-workspace-scope.mjs` — remove a stale workspace-scope's node_modules symlinks a rename left behind
@@ -70,12 +67,13 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/stash-whose.mjs` — list every git stash entry with the branch it was made on, since git alone will not say
 - `node scripts/stranded-branches.mjs` — find pushed branches with no open PR, which are otherwise invisible to CI and review
 - `node scripts/tracker-comment.mjs` — read and edit a tracker comment safely -- the one place, so no edit is improvised again
-- `node scripts/tree-wide-guards.mjs` — every tracked *.test.ts file that DECLARES ITSELF a TREE-WIDE GUARD by importing and calling
+- `node packages/guards/src/tree-wide-guards.mjs` — every tracked *.test.ts file that DECLARES ITSELF a TREE-WIDE GUARD by importing and calling
 - `node scripts/trunk-revert-guard.mjs` — compare main's before/after state on a merge and refuse one that silently deletes prior work
 - `node scripts/trunk-revert.mjs` — revert a push to main that fails its own gate, unattended, since nothing else runs after it lands
 - `node scripts/trunk-sweep.mjs` — sweep main for a gate failure while GITHUB_TOKEN-authored merges suppress every triggering event
 - `node scripts/update-branch-sweep.mjs` — push every armed, green-or-running PR up to main's new tip after a merge lands
 - `node scripts/update-primary.mjs` — the one sanctioned way to move the primary checkout: fetch, detach at origin/main, install if the lockfile moved, rebuild
+- `node scripts/work-gate.mjs` — work-gate -- is there work for any session? One cheap read; a wake order per line when yes.
 - `node scripts/workflow-lane-check.mjs` — check a PR changing a lane-owned path was opened from that lane's branch, or names its exception
 - `node scripts/workflow-run-liveness.mjs` — watchdog: did CI actually run before this commit reached main, checked automatically
 - `node scripts/worktree-owner.mjs` — print which session stamped a worktree, so a session can tell whose tree it is standing in

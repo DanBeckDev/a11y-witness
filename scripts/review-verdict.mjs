@@ -119,3 +119,71 @@ export function reviewVerdict(body) {
     ? { verdict: "unrecognised", word: null, head, author }
     : { verdict: "none", word: null, head, author };
 }
+
+/**
+ * #912: THE VERDICT AT ONE HEAD, AND WHO WROTE IT -- the question a wake gate actually asks.
+ *
+ * `reviewVerdict` answers "what verdict does THIS COMMENT carry". The clock's question is one level up and
+ * this file has stated it since #1259 without anyone being able to call it: *"is there a verdict AT THIS
+ * HEAD, FROM A REVIEWER WHO IS NOT ME"*. Every session that needed it walked the comment list in its own
+ * prompt, which is the shape #1245 ended for the word and #1259 ended for the two fields -- one level out,
+ * and still open.
+ *
+ * IT RETURNS FACTS AND DECIDES NOTHING, which is this file's existing rule ("`null` makes that caller
+ * decide") carried up. In particular `byIsAuthor` is **`null` when the opener named nobody** -- never
+ * `false`. A caller that read absent as "someone else" would settle a PR on its own author's comment; a
+ * caller that read it as "the author" would re-wake a reviewer forever on a genuine author-less verdict,
+ * which is precisely the `Re-read of \`94d6e948\` -- **convinced**.` that stalled #1244 for thirty minutes.
+ * Both are wrong, they are wrong in opposite directions, and neither is this function's to choose.
+ *
+ * WHY THE TWO CALLERS WANT OPPOSITE DEFAULTS, stated here so the next one does not have to rediscover it:
+ * an ARM gate must fail CLOSED on an unattributed verdict (merging on the author's own word is the
+ * silent-wrong-thing direction this file opens by naming), while a WAKE gate should fail toward WAKING
+ * (a needless wake costs one turn and is visible; a missed one stalls a draft and is not). The wake side
+ * is safe to default that way only because its order ledger dedupes on the head sha, so "wake anyway"
+ * costs one turn per head rather than one per tick.
+ *
+ * HEADS COMPARE BY PREFIX because the convention writes eight characters (`docs/roles/reviewer.md`: a
+ * comment matching ``at `<head8>` ``) while the API returns forty, and `reviewVerdict` accepts 7-40. The
+ * shorter being a prefix of the longer is the whole test; equality would find nothing.
+ *
+ * @param {{ comments: { body: string, id?: number | string }[], head: string, prAuthor?: string | null }} q
+ * @returns {{ verdict: "convinced" | "not-convinced" | null, by: string | null,
+ *             byIsAuthor: boolean | null, id: number | string | null, examined: number }}
+ */
+export function verdictAtHead({ comments, head, prAuthor = null }) {
+  const examined = comments?.length ?? 0;
+  const none = { verdict: /** @type {null} */ (null), by: null, byIsAuthor: /** @type {null} */ (null),
+    id: null, examined };
+  if (!head || examined === 0) return none;
+  // NEWEST WINS. `reviewer.md` settles a re-review by the LAST verdict at the head ("a PR you reviewed
+  // earlier whose head has moved since is not done"), and a reviewer who writes `not-convinced` and then
+  // `convinced` at the same head has changed their mind, not written two verdicts.
+  for (let i = comments.length - 1; i >= 0; i -= 1) {
+    const c = comments[i];
+    const parsed = reviewVerdict(c?.body ?? "");
+    if (parsed.verdict !== "convinced" && parsed.verdict !== "not-convinced") continue;
+    if (!headMatches(parsed.head, head)) continue;
+    return {
+      verdict: parsed.verdict,
+      by: parsed.author,
+      // `null`, NOT `false`, when the opener named nobody -- see the header. This is the field callers get
+      // wrong, so it is the one that refuses to guess.
+      byIsAuthor: parsed.author === null || prAuthor === null ? null : parsed.author === prAuthor,
+      id: c?.id ?? null,
+      examined,
+    };
+  }
+  return none;
+}
+
+/**
+ * Whether a verdict's head names the PR's head. PREFIX, EITHER WAY ROUND -- see the header.
+ * @param {string | null} stated @param {string} actual
+ */
+export function headMatches(stated, actual) {
+  if (!stated || !actual) return false;
+  const a = stated.toLowerCase();
+  const b = actual.toLowerCase();
+  return a.startsWith(b) || b.startsWith(a);
+}
