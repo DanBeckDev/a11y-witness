@@ -69,7 +69,7 @@ on a name instead of the fact it names — all one shape, read at different scal
   not just "yes/no it is fixed."
 - **Anything reaching the fleet, the lab, or requiring a `runs/`-reading gate as a VERDICT** — never run
   directly; requested through `dispatcher`, who has `orchestrator` run it and return the number.
-- **THE CLAIM, before the region.** `node scripts/row-claim.mjs check <n>` first — it reads the board's
+- **THE CLAIM, before the region.** `node packages/agent-org/src/row-claim.mjs check <n>` first — it reads the board's
   `in-progress`/`session:*` labels, which is where a row's claim actually lives. The region check below
   answers a different question ("would I collide in this file") and does not see a claim at all: #28 and
   #30 (2026-09-06) were each pulled twice by workers whose region check was clean and correct, because the

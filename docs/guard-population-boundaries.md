@@ -42,7 +42,7 @@ annotates its whole pure verdict. Those annotations are documentation. Filed as 
 ```
 identical `/** @type {number} */ const X = "not a number"` appended to …
 
-  scripts/row-claim.mjs                    npm run typecheck -> EXIT 0, clean
+  packages/agent-org/src/row-claim.mjs                    npm run typecheck -> EXIT 0, clean
   packages/control/src/fleet-discover.mjs  npm run typecheck -> EXIT 2, TS2322
 ```
 

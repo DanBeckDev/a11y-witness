@@ -27,8 +27,8 @@ the ban is still right, the justification was not.
 **Setup, done by me and not by them**, so the fleet-affecting git state stays with one driver:
 
 ```
-node scripts/row-claim.mjs check <n>
-node scripts/row-claim.mjs claim <n> --session=<name> --branch=agent/<branch> --worktree=../a11y-wt-<name>
+node packages/agent-org/src/row-claim.mjs check <n>
+node packages/agent-org/src/row-claim.mjs claim <n> --session=<name> --branch=agent/<branch> --worktree=../a11y-wt-<name>
 cd ../a11y-wt-<name> && npm install && ln -s <main>/runs runs && ln -s <main>/.venv .venv
 ```
 

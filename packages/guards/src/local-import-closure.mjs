@@ -20,7 +20,7 @@ import { dirname, join, resolve } from "node:path";
  * IDENTICAL length -- never removed, so a caller computing a line/column against the result still
  * describes the real file. Naive (a `//` inside a string literal is blanked too, the same tradeoff this
  * repo's own indentation-based YAML slicing already accepts elsewhere) but load-bearing: THIS MODULE'S OWN
- * DOCSTRING once demonstrated `import { collect } from "../../../scripts/board-data.mjs"` as a worked example, and
+ * DOCSTRING once demonstrated `import { collect } from "../../agent-org/src/board-data.mjs"` as a worked example, and
  * without this, `localImports` read its own JSDoc as a real import -- a self-reference one level deeper
  * than the mention-versus-use trap `acceptance-commands.mjs`'s own header already names: not "a comment
  * MENTIONING an operation," but "a comment CONTAINING syntactically valid code that performs one."
@@ -43,7 +43,7 @@ export function stripComments(text) {
   // With the block pass first, a `//` comment CONTAINING `/*` -- a glob in prose, `--branches='agent/*'`,
   // `@a11ign/*` -- opened a block-comment match that closed at the next `*/` ANYWHERE LATER IN THE FILE,
   // blanking every line between, real code included. Measured across the tree the night this was found:
-  // 10 of 89 `scripts/*.mjs` with relative imports derived NONE, `scripts/row-claim.mjs` among them --
+  // 10 of 89 `scripts/*.mjs` with relative imports derived NONE, `packages/agent-org/src/row-claim.mjs` among them --
   // twelve real imports, zero visible -- and with them `select-changed-tests.mjs` and `ci-changed.mjs`,
   // which decide what CI runs.
   //
@@ -111,7 +111,7 @@ function namesFromClause(clause) {
 
 /**
  * The LOCAL NAMES `file` binds to an import whose specifier resolves to `target` -- `["collect"]` for
- * `import { collect } from "../../../scripts/board-data.mjs"`, `[]` for a side-effect `import "./x.mjs"` (nothing is
+ * `import { collect } from "../../agent-org/src/board-data.mjs"`, `[]` for a side-effect `import "./x.mjs"` (nothing is
  * bound, so nothing can be named). Handles named (`{ a, b as c }`), default and namespace (`* as ns`)
  * clauses; a mixed `import Default, { a } from "..."` yields both. Used only for a human-facing message --
  * #621's own stated point is naming the HOP a reader would grep for, not just a file path they would have

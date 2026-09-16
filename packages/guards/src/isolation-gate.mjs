@@ -2,7 +2,7 @@
 // command: prove a published package installs and works standalone, by actually installing and running it
 // Can a consumer install this package and use it? Answered by doing it.
 //
-//   node scripts/isolation-gate.mjs packages/evidence [more...]
+//   node packages/guards/src/isolation-gate.mjs packages/evidence [more...]
 //   npm run gate:isolation
 //
 // ## Why a workspace cannot answer this
@@ -394,15 +394,15 @@ function countPrivatePackages() {
 // entry-points.test.ts's own "the guard is the exact comparison" test polices this idiom, but its
 // discovery only matched packages/*.mjs|.ts until this file's own drift widened it to scripts/ too.
 // realpathSync'd for the same reason every published bin needed it this session: harmless for a plain
-// `node scripts/isolation-gate.mjs` invocation, but this file is ALSO imported by test files under
+// `node packages/guards/src/isolation-gate.mjs` invocation, but this file is ALSO imported by test files under
 // packages/, so the same guard idiom this repo now uses everywhere is worth using here too.
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
   // Guarded per #164: --all, plus positional package dirs; npm flags go onward.
-  refuseUnknownFlags(["--all"], { entry: import.meta.url, command: "node scripts/isolation-gate.mjs" });
+  refuseUnknownFlags(["--all"], { entry: import.meta.url, command: "node packages/guards/src/isolation-gate.mjs" });
   const args = process.argv.slice(2);
   const targets = args.length === 0 || args[0] === "--all" ? allPackages() : args;
   if (args.length > 0 && args[0] !== "--all" && targets.length === 0) {
-    process.stderr.write("usage: node scripts/isolation-gate.mjs [--all | <package-dir>...]\n");
+    process.stderr.write("usage: node packages/guards/src/isolation-gate.mjs [--all | <package-dir>...]\n");
     process.exit(2);
   }
   const privateCount = args.length === 0 || args[0] === "--all" ? countPrivatePackages() : 0;

@@ -646,7 +646,7 @@ if [ "$BRANCH" != "main" ]; then
     # one of the few contexts `set -e` exempts, which is the ONLY reason this can read the exit code at
     # all rather than dying silently with no message printed -- found by this guard's own wiring test,
     # not by reasoning about it.
-    if ARMED_CHECK_OUT="$(node scripts/merge-guard.mjs --armed-check="$BRANCH" 2>&1)"; then
+    if ARMED_CHECK_OUT="$(node packages/agent-org/src/merge-guard.mjs --armed-check="$BRANCH" 2>&1)"; then
       ARMED_CHECK_CODE=0
     else
       ARMED_CHECK_CODE=$?

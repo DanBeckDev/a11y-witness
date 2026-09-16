@@ -317,14 +317,14 @@ jobs:
   # identity to compare against a claimed row's holder, so closing the exact row a PR was built for --
   # the ordinary worker-owned shape -- reads as discarding a stranger's work. A required job refusing the
   # normal case is not a gate, it is a wall everyone routes around; see `mergeSafetyVerdict`'s own comment
-  # in `scripts/merge-guard.mjs` for the measurements. Both stay useful ADVICE in `merge-guard.mjs`'s
+  # in `packages/agent-org/src/merge-guard.mjs` for the measurements. Both stay useful ADVICE in `merge-guard.mjs`'s
   # plain CLI mode, which knows who is asking and is run by a person, never by this job.
   #
   # UNCONDITIONAL, NOT GATED ON `ci-changed.mjs`. Every other job here answers "did the DIFF change
   # something this checks" -- head-vs-tip is a fact about the COMMIT, true or false regardless of which
   # files moved, so there is no diff shape that makes this safe to skip.
   #
-  # NEVER `mergeReadiness` -- `scripts/merge-guard.mjs --ci-gate` calls the narrower `mergeSafetyVerdict`,
+  # NEVER `mergeReadiness` -- `packages/agent-org/src/merge-guard.mjs --ci-gate` calls the narrower `mergeSafetyVerdict`,
   # which deliberately never inspects check-run CONCLUSIONS. This job's own siblings (`ts`, `python`, ...)
   # are still in flight while it runs, in the SAME workflow run -- a check asking "did every required
   # context conclude" about a commit it is itself currently testing would read STILL_RUNNING on every
@@ -380,7 +380,7 @@ jobs:
       - name: This head matches what GitHub recorded (#294)
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node scripts/merge-guard.mjs --ci-gate ${{ github.event.pull_request.number }}
+        run: node packages/agent-org/src/merge-guard.mjs --ci-gate ${{ github.event.pull_request.number }}
       # #549: WHAT THE BODY DECLARES MUST MATCH WHAT GITHUB WILL ACTUALLY CLOSE. `Closes: none` in the
       # body and a real closure of two issues both merged the same day -- neither the acceptance job (no
       # GH_TOKEN, by design) nor anything else compared the two. This is a NEW step, not folded into
@@ -393,7 +393,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR_BODY: ${{ github.event.pull_request.body }}
-        run: node scripts/closes-mismatch-check.mjs ${{ github.event.pull_request.number }}
+        run: node packages/agent-org/src/closes-mismatch-check.mjs ${{ github.event.pull_request.number }}
 
 
       # A LANE IS WHO MAY CHANGE A PATH -- ceo's ruling 2026-09-08, after a `pull_request` trigger added
@@ -425,7 +425,7 @@ jobs:
           # not seen by the check that owns that lane -- a bypass, not merely a short list.
           node packages/guards/src/changed-files.mjs origin/${{ github.base_ref }}...HEAD > /tmp/lane-changed.txt
           printf '%s' "$PR_BODY" > /tmp/lane-body.txt
-          node scripts/workflow-lane-check.mjs \
+          node packages/agent-org/src/workflow-lane-check.mjs \
             --diff=/tmp/lane-changed.txt \
             --branch="$HEAD_REF" \
             --body=/tmp/lane-body.txt
@@ -435,7 +435,7 @@ jobs:
   # reporting the result in prose. `capture-check` was mandatory after any `capture-core.mjs` change and
   # had never run once; `scorer:verify` was a security check on the one artefact this project publishes
   # and nothing invoked it; `release:gate` was broken from the day it was written. This is the thing that
-  # actually runs it -- see `scripts/acceptance-commands.mjs`'s own header for the three outcomes
+  # actually runs it -- see `packages/agent-org/src/acceptance-commands.mjs`'s own header for the three outcomes
   # (RAN/REFUSED/MISSING) and why they must never collapse into two.
   #
   # `pull_request`, NEVER `pull_request_target` -- this job executes commands an author wrote in a PR
@@ -496,7 +496,7 @@ jobs:
         run: |
           git diff --name-only origin/${{ github.base_ref }}...HEAD > /tmp/changed.txt
           printf '%s' "$BODY" > /tmp/body.txt
-          node scripts/owned-path-signoff.mjs --diff=/tmp/changed.txt --body=/tmp/body.txt
+          node packages/agent-org/src/owned-path-signoff.mjs --diff=/tmp/changed.txt --body=/tmp/body.txt
 
   # #902, step 2 of the CI Reset (chairman-approved): THE REQUIRED CHECK IS THE PRODUCT, NOT THE PROCESS.
   # Of the last forty red `ci` runs on pull requests, 13 were `ts` -- a real test, lint or typecheck

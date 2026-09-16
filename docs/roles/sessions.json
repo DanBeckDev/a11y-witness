@@ -1,6 +1,6 @@
 {
   "_owner": "ceo",
-  "_why": "ceo's ruling on #1453 (2026-09-13): the one file that says which sessions are live. scripts/arm-pr.mjs reads it and types no session list; a label is refused when its session is absent from `live`, and `retired` only chooses the sentence the refusal uses. The repository's session:* labels are not the source: four of them are retired.",
+  "_why": "ceo's ruling on #1453 (2026-09-13): the one file that says which sessions are live. packages/agent-org/src/arm-pr.mjs reads it and types no session list; a label is refused when its session is absent from `live`, and `retired` only chooses the sentence the refusal uses. The repository's session:* labels are not the source: four of them are retired.",
   "live": [
     {
       "name": "ceo",

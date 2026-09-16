@@ -277,9 +277,9 @@ is reported the same way, naming what was checked**, which costs the dispatcher 
 costing the worker an hour.
 
 1. **A worker takes the top Ready row in its own lane itself.** From a non-primary tree, first
-   `node scripts/row-claim.mjs check <n>` — the CLAIM check, reading the board's `in-progress`/`session:*`
+   `node packages/agent-org/src/row-claim.mjs check <n>` — the CLAIM check, reading the board's `in-progress`/`session:*`
    labels, never git history — and the collision and region rules; then
-   `node scripts/row-claim.mjs claim <n> --session=<name> --branch=agent/<branch> --worktree=<path>`. Since
+   `node packages/agent-org/src/row-claim.mjs claim <n> --session=<name> --branch=agent/<branch> --worktree=<path>`. Since
    #1432 that CREATES and stamps the worktree, so nobody makes it first: a pre-made path or branch is refused
    before any write (`NOT CLAIMED: --worktree=<path> ALREADY EXISTS … Refusing before any write`). The worker
    symlinks `node_modules`, builds in that tree, and says what it took. **The brief becomes a CHECK
@@ -303,12 +303,12 @@ costing the worker an hour.
    progress, then reverted to Ready on seeing another branch, on the reasoning "someone else has it, so it
    is not mine to assign" — which put a claimed row back into the pull queue at the exact moment a second
    worker was looking at it. **The label is the claim; a row you know is taken must show that, whoever
-   holds it.** `node scripts/row-claim.mjs check <n>` before touching a row's status, `claim` to take it.
+   holds it.** `node packages/agent-org/src/row-claim.mjs check <n>` before touching a row's status, `claim` to take it.
    > **#176 (2026-09-07): dispatch a row, don't just mention it.** "No command enforces this half" was
    > true and it cost three real double-dispatches (#156, #158, #159) — a worker's own caution caught each
    > one, not the board, because a row named in a dispatcher/product-manager MESSAGE carried no label at
    > all until the assigned session got around to `claim`, and a second dispatch in that window read
-   > UNCLAIMED. **`node scripts/row-claim.mjs dispatch <n> --session=<name>` is now the first act of
+   > UNCLAIMED. **`node packages/agent-org/src/row-claim.mjs dispatch <n> --session=<name>` is now the first act of
    > handing a row out, not a follow-on to it** — in the SAME turn as the message assigning it, before
    > sending it, exactly the way `claim` is the worker's own first act rather than a follow-on to starting
    > work. It writes `in-progress` + `session:<name>` (not `started` — that stays for the assigned session's
@@ -422,7 +422,7 @@ earlier**. Both sentences were true — nothing held the region, every symbol wa
 work was done and merged.**
 
 ```
-$ node scripts/row-claim.mjs check 83
+$ node packages/agent-org/src/row-claim.mjs check 83
 UNCLAIMED -- #83 …    STARTABLE: no unmerged branch is in its region
 
 $ gh issue view 83 --json state,closedAt
@@ -552,7 +552,7 @@ depends on somebody remembering to record it does not get recorded.
   records who holds a ROW, `git worktree list` records who holds a BRANCH, and neither knew about the
   other. Two fixes, ceo-ruled (#656): a claim now records its branch (`row-claim.mjs claim --branch=<name>`,
   read back via `claimStatus(...).branch` and printed by `check`), so an escalating session can tell a
-  portable row from a held one before offering to take it; and `node scripts/carry-branch.mjs <branch>
+  portable row from a held one before offering to take it; and `node packages/agent-org/src/carry-branch.mjs <branch>
   --carrier=<name> --reason=<text>` is the mechanism that makes the offer real once made — a DETACHED
   worktree merges `origin/main` in and pushes straight to the branch ref, never checking the branch out by
   name, so it cannot collide with wherever the owner already has it. It is not a licence to write into

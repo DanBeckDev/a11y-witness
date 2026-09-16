@@ -4,7 +4,7 @@
 /**
  * Detects the shape behind issue #180: `cmd | head` (or `| tail`, `| grep`) reports the STATUS TOOL's
  * exit code, not the piped command's — so `$?` read afterward names the wrong thing. Measured twice in
- * one night, once an hour after the first was diagnosed and warned about: `node scripts/merge-guard.mjs
+ * one night, once an hour after the first was diagnosed and warned about: `node packages/agent-org/src/merge-guard.mjs
  * 148 | head -4; echo EXIT=$?` printed `EXIT=0` for a command that actually exited 2.
  *
  * Deliberately narrow. A pipeline ending in head/tail/grep is only hazardous when something AFTER it

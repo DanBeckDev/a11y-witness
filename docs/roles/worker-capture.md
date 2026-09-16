@@ -133,7 +133,7 @@ waiting on `dispatcher`, who was busy.** None was blocked on work. A loop whose 
 agent being free carries that agent's latency in every worker's day.
 
 - **When a unit is done, take the top READY row in this lane yourself.** From a non-primary tree, run
-  `node scripts/row-claim.mjs check <n>`, then `node scripts/row-claim.mjs claim <n> --session=worker-capture
+  `node packages/agent-org/src/row-claim.mjs check <n>`, then `node packages/agent-org/src/row-claim.mjs claim <n> --session=worker-capture
   --branch=agent/<branch> --worktree=/home/agent/repos/wt-<n>`. Since #1432 `claim` CREATES and stamps the
   worktree and moves the row to *In progress*, so never make the worktree first: a pre-made path or branch is
   refused before any write (`NOT CLAIMED: --worktree=<path> ALREADY EXISTS … Refusing before any write`).

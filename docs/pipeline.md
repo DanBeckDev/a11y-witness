@@ -12,8 +12,8 @@ the machinery that merges everything else.
 | | what it does | where |
 |---|---|---|
 | **1** | auto-arm every non-draft PR against `main` on `opened`/`ready_for_review` | `.github/workflows/auto-arm.yml` |
-| **1c** | sweep the PRs unit 1 structurally cannot see — the ones already open when it shipped | `scripts/auto-arm-sweep.mjs`, same workflow |
-| **1d** | close the rows a merged PR declared, because GitHub does not do it for a bot merge | `trunk.yml`'s `closeRows` job (#909; `close-rows.yml` until 2026-09-12), `scripts/close-rows-sweep.mjs`, `scripts/close-rows-for-merged-pr.mjs` |
+| **1c** | sweep the PRs unit 1 structurally cannot see — the ones already open when it shipped | `packages/agent-org/src/auto-arm-sweep.mjs`, same workflow |
+| **1d** | close the rows a merged PR declared, because GitHub does not do it for a bot merge | `trunk.yml`'s `closeRows` job (#909; `close-rows.yml` until 2026-09-12), `packages/agent-org/src/close-rows-sweep.mjs`, `packages/agent-org/src/close-rows-for-merged-pr.mjs` |
 | **2** | run the `Acceptance:`/`Mutation:` commands out of a PR body (#353) | not built |
 | **3** | revert a push that fails `gate` on `main` | `trunk.yml`, `decideRevert` |
 | **4** | continuous delivery to npm `next`, and fleet self-deploy | not built |
@@ -66,7 +66,7 @@ automatically on every runner**, so no workflow here assigns it a literal; each 
 `${{ github.repository }}` through, which is the same value by a route that cannot drift from the repo the
 job is actually running in.
 
-Read by `scripts/auto-arm-sweep.mjs` and `scripts/close-rows-for-merged-pr.mjs`.
+Read by `packages/agent-org/src/auto-arm-sweep.mjs` and `packages/agent-org/src/close-rows-for-merged-pr.mjs`.
 
 **Both exit `2` (CANNOT_ASK) when it is unset rather than defaulting to a repo name**, and that refusal is
 the point: one of them arms merges and the other closes issues, so a guessed repository would take a real
@@ -76,7 +76,7 @@ answer — the rule this repository states most often.
 **Set it yourself when running either script by hand**, which is the normal way to rehearse one:
 
 ```bash
-GITHUB_REPOSITORY=DanBeckDev/a11y-witness node scripts/auto-arm-sweep.mjs
+GITHUB_REPOSITORY=DanBeckDev/a11y-witness node packages/agent-org/src/auto-arm-sweep.mjs
 ```
 
 Note that the sweep **arms real PRs** when it runs, so a rehearsal is not free. To see its decisions
@@ -166,7 +166,7 @@ green-then-behind is the condition rather than the impatience.
 
 ## `update-branch` moves your branch under you — a non-fast-forward is the train, not a violation
 
-The `update-branch` job in `.github/workflows/auto-arm.yml` runs `scripts/update-branch-sweep.mjs` on
+The `update-branch` job in `.github/workflows/auto-arm.yml` runs `packages/agent-org/src/update-branch-sweep.mjs` on
 **every push to `main`**, and it pushes to *other people's branches*: every merge leaves every other open
 PR one commit further behind, and something has to close that gap.
 
@@ -303,7 +303,7 @@ or on their exit codes, only on how deep the checkout is before they run.
 
 ### The declaration above is opt-in, and #621 stopped trusting it alone
 
-`board-style.test.ts` reached `gh` (through `collect()` in `scripts/board-data.mjs`) with **no
+`board-style.test.ts` reached `gh` (through `collect()` in `packages/agent-org/src/board-data.mjs`) with **no
 `// requires:` header at all**, and #510's mechanism could not see it — an opt-in declaration cannot catch
 the file whose author did not know there was something to declare. Fourth instance of the shape in two
 days (#382, #619).
@@ -358,7 +358,7 @@ declaration. Measured the same day, twice: a PR that said, mid-sentence, *"the w
 #494"* closed #494 while declaring `none`; a PR that said *"whose acceptance now says it \`closes #492\`"*
 closed #492 the same way. Both had to be reopened by hand.
 
-**`scripts/closes-mismatch-check.mjs` compares two facts this pipeline already holds**, rather than
+**`packages/agent-org/src/closes-mismatch-check.mjs` compares two facts this pipeline already holds**, rather than
 trusting either alone: what the body DECLARED (`extractClosesDeclaration`, B7's own gate, already run in
 `acceptance`) against what GitHub actually RESOLVES (`lookupClosingIssues`, the same
 `closingIssuesReferences` query `close-rows-for-merged-pr.mjs` already relies on). Neither is new work —
@@ -452,7 +452,7 @@ state the run list will never report.
 ## An Acceptance block is EXECUTED, so it holds commands and nothing else
 
 The `acceptance` job runs every line of a PR body's Acceptance section as a command
-(`scripts/acceptance-commands.mjs`). That is the whole point of #353 — nothing had ever run a row's
+(`packages/agent-org/src/acceptance-commands.mjs`). That is the whole point of #353 — nothing had ever run a row's
 acceptance, and every one was an author's prose report of a result nobody re-derived. It also means the
 section is an argv list wearing prose's clothes, and two shapes that read perfectly well to a person are
 executed as nonsense.
@@ -502,7 +502,7 @@ each cost a full CI cycle to discover.
 
 ```
 node -e "import('./scripts/acceptance-commands.mjs').then(...)"   # what the runner will execute
-node scripts/owned-path-signoff.mjs --diff=<file> --body=<file>   # exit 0, or what it wants stated
+node packages/agent-org/src/owned-path-signoff.mjs --diff=<file> --body=<file>   # exit 0, or what it wants stated
 ```
 
 **A cheap pre-check is for deciding whether to bother running the real one, never for concluding the
@@ -690,7 +690,7 @@ for that four times in one release — and here the window had a live guard in i
 
 ## A lane is who may CHANGE a path
 
-`scripts/workflow-lane-check.mjs`, a step in `mergeSafety`, refuses a PR that changes a lane-owned path
+`packages/agent-org/src/workflow-lane-check.mjs`, a step in `mergeSafety`, refuses a PR that changes a lane-owned path
 from a branch outside that lane. Today there is one lane: `.github/workflows/` belongs to `dispatcher`.
 
 The reason is measured. On 2026-09-08 a `pull_request: [closed]` trigger was added to
@@ -721,7 +721,7 @@ declare. A path can be lane-owned and fact-free, or fact-heavy and open to every
 together would make one owner's edit silently move the other's rule.
 
 **Run `signoffVerdict` against your own body before pushing, not after CI reads it back to you.** The
-check (`scripts/owned-path-signoff.mjs`) is a pure function of `{changed, body, facts}`, so there is no
+check (`packages/agent-org/src/owned-path-signoff.mjs`) is a pure function of `{changed, body, facts}`, so there is no
 reason the first time it examines your wording is in a run you cannot see failing until it already has:
 
 ```js

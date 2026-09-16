@@ -86,6 +86,6 @@ export function changedPackagesAgainstOrigin() {
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
   // Guarded per #164: takes no flags; `--name-only` is passed onward to git.
-  refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/changed-packages.mjs" });
+  refuseUnknownFlags([], { entry: import.meta.url, command: "node packages/guards/src/changed-packages.mjs" });
   process.stdout.write(changedPackagesAgainstOrigin().join(" "));
 }

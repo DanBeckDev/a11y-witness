@@ -48,7 +48,7 @@
 //   2  refused before mutating -- the test was already failing, or the arguments are unusable
 //   3  THE RESTORE FAILED -- the file on disk is not what it was. Loud, and the copy is left in place.
 //
-// #516: DO NOT NAME THIS SCRIPT ON A `Refutation:` LINE. `Refutation:` (scripts/acceptance-commands.mjs)
+// #516: DO NOT NAME THIS SCRIPT ON A `Refutation:` LINE. `Refutation:` (packages/agent-org/src/acceptance-commands.mjs)
 // reads success as any NON-ZERO exit (#438) -- the OPPOSITE of exit 0 above meaning the guard bites. That
 // parser now refuses (rather than misreads) a `Refutation:` line naming `mutate`; paste this script's real
 // output under an unparsed heading instead (#504).
