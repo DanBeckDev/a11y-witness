@@ -48,7 +48,7 @@ export function changedFiles(range, { repoRoot = process.cwd(), pathspec = [] } 
     .split("\n").filter(Boolean);
 }
 
-// The CLI half, for the workflow steps that cannot import: `node scripts/changed-files.mjs origin/main...HEAD`
+// The CLI half, for the workflow steps that cannot import: `node packages/guards/src/changed-files.mjs origin/main...HEAD`
 // prints one path per line, which is what `> /tmp/lane-changed.txt` wants.
 //
 // `realpathSync` on argv[1], because without it the guard below silently does not fire through a symlink
@@ -63,10 +63,10 @@ if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.arg
   refuseUnknownFlags([], {
     entry: import.meta.url,
     argv: at === -1 ? argv : argv.slice(0, at),
-    command: "node scripts/changed-files.mjs",
+    command: "node packages/guards/src/changed-files.mjs",
   });
   if (argv.length === 0) {
-    console.error("usage: node scripts/changed-files.mjs <range...> [-- <pathspec...>]");
+    console.error("usage: node packages/guards/src/changed-files.mjs <range...> [-- <pathspec...>]");
     process.exit(2);
   }
   const pathspec = at === -1 ? [] : argv.slice(at + 1);

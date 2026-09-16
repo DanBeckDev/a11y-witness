@@ -1,6 +1,6 @@
 {
   "_owner": "orchestrator",
-  "_why": "ceo's ruling 2026-09-07 (#356): 'Orchestrator writes the fact list; that is its code ownership expressed in a check.' This file IS that ownership. It is data so the owner can correct and extend it without touching scripts/owned-path-signoff.mjs, and so the mechanism cannot quietly decide what the facts are.",
+  "_why": "ceo's ruling 2026-09-07 (#356): 'Orchestrator writes the fact list; that is its code ownership expressed in a check.' This file IS that ownership. It is data so the owner can correct and extend it without touching packages/agent-org/src/owned-path-signoff.mjs, and so the mechanism cannot quietly decide what the facts are.",
   "_starting_list": "These are ceo's starting facts, seeded so the check can run at all. They are explicitly TO BE CORRECTED AND EXTENDED by the owner -- a seeded list is not an owned one, and nothing here should be read as orchestrator having reviewed it.",
   "owned": [
     "packages/nvda-worker/",

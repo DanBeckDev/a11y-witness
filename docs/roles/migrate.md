@@ -73,7 +73,7 @@ and resuming it is cheaper and more complete than re-deriving it from role files
    start when it works.
 2. **If resume fails** (transcript not carried over, harness mismatch, corrupted state) **fall back to the
    role file**, per `docs/roles/README.md`'s first-message table, PLUS `docs/roles/memory/MEMORY.md` — this
-   is exactly what `scripts/reconstitution-drill.mjs` composes automatically; run it rather than
+   is exactly what `packages/agent-org/src/reconstitution-drill.mjs` composes automatically; run it rather than
    re-assembling the message by hand.
 3. Bring up `orchestrator` before `dispatcher` before workers, matching `docs/roles/README.md`'s reasoning
    — nothing else can be usefully briefed against real fleet/lab state until the driver exists, whether

@@ -7,7 +7,7 @@
 // else"*. That is right for a guard whose population IS the repository. Measured by running all 131 of them
 // under this module's observer: 38 walk the whole repository and 69 read inside a product package -- but 24
 // read nothing a product diff can touch, and 6 of those nothing outside their own imports at all. Five of the
-// 6 transitively import `scripts/ready-label-audit.mjs`, whose `run("git", ["for-each-ref", ...])` the static
+// 6 transitively import `packages/agent-org/src/ready-label-audit.mjs`, whose `run("git", ["for-each-ref", ...])` the static
 // predicate reads as a walk; the tests never take that path. A first observer that saw only the sync `fs`
 // calls and argv `git` counted 17 / 83 / 31: child processes and root listings, which it could not see, are
 // the difference.
@@ -258,7 +258,7 @@ function pointsHere(/** @type {string} */ value, /** @type {string} */ where) {
 /**
  * A git run from OUTSIDE this checkout that is pointed back at it anyway: by `--git-dir`/`--work-tree`, by a
  * `GIT_*` variable in the environment it runs with -- git exports `GIT_DIR` into every hook, per
- * `scripts/git-env.mjs` -- or by an operand, as a clone source is.
+ * `packages/guards/src/git-env.mjs` -- or by an operand, as a clone source is.
  * @param {{ where: string, redirects: string[], rest: string[] }} git @param {{ env?: unknown } | undefined} options
  */
 function pointedBackHere({ where, redirects, rest }, options) {

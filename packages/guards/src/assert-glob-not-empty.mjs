@@ -17,8 +17,8 @@
 // this floor has to live OUTSIDE the suite: a plain script, run BEFORE `tsx --test` is ever invoked,
 // never another `*.test.ts` (that is the defect this row exists to end, one level further in).
 //
-//   node scripts/assert-glob-not-empty.mjs <glob...> [--min=N]                 -- check only
-//   node scripts/assert-glob-not-empty.mjs <glob...> [--min=N] [--drop-empty] --run [--runner=tsx|rstest] [--test-concurrency=N]
+//   node packages/guards/src/assert-glob-not-empty.mjs <glob...> [--min=N]                 -- check only
+//   node packages/guards/src/assert-glob-not-empty.mjs <glob...> [--min=N] [--drop-empty] --run [--runner=tsx|rstest] [--test-concurrency=N]
 //
 // Each glob given is resolved independently and must match at least `--min` files (default 1 -- "not
 // vacuous", never "exactly this many"). A directory rename, a package restructure, or #66's tree-wide
@@ -130,7 +130,7 @@ export function runnerInvocation({ runner, patterns, concurrency }) {
 
 function main() {
   refuseUnknownFlags(["--min", "--drop-empty", "--run", "--runner", "--test-concurrency"],
-    { entry: import.meta.url, command: "node scripts/assert-glob-not-empty.mjs" });
+    { entry: import.meta.url, command: "node packages/guards/src/assert-glob-not-empty.mjs" });
   const given = process.argv.slice(2).filter((arg) => !arg.startsWith("--"));
   if (!given.length) {
     process.stderr.write("assert-glob-not-empty: no glob pattern given -- nothing to check.\n");

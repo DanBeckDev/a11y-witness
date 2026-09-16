@@ -800,7 +800,7 @@ The first published version of `a11ign`. Everything below landed before it: the 
   because a file added anywhere can join such a population. That stays exactly as it is. Measured by running
   all 131 always-run guards under the new observer: 38 walk the whole repository and 69 read inside a product
   package, but **24 read nothing a product diff can touch**. Six of those read nothing outside their own
-  imports at all, and five of the six are flagged only because they import `scripts/ready-label-audit.mjs`,
+  imports at all, and five of the six are flagged only because they import `packages/agent-org/src/ready-label-audit.mjs`,
   whose `run("git", ["for-each-ref", …])` the static predicate reads as a walk.
 
   A guard may now write `export const WALK_SCOPE = ["docs"];`, and `narrowByDeclaredScope` leaves it out of a

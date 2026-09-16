@@ -77,7 +77,7 @@ whether a real one is worth requesting.
   together. A lane with nothing ready is still a complete report — say so, with what was checked, in that
   same message.
 - **Self-pull the next ready row** from `https://github.com/users/DanBeckDev/projects/2` rather than
-  waiting to be briefed. **`node scripts/row-claim.mjs check <n>` FIRST** — the region check below answers
+  waiting to be briefed. **`node packages/agent-org/src/row-claim.mjs check <n>` FIRST** — the region check below answers
   "would I collide in this file", not "is somebody already on this row", and #28/#30 (2026-09-06) were
   each pulled twice by a clean, correct region check against a row that was already claimed with no file
   yet touched. `row-claim.mjs claim <n> --session=worker-audit` takes it once confirmed open.

@@ -58,12 +58,12 @@ this laptop's local corpus was a retired VM pool at a protocol nobody was asking
 
 **The loop is pull, not push.**
 
-1. **When a unit is done, take the top ready row in this lane myself.** `node scripts/row-claim.mjs check
+1. **When a unit is done, take the top ready row in this lane myself.** `node packages/agent-org/src/row-claim.mjs check
    <n>` FIRST — the board's `in-progress`/`session:*` labels are where a claim actually lives, and the
    region check below cannot see one: #28/#30 (2026-09-06) were each pulled twice by a region check that
    was clean and correct against a row already claimed with no file yet touched. Then check it is still
    open against `origin/main` PLUS every unmerged `agent/*` branch (never HEAD alone), check the region
-   for collision, and, from a non-primary tree, `node scripts/row-claim.mjs claim <n> --session=worker-judge
+   for collision, and, from a non-primary tree, `node packages/agent-org/src/row-claim.mjs claim <n> --session=worker-judge
    --branch=agent/<branch> --worktree=/home/agent/repos/wt-<n>` to take it. Since #1432 that CREATES and
    stamps the worktree itself, so never make it first: a pre-made path or branch is refused before any write
    (`NOT CLAIMED: --worktree=<path> ALREADY EXISTS … Refusing before any write`). It then claims first and

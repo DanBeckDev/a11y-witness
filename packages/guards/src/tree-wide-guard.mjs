@@ -2,7 +2,7 @@
 // @ts-check
 // THE TREE-WIDE-GUARD MARKER -- #716/#704, ceo's ruling 2026-09-09.
 //
-// `scripts/tree-wide-guards.mjs`'s discovery used to grep comment-stripped source for the literal
+// `packages/guards/src/tree-wide-guards.mjs`'s discovery used to grep comment-stripped source for the literal
 // substring "ls-files" -- a real fix for the mention-vs-use trap (a comment describing a tree walk no
 // longer counted), but still "a test deriving its expectations from source TEXT", this repo's own
 // most-repeated defect shape (CLAUDE.md, "A LIST OF FIELDS TO CHECK", "signal regexes broke whenever...").
@@ -17,7 +17,7 @@
 // calling it; the population is then a fact the tree computes from the import graph, never a keyword a
 // future guard might happen to share or fail to spell the expected way.
 //
-//   node scripts/tree-wide-guards.mjs     one path per line, for `npm run guards:sweep`
+//   node packages/guards/src/tree-wide-guards.mjs     one path per line, for `npm run guards:sweep`
 import { execFileSync } from "node:child_process";
 import { extname } from "node:path";
 import { createRequire } from "node:module";
@@ -50,7 +50,7 @@ export function _typescriptLoadedForTests() {
 
 /**
  * Call this once, at module scope, in any test whose own population is the whole tracked tree rather than
- * one file. The return value carries no meaning -- `scripts/tree-wide-guards.mjs`'s discovery only checks
+ * one file. The return value carries no meaning -- `packages/guards/src/tree-wide-guards.mjs`'s discovery only checks
  * that the CALL exists (never merely the import), the same "imported is not used" distinction
  * `git-spawn-classification.test.ts`'s own `usesCanonicalHelper` already draws for the identical reason.
  * @returns {true}
