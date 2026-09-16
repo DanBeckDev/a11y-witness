@@ -36,7 +36,7 @@ import { availableParallelism } from "node:os";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const registerHook = fileURLToPath(new URL("./register-node-test-alias.mjs", import.meta.url));
-const walkScope = fileURLToPath(new URL("../walk-scope.mjs", import.meta.url));
+const walkScope = fileURLToPath(new URL("../../packages/guards/src/walk-scope.mjs", import.meta.url));
 
 /**
  * #1319: whether `CI` names a CI run. GitHub Actions sets `CI=true`. An unset, empty or `false` value is a local run.

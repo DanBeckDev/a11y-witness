@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
-import { sandboxGitEnv } from "../../../scripts/git-env.mjs";
+import { sandboxGitEnv } from "../../guards/src/git-env.mjs";
 
 import { stripComments } from "@a11ign/evidence/source-text";
 

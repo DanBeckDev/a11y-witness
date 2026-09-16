@@ -24,7 +24,7 @@ import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 import {
   REPO, MILESTONE, HOURS_MS, READ_SET,
   gh, git, issues, milestone, mergeState, misAuthored, reported, daysUntil, readSetIsNotMain, countable,
-  conflictMetrics} from "./board-data.mjs";
+  conflictMetrics, readyRows} from "./board-data.mjs";
 import { editionDay } from "./board-discussion.mjs";
 
 const argv = process.argv.slice(2);
@@ -277,7 +277,7 @@ function facts(since, sinceLabel) {
   // Meta rows are containers, not work -- see `countable` in board-data.mjs, and section 6 prints the rule.
   const open = countable(all.filter((/** @type {any} */ i) => i.state === "OPEN"));
   const blockers = open.filter((/** @type {any} */ i) => i.milestone?.title === MILESTONE);
-  const ready = open.filter((/** @type {any} */ i) => i.labelNames.includes("ready"));
+  const ready = readyRows(open);
   const awaiting = open.filter((/** @type {any} */ i) => i.labelNames.includes("awaiting-merge"));
 
   return { since, sinceLabel, all, ms, merges, unpushed, strays, latestGate, gateIsFresh,

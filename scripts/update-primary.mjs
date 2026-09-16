@@ -12,12 +12,12 @@
 // `pre-commit`/`post-checkout` already use, imported rather than restated.
 import { execFileSync } from "node:child_process";
 import { isPrimaryWorktree } from "./prune-worktrees.mjs";
-import { sandboxGitEnv } from "./git-env.mjs";
+import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
 import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 import { npmCliInvocation } from "./npm-cli-executable.mjs";
-import { changedFiles } from "./changed-files.mjs";
+import { changedFiles } from "../packages/guards/src/changed-files.mjs";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 
@@ -76,7 +76,7 @@ export const LOCKFILE = "package-lock.json";
  * A HEAD that did not move asks nothing: there is no range, and a `git diff` of a commit against itself
  * would be a question whose answer is empty by construction.
  *
- * ASKED THROUGH `scripts/changed-files.mjs`, the one place this repository asks git which paths a range
+ * ASKED THROUGH `packages/guards/src/changed-files.mjs`, the one place this repository asks git which paths a range
  * touched (#939), so a lockfile moved away is listed under the path it left. `changed` is that helper,
  * injected so a test can answer for git.
  *

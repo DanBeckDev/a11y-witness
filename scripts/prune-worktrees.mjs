@@ -69,7 +69,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
-import { sandboxGitEnv } from "./git-env.mjs";
+import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 
 /** @type {(cmd: string, args: string[], opts: { cwd: string }) => string} */
 const defaultRun = (cmd, args, opts) =>

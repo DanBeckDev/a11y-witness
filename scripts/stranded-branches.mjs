@@ -52,7 +52,7 @@ import { pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
 import { refuseUnknownFlags, flagValue } from "@a11ign/worker-fleet/cli-flags";
 import { REPO } from "./repo-identity.mjs";
-import { sandboxGitEnv } from "./git-env.mjs";
+import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 import { assertNoLeakInArgv } from "../packages/lab/src/packaging/leak-patterns.mjs";
 
 export const EXIT = { OK: 0, CANDIDATES: 1, CANNOT_ASK: 2, LANDED_THEN_FAILED: 3 };

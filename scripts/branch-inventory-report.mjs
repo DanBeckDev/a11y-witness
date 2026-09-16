@@ -16,7 +16,7 @@ import { pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
 import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 import { REPO } from "./repo-identity.mjs";
-import { sandboxGitEnv } from "./git-env.mjs";
+import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 import { branchFacts, renderInventory, rowNumberFromBranch, sessionFromLabels, reconcile }
   from "./branch-inventory.mjs";
 

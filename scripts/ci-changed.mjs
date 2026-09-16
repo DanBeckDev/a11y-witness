@@ -35,24 +35,24 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync, appendFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { changedFiles } from "./changed-files.mjs";
+import { changedFiles } from "../packages/guards/src/changed-files.mjs";
 // RELATIVE, NOT `@a11ign/worker-fleet/cli-flags` — every other root script uses the package
 // specifier, and every other root script runs after `npm run build`. This one gates whether ANYTHING
 // else in the workflow builds at all, so it cannot depend on a build having already happened; the file
 // itself is plain JS with no TypeScript syntax, so importing straight from `src` costs nothing.
 import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-flags.mjs";
-import { sandboxGitEnv } from "./git-env.mjs";
+import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 // REUSED, NOT RE-DERIVED. `changedPackages` already exists, already extracts `packages/<name>` from a
 // diff, and already has its own test (`changed-packages.test.ts`) proving it against real shapes (a
 // rename, a deletion, a file directly under `packages/` with no subdirectory). Writing a second copy of
 // `/^packages\/([^/]+)\//` here would be the exact defect this file's own header names.
-import { changedPackages } from "./changed-packages.mjs";
+import { changedPackages } from "../packages/guards/src/changed-packages.mjs";
 // REUSED FOR REAL THIS TIME. The comment on `packedFiles` below has claimed this reuse since #132 while
 // the function beneath it carried its own, second `npm pack --dry-run --json` call -- two derivations of
 // "what does a package actually ship" guarding the identical promise, the exact fact-stated-twice shape
 // this file's own header opens with. `isolation-gate.mjs` is this repo's other, older answer to the same
 // question (does a consumer's install actually work), so it is the one authority now.
-import { packedFiles as packedFilesForDir } from "./isolation-gate.mjs";
+import { packedFiles as packedFilesForDir } from "../packages/guards/src/isolation-gate.mjs";
 
 /**
  * Every top-level package directory this repo has, read once rather than hardcoded twice.
@@ -392,7 +392,7 @@ export function classify(files, allPackages, dependencyGraph = {},
   const rootScriptsChanged = files.some((f) => /^scripts\/.*\.mjs$/.test(f));
   // A root config file (tsconfig, eslint config, the workspace's own package.json) OR a `scripts/*.mjs`
   // file can change what EVERY package lints, typechecks or tests as — dozens of packaging tests import
-  // `scripts/git-env.mjs`, `scripts/cli-flags.mjs` and their siblings directly, so a change there is not
+  // `packages/guards/src/git-env.mjs`, `scripts/cli-flags.mjs` and their siblings directly, so a change there is not
   // scoped to any one package. Both are treated as touching every package rather than none, matching the
   // pre-push hook's own rule: an EMPTY touched-package result must read as "run everything", never as
   // "run nothing" (`scripts/git-hooks/pre-push`'s FAST/FULL split header states this for the identical

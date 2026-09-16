@@ -423,7 +423,7 @@ jobs:
           # #939: THE ONE HELPER, so the SOURCE side of a rename is listed. A bare `git diff --name-only`
           # prints only where a file WENT, so a pull request moving a file OUT of another session's lane was
           # not seen by the check that owns that lane -- a bypass, not merely a short list.
-          node scripts/changed-files.mjs origin/${{ github.base_ref }}...HEAD > /tmp/lane-changed.txt
+          node packages/guards/src/changed-files.mjs origin/${{ github.base_ref }}...HEAD > /tmp/lane-changed.txt
           printf '%s' "$PR_BODY" > /tmp/lane-body.txt
           node scripts/workflow-lane-check.mjs \
             --diff=/tmp/lane-changed.txt \

@@ -42,7 +42,7 @@ import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { readFileSync, realpathSync } from "node:fs";
 import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
-import { sandboxGitEnv } from "./git-env.mjs";
+import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 import { REPO } from "./repo-identity.mjs";
 import { gh, lookup, lookupCheckRuns } from "./merge-guard.mjs";
 

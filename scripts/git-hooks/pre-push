@@ -41,7 +41,7 @@
 # `main` pushes are UNCHANGED: full suite, every time, because nothing else gates a merge to `main`.
 # `agent/*`/`lead/*` pushes run a FAST gate instead — lint, typecheck (both whole-repo checks regardless of
 # branch, so neither shrinks), and unit tests SCOPED to the packages/<name> directories the branch actually
-# touched against `origin/main` (`scripts/changed-packages.mjs`). A push touching no `packages/` file at
+# touched against `origin/main` (`packages/guards/src/changed-packages.mjs`). A push touching no `packages/` file at
 # all (docs, this hook, the workflow) runs every package's tests -- an EMPTY touched-package result must
 # read as "run everything", never as "run nothing", the same rule this repo's discovery tests already
 # apply to an empty walk.
@@ -574,7 +574,7 @@ run_gate() { # run_gate <branch-label>
   if git rev-parse --verify -q origin/main >/dev/null; then
     while IFS= read -r changed_path; do
       [ -n "$changed_path" ] && add_lint_path "$changed_path"
-    done < <(node scripts/changed-files.mjs origin/main...HEAD)
+    done < <(node packages/guards/src/changed-files.mjs origin/main...HEAD)
   else
     # FAILS CLOSED, not open: with no base ref there is no committed diff to scope by, so read the whole
     # tree rather than read nothing and print "ok".

@@ -179,7 +179,7 @@ describes the ADR 0002 design (a generative pass refined by a DeBERTa gate) and 
 `dist`, `src/local-worker`, `src/provisioning`. `npm pack --dry-run` in that directory produces 133 files
 including `dist/cli-flags.mjs` and no top-level `src/*.mjs`. From a tarball the import fails with
 `ERR_MODULE_NOT_FOUND`; in the workspace it resolves through the symlink. It is the most-imported subpath in
-the repo (42 sites, every one in `lab`). `scripts/isolation-gate.mjs:143-147` skips private packages by
+the repo (42 sites, every one in `lab`). `packages/guards/src/isolation-gate.mjs:143-147` skips private packages by
 design, and `cli/isolation-smoke.mjs` never imports it, so the gate that exists to catch exactly this class
 ("exports subpaths that do not resolve", `isolation-gate.mjs:16`) is green. The fix is one character class:
 point the export at `./dist/cli-flags.mjs`, which already exists.

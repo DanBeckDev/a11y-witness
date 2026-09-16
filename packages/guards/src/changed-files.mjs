@@ -32,7 +32,7 @@ import { sandboxGitEnv } from "./git-env.mjs";
 // ERR_MODULE_NOT_FOUND before `npm ci` finishes. `cli-flags.mjs` imports only `node:` builtins, so the
 // leaf property above survives the import -- `pre-install-import-graph.test.ts` is what checks that, and
 // it walks relative imports rather than taking this comment's word for it.
-import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
+import { refuseUnknownFlags } from "../../worker-fleet/src/cli-flags.mjs";
 
 /**
  * The paths a range changed, repo-relative, with the source side of every rename included.

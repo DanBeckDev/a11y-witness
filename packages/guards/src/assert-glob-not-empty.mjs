@@ -38,7 +38,7 @@ import { globSync, realpathSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { refuseUnknownFlags, flagValue } from "@a11ign/worker-fleet/cli-flags";
-import { npmCliInvocation } from "./npm-cli-executable.mjs";
+import { npmCliInvocation } from "../../../scripts/npm-cli-executable.mjs";
 
 /**
  * Pure: which of the given globs resolved to fewer than `min` files, and how many each actually matched.
@@ -93,7 +93,7 @@ function dropEmptyPatterns(patterns) {
 export const RUNNERS = Object.freeze(["tsx", "rstest"]);
 
 /** #1319: the rstest config every rstest run uses, resolved from this file so the caller's cwd cannot change it. */
-export const RSTEST_CONFIG = fileURLToPath(new URL("./rstest/rstest.config.mjs", import.meta.url));
+export const RSTEST_CONFIG = fileURLToPath(new URL("../../../scripts/rstest/rstest.config.mjs", import.meta.url));
 
 /**
  * #1319: THE COMMAND `--run` EXECUTES, PURE, so the runner switch is pinned by a test rather than read off a spawn.

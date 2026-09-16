@@ -45,7 +45,7 @@ import { appendFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
-import { sandboxGitEnv } from "./git-env.mjs";
+import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 import { gitCommonDir } from "./merge-guard.mjs";
 import { REPO } from "./repo-identity.mjs";
 import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";

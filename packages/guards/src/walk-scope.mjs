@@ -53,7 +53,7 @@ const nodeTest = require("node:test");
 const moduleApi = require("node:module");
 
 // REAL, because every comparison below is against a real path: on macOS `/tmp` is a link to `/private/tmp`.
-export const REPO_ROOT = fs.realpathSync.native(resolve(fileURLToPath(new URL("..", import.meta.url))));
+export const REPO_ROOT = fs.realpathSync.native(resolve(fileURLToPath(new URL("../../../", import.meta.url))));
 
 /** A read that cannot be bounded to a subtree -- a whole-repository walk. Never inside any declared scope. */
 export const WHOLE_REPOSITORY = "(the whole repository)";
@@ -654,7 +654,7 @@ export async function declareWalkScope(testUrl) {
     // Dynamic, not static: the selector's module graph is loaded only when a declaring guard's tests finish,
     // and never ahead of the observer in a declarer's import order.
     const [{ sourceClosure, packageIndex }, { knownPackages }] = await Promise.all(
-      [import("./select-changed-tests.mjs"), import("./ci-changed.mjs")]);
+      [import("../../../scripts/select-changed-tests.mjs"), import("../../../scripts/ci-changed.mjs")]);
     const packages = packageIndex(REPO_ROOT, knownPackages(REPO_ROOT));
     const own = new Set([...sourceClosure(testPath, REPO_ROOT, packages)]
       .map((absolute) => relative(REPO_ROOT, absolute)));

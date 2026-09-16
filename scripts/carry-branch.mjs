@@ -51,7 +51,7 @@ import { mkdtempSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { sandboxGitEnv } from "./git-env.mjs";
+import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 import { REPO } from "./repo-identity.mjs";
 import { parseWorktreeList } from "./prune-worktrees.mjs";
 import { stampWorktree } from "./worktree-owner.mjs";

@@ -48,8 +48,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 // RELATIVE, for `ci-changed.mjs`'s documented reason: this file is in that script's import graph, and
 // `ci.yml`'s `changed` job runs no `npm ci` — it decides whether anything else installs at all. A package
 // specifier here dies before the workflow starts.
-import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
-import { npmCliInvocation } from "./npm-cli-executable.mjs";
+import { refuseUnknownFlags } from "../../worker-fleet/src/cli-flags.mjs";
+import { npmCliInvocation } from "../../../scripts/npm-cli-executable.mjs";
 
 export const SMOKE = "isolation-smoke.mjs";
 
@@ -366,7 +366,7 @@ export function checkIsolation(packageDir) {
 
 /** Every real package, so neither the gate nor the build can run against a stale hand-written list. */
 export function allPackages() {
-  const root = fileURLToPath(new URL("../packages/", import.meta.url));
+  const root = fileURLToPath(new URL("../../", import.meta.url));
   if (!existsSync(root)) return [];
   return readdirSync(root, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && existsSync(join(root, entry.name, "package.json")))
@@ -381,7 +381,7 @@ export function allPackages() {
 
 /** How many packages were skipped for being private — reported, so the gate's coverage is never overstated. */
 function countPrivatePackages() {
-  const root = fileURLToPath(new URL("../packages/", import.meta.url));
+  const root = fileURLToPath(new URL("../../", import.meta.url));
   if (!existsSync(root)) return 0;
   return readdirSync(root, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && existsSync(join(root, entry.name, "package.json")))

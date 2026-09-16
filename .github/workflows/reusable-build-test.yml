@@ -193,7 +193,7 @@ jobs:
               echo "loudly rather than silently running nothing."
               exit 1
             fi
-            node scripts/assert-glob-not-empty.mjs "${globs[@]}" --min=1 --drop-empty --run --runner=rstest
+            node packages/guards/src/assert-glob-not-empty.mjs "${globs[@]}" --min=1 --drop-empty --run --runner=rstest
           else
             files=(${{ steps.select.outputs.testFiles }})
             if [ "${#files[@]}" -eq 0 ]; then
@@ -202,7 +202,7 @@ jobs:
               echo "running nothing, this job's whole reason for existing."
               exit 1
             fi
-            node scripts/assert-glob-not-empty.mjs "${files[@]}" --min=1 --run --runner=rstest
+            node packages/guards/src/assert-glob-not-empty.mjs "${files[@]}" --min=1 --run --runner=rstest
           fi
       # UNSCOPED path -- trunk-guard's own choice, unchanged: the whole tree, never a per-package slice,
       # because every merge to main needs the full answer regardless of what that merge's own diff touched.

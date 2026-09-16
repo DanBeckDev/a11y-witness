@@ -25,7 +25,7 @@ import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { join, resolve } from "node:path";
 import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
-import { sandboxGitEnv } from "./git-env.mjs";
+import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 
 const README_REL = "docs/roles/README.md";
 const MEMORY_INDEX_REL = "docs/roles/memory/MEMORY.md";
