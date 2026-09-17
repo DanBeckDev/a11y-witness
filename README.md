@@ -169,6 +169,7 @@ OS-bound desktop application, so something has to run Windows — but it does no
 jobs:
   a11y:
     runs-on: windows-2022          # NVDA needs Windows; GitHub hosts these
+    timeout-minutes: 20           # a run that will not finish says so here, not after GitHub's own default
     permissions:
       contents: read
       pull-requests: write         # for the PR comment below; omit it and the report still runs, only quieter
