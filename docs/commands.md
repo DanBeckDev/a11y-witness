@@ -46,6 +46,8 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node packages/agent-org/src/update-branch-sweep.mjs` — push every armed, green-or-running PR up to main's new tip after a merge lands
 - `node packages/agent-org/src/update-primary.mjs` — the one sanctioned way to move the primary checkout: fetch, detach at origin/main, install if the lockfile moved, rebuild
 - `node packages/agent-org/src/work-gate.mjs` — work-gate -- is there work for any session? One cheap read; a wake order per line when yes.
+- `node packages/agent-org/src/wake.mjs` — wake -- deliver work-gate's orders to the sessions that can take them. The other half of #912.
+- `node packages/agent-org/src/work-tick.mjs` — work-tick -- one tick of the org: ask work-gate, hand the orders to wake. Runs on a timer.
 - `node packages/agent-org/src/workflow-run-liveness.mjs` — watchdog: did CI actually run before this commit reached main, checked automatically
 - `node packages/agent-org/src/worktree-owner.mjs` — print which session stamped a worktree, so a session can tell whose tree it is standing in
 - `node packages/guards/src/assert-glob-not-empty.mjs` — refuse a test glob that resolves to zero files instead of passing silently
