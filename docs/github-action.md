@@ -12,6 +12,7 @@ on:
 jobs:
   a11ign:
     runs-on: windows-2022        # NVDA is Windows-only; the action fails fast and says so otherwise
+    timeout-minutes: 20          # a run that will not finish says so here, not after GitHub's own default
     permissions:
       contents: read
       pull-requests: write       # for the PR comment below; omit it and the report still runs, only quieter
@@ -35,6 +36,11 @@ jobs:
 ```
 
 Save it as `.github/workflows/a11ign.yml`. It runs on every pull request, and `workflow_dispatch` also lets you start it by hand from the repository's Actions tab (or `gh workflow run a11ign.yml`).
+
+**`timeout-minutes: 20` bounds a run that will not finish** — a job that hangs or loses its runner leaves
+no log and no artifact, and any diagnostic step you add with `if: always()` does not run either; see
+[the account of one, and what to do about it](./try-it.md#the-fastest-route-a-github-actions-run) in
+`docs/try-it.md`.
 
 > **Pin this deliberately.** There is no tagged release yet, so `@main` is the only ref that resolves —
 > and it moves. If your CI must not change under you, pin the full commit SHA
