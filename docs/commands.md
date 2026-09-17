@@ -48,6 +48,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node packages/agent-org/src/work-gate.mjs` — work-gate -- is there work for any session? One cheap read; a wake order per line when yes.
 - `node packages/agent-org/src/wake.mjs` — wake -- deliver work-gate's orders to the sessions that can take them. The other half of #912.
 - `node packages/agent-org/src/work-tick.mjs` — work-tick -- one tick of the org: ask work-gate, hand the orders to wake. Runs on a timer.
+- `node packages/agent-org/src/worker-profile.mjs` — worker-profile -- which model and effort a wake order's CAUSE deserves. Data, not judgment.
 - `node packages/agent-org/src/workflow-run-liveness.mjs` — watchdog: did CI actually run before this commit reached main, checked automatically
 - `node packages/agent-org/src/worktree-owner.mjs` — print which session stamped a worktree, so a session can tell whose tree it is standing in
 - `node packages/guards/src/assert-glob-not-empty.mjs` — refuse a test glob that resolves to zero files instead of passing silently
