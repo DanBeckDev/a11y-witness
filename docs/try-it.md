@@ -47,6 +47,7 @@ on:
 jobs:
   a11ign:
     runs-on: windows-2022        # NVDA is Windows-only; the action fails fast anywhere else
+    timeout-minutes: 20          # a run that will not finish says so here, not after GitHub's own default
     permissions:
       contents: read
       pull-requests: write       # for the PR comment below; omit it and the report still runs, only quieter
@@ -123,9 +124,12 @@ result byte-identical to a 5 m 08 s run the same day** (34774183433); **a separa
 finished its capture alone, excluding judging, in 3 m 48.9 s, transcript byte-identical to a 4 m 44.7 s
 one** (runs 34782000257 and 34781484432). **So duration alone does not tell you which happened — check
 the report itself:** if it shows almost nothing on a page you know is large, you are looking at the banner
-(see the check below); a fast, full report is a good run.
+(see the check below); a fast, full report is a good run. The range above has no ceiling of its own — the
+workflow's own limit on a run that will not finish at all is stated below.
 
-**Those are capture times, not the job you are billed for.** Setup comes on top. The two most recent jobs measured at a single build, both at `3bb1fddf` with warm caches (V1 rehearsal 4, runs 34781484432 and 34782000257, 2026-09-13), took 6 m 42 s and 5 m 56 s for the whole job. The only cold-cache job measured is older and at a different build, `0e809d13` (V1 rehearsal 1, run 34764686304, the same day): setup 85.3 s, capture and judging 7 m 30 s, and 9 m 20 s for the whole job. Budget runner time for the job, not the capture.
+**Those are capture times, not the job you are billed for.** Setup comes on top. The two most recent jobs measured at a single build, both at `3bb1fddf` with warm caches (V1 rehearsal 4, runs 34781484432 and 34782000257, 2026-09-13), took 6 m 42 s and 5 m 56 s for the whole job. The only cold-cache job measured is older and at a different build, `0e809d13` (V1 rehearsal 1, run 34764686304, the same day): setup 85.3 s, capture and judging 7 m 30 s, and 9 m 20 s for the whole job. Budget runner time for the job, not the capture. The snippets above set `timeout-minutes: 20` on the job — a bit over twice the slowest one measured (9 m 20 s) — so a run that will not finish says so at 20, not after GitHub's own much longer job default.
+
+**A run that does not finish looks nothing like a slow one.** Rehearsal 5's run 34799670660 (same commit, page and task as a run that had just succeeded) started its Action step and never completed it: the job ended after 50 m 01 s with GitHub's own annotation, "The hosted runner lost communication with the server" — not a11ign's. It left no log (`gh run view --log` answered "log not found"), no artifact, and a diagnostic step added with `if: always()` never ran either. **This says nothing about why**, or how often — that count is its own row ([#1520](https://github.com/DanBeckDev/a11y-witness/issues/1520), still being measured: 1 lost of 12 runs so far whose Action step ran past 60 s). **What to do:** re-run the same commit. A single lost run like this one is evidence about GitHub's infrastructure that day, not about your page.
 
 ## The other route: run it from the repository
 
