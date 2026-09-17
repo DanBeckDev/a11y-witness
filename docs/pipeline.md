@@ -501,7 +501,7 @@ well thirty lines below a sentence that merely mentioned it. All four were bodie
 each cost a full CI cycle to discover.
 
 ```
-node -e "import('./scripts/acceptance-commands.mjs').then(...)"   # what the runner will execute
+node -e "import('./packages/agent-org/src/acceptance-commands.mjs').then(...)"   # what the runner will execute
 node packages/agent-org/src/owned-path-signoff.mjs --diff=<file> --body=<file>   # exit 0, or what it wants stated
 ```
 
@@ -726,7 +726,7 @@ reason the first time it examines your wording is in a run you cannot see failin
 
 ```js
 node -e '
-import("./scripts/owned-path-signoff.mjs").then(({ signoffVerdict, loadFacts }) => {
+import("./packages/agent-org/src/owned-path-signoff.mjs").then(({ signoffVerdict, loadFacts }) => {
   const body = require("fs").readFileSync("/dev/stdin", "utf8");
   const changed = require("child_process").execSync("git diff --name-only origin/main...HEAD").toString().split("\n").filter(Boolean);
   console.log(signoffVerdict({ changed, body, facts: loadFacts() }));

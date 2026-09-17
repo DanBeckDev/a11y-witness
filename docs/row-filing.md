@@ -110,7 +110,7 @@ grammar will change.** The check is one command, and it is the check to run befo
 region:
 
 ```bash
-node --input-type=module -e "import {declaredRegionFiles} from './scripts/region-paths.mjs';
+node --input-type=module -e "import {declaredRegionFiles} from './packages/agent-org/src/region-paths.mjs';
   import {readFileSync} from 'node:fs';
   console.log(declaredRegionFiles(readFileSync(process.argv[1],'utf8')))" <a file holding the row body>
 ```
