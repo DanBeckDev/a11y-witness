@@ -1,8 +1,15 @@
 <!--
 THE `Acceptance:` BLOCK BELOW IS RUN BY CI. `ci.yml`'s `acceptance` job (#353) hands each line to bash and
-its EXIT CODE is the verdict; a PR with no acceptance block FAILS `gate` with `ACCEPTANCE: MISSING`, and so
-does this template left unfilled. That is deliberate -- a check that finds nothing, runs nothing and
-reports green is this repository's most-recorded defect.
+its EXIT CODE is the verdict; a PR with no acceptance block reports `ACCEPTANCE: MISSING`, and so does this
+template left unfilled. That is deliberate -- a check that finds nothing, runs nothing and reports green is
+this repository's most-recorded defect.
+
+IT NO LONGER BLOCKS THE MERGE, and this paragraph used to say it did. #902 removed `acceptance` from
+`gate`'s `needs:` (ci.yml:519 lists `changed, ts, python, ansible, changeset, rulesFitness,
+deliberateRefusals` and not this job) after measuring that of forty red `ci` runs on pull requests, THIRTEEN
+were a real test, lint or typecheck failure and the rest were process jobs. It still runs and still reports
+its own verdict; a red `acceptance` is a thing to read, not a wall. An outside contributor whose change is
+covered by `npm test` can say so in one line and move on.
 
 The enforcement shipped before the field was documented anywhere an author looks, and five open PRs failed
 a gate for something nobody had been told about. Hence these lines at the top, rather than the rules living
@@ -55,7 +62,7 @@ Mutation:
 
 <!-- Tick what you ran. Not every box applies — see CONTRIBUTING.md for which apply to your change. -->
 
-- [ ] `npm test` (~850 tests, no worker)
+- [ ] `npm test` (the product suite: ~1,800 tests, no worker, no network)
 - [ ] `npm run lint` and `npm run typecheck`
 - [ ] `npm run training:check-signals` — if you touched a probe's output shape or a case definition
 - [ ] `npm run capture:check -- --worker=<url>` — **required** if you touched `capture-core.mjs`
