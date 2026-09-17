@@ -348,7 +348,7 @@ export {
 export type { Channel, ParsedAnnouncement, ParsedObject } from "./announcement.js";
 
 /** Where the examination ended, when an activation took the browser off the page's site (#1363). */
-export { announcesANewWindow, leftSite, leftSiteReason, withinTheSite } from "./left-site.js";
+export { addressBarHost, announcesANewWindow, leftSite, leftSiteReason, withinTheSite } from "./left-site.js";
 export type { LeftSite, ProbePhase, SiteBoundCapture } from "./left-site.js";
 
 /** Whether the capture examined enough of a channel to support a finding on it. */
