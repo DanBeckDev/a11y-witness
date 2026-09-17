@@ -53,7 +53,8 @@ A longer, commented version of the same workflow is in [`examples/workflow.yml`]
 
 **`fail-on` defaults to `never`.** A tool that breaks builds the day it is installed gets uninstalled. One
 that reports first, and fails when the team decides it should, gets adopted. Move to `blocker`, then
-`serious`, as you fix what it finds. A severity means *that or worse*.
+`serious`, as you fix what it finds. A severity means *that or worse*. **fail-on counts asserted findings;
+referrals are listed and never fail the run.** A referral is a person's decision, so no threshold fires on it.
 
 An **unrecognised** `fail-on` is a hard error rather than a fallback to `never`. A typo in a workflow file
 that silently produces a permanently green check is the failure nobody notices, because green is exactly
@@ -309,7 +310,7 @@ pressing submit part-way through filling would attribute the evidence to a state
 | `task-completable` | Whether the judge thinks a screen-reader user could finish the stated task. On the default `local` backend this only means nothing scored as a blocker, a coarse proxy. |
 | `result-json` | Path to the full result, including the transcript. Worth uploading as an artifact — the transcript is the evidence behind every finding. |
 
-`findings` counts every lived-experience finding, referred ones included. The one-line log splits them:
+`findings` counts every lived-experience finding, referred ones included; `fail-on` counts only the asserted ones. The one-line log splits them:
 `a11ign: 3 finding(s) (2 asserted: 1 serious, 1 moderate; 1 referred); fail-on=<your fail-on>`.
 
 ## What `result-json` contains
