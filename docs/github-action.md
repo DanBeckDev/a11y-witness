@@ -228,13 +228,21 @@ Less than its name suggests, and worth knowing before you agonise over the wordi
 
 | setting | does the task matter? |
 |---|---|
-| `probe-forms: true` (**the default here**) | **Yes — it changes the capture.** A button whose announced name shares a meaningful word with the task is activated, and what the screen reader says next is recorded. The word match is the safety guard: "show only bags" activates a *Bags* button, never *Delete account*. Asserted in `probe-choice.test.ts`. |
+| `probe-forms: true` (**the default here**) | **Yes, for one of several things it presses.** A run under `probe-forms` always submits submit-like buttons and toggles checkboxes/radio buttons, whatever the task says; it activates any OTHER button only if its announced name shares a meaningful word with the task — so "show only bags" activates a *Bags* button, never *Delete account*. Disclosures are activated with no `probe-forms` gate at all. Asserted in `probe-choice.test.ts`; see [SECURITY.md](../SECURITY.md#it-operates-controls-on-the-page-and-one-probe-presses-buttons) for the full rule. |
 | `judge-backend: anthropic` / `openai` | **Yes — it changes the verdict.** The LLM reads it and answers "could a screen-reader user finish this?" |
 | `judge-backend: local` (default) | **Not for the verdict.** The scorer has no head for task completion and never sees the task — `docs/local-model.md` bars it as a model feature. It still reports `task-completable`, but on this backend that only means nothing scored as a blocker: a coarse proxy, not a judgement about your task (see above). |
 
-So on the defaults the task **does** shape what gets captured, because `probe-forms` is on: it selects
-which control is operated, and therefore whether 3.3.1 and 4.1.3 evidence exists at all. It does not
-shape the judgement, because the default scorer never reads it.
+`probe-navigation` is separate from all of the above, has no input to disable it here, and has no
+task-word test either: it follows the first link on the page regardless of what `task` says. Rehearsal 3's
+run against `https://www.w3.org/WAI` with the task `"Learn about web accessibility"` activated five
+controls — one button whose name happened to share the word "Web" with the task (the word-match rule),
+three submissions of the search form (submit-like, no task word needed) and one followed link
+(`probe-navigation`, no task word tested at all). The word match governed exactly one of the five.
+
+So on the defaults the task **does** shape what gets captured — it decides which non-submit, non-disclosure
+buttons get activated, and therefore whether some 3.3.1 and 4.1.3 evidence exists at all — but most of what
+a default run presses does not read the task. It does not shape the judgement, because the default scorer
+never reads it.
 
 This section previously said the task was inert on the defaults, which was true when `probe-forms`
 defaulted to false. It changed deliberately: reviewing a page means checking what is on it, and an error
