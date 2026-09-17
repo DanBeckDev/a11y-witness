@@ -16,7 +16,7 @@ import { existsSync, realpathSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { join } from "node:path";
 
-import { allPackages } from "./isolation-gate.mjs";
+import { allPackages } from "../packages/guards/src/isolation-gate.mjs";
 import { npmCliInvocation } from "./npm-cli-executable.mjs";
 // RELATIVE, NOT `@a11ign/worker-fleet/cli-flags` -- same rule `ci-changed.mjs`'s header already
 // states, and `isolation-gate.mjs` (imported above) already follows: this script IS the thing that

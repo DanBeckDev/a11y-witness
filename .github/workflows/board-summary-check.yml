@@ -79,7 +79,7 @@ jobs:
         if: steps.hour.outputs.mode == 'reminder'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node scripts/board-summary-check.mjs --post --reminder
+        run: node packages/agent-org/src/board-summary-check.mjs --post --reminder
 
       # 07:45 -- REFUSES. The edition is fifteen minutes away and will refuse anyway; failing here says
       # so while there is still time to act.
@@ -87,4 +87,4 @@ jobs:
         if: steps.hour.outputs.mode == 'refuse'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node scripts/board-summary-check.mjs --post
+        run: node packages/agent-org/src/board-summary-check.mjs --post

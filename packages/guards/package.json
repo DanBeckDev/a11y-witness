@@ -1,0 +1,58 @@
+{
+  "name": "@a11ign/guards",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-or-later",
+  "description": "Repo-hygiene guards: refusals that are about engineering practice, not about this product.",
+  "exports": {
+    "./assert-glob-not-empty": {
+      "default": "./src/assert-glob-not-empty.mjs"
+    },
+    "./changed-files": {
+      "default": "./src/changed-files.mjs"
+    },
+    "./changed-packages": {
+      "default": "./src/changed-packages.mjs"
+    },
+    "./git-env": {
+      "default": "./src/git-env.mjs"
+    },
+    "./git-spawn-scrubbed": {
+      "default": "./src/git-spawn-scrubbed.mjs"
+    },
+    "./isolation-gate": {
+      "default": "./src/isolation-gate.mjs"
+    },
+    "./local-import-closure": {
+      "default": "./src/local-import-closure.mjs"
+    },
+    "./mutation-check": {
+      "default": "./src/mutation-check.mjs"
+    },
+    "./piped-exit-status-guard": {
+      "default": "./src/piped-exit-status-guard.mjs"
+    },
+    "./tree-wide-guard": {
+      "default": "./src/tree-wide-guard.mjs"
+    },
+    "./tree-wide-guards": {
+      "default": "./src/tree-wide-guards.mjs"
+    },
+    "./uncontrolled-emptiness": {
+      "default": "./src/uncontrolled-emptiness.mjs"
+    },
+    "./walk-scope": {
+      "default": "./src/walk-scope.mjs"
+    },
+    "./walk-scope-declaration": {
+      "default": "./src/walk-scope-declaration.mjs"
+    },
+    "./tooling-roots": {
+      "default": "./src/tooling-roots.mjs"
+    }
+  },
+  "files": [
+    "src"
+  ]
+}
