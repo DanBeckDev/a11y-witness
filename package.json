@@ -22,7 +22,6 @@
     "tracker:comment": "node packages/agent-org/src/tracker-comment.mjs",
     "board:record": "node packages/agent-org/src/board-record.mjs",
     "board:report": "node packages/agent-org/src/board-report.mjs",
-    "jobs:check": "node scripts/check-scheduled-jobs.mjs",
     "hygiene:report": "node packages/agent-org/src/control-plane-hygiene.mjs",
     "spike": "tsx packages/lab/src/harnesses/run-spike.ts",
     "witness": "A11Y_PYTHON=.venv/bin/python tsx packages/cli/src/cli.ts",
