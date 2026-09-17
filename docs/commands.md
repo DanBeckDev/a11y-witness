@@ -6,7 +6,6 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 
 - `node packages/agent-org/src/acceptance-commands.mjs` — run a PR's own stated Acceptance/Refutation command(s) and report RAN/REFUSED/MISSING
 - `node packages/agent-org/src/arm-pr.mjs` — arm-pr -- enable auto-merge on ONE pull request, unless it is held
-- `node packages/guards/src/assert-glob-not-empty.mjs` — refuse a test glob that resolves to zero files instead of passing silently
 - `node packages/agent-org/src/auto-arm-sweep.mjs` — arm auto-merge on open PRs that predate auto-arm.yml and were never armed
 - `node packages/agent-org/src/board-discussion.mjs` — say whether today's board edition exists as a Discussion (exit 0 yes, 1 no, 2 could not ask)
 - `node packages/agent-org/src/board-document.mjs` — render the board's PDF from the same data the daily GitHub report reads
@@ -16,41 +15,19 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node packages/agent-org/src/board-snapshot.mjs` — snapshot every Project item before any board-mutating call, so a bad mutation is recoverable
 - `node packages/agent-org/src/board-summary-check.mjs` — check on the morning of an edition whether that day's hand-written board summary exists
 - `node packages/agent-org/src/branch-inventory-report.mjs` — produce the #623 four-fact inventory of every branch on origin with no open PR and commits
-- `node scripts/build-packages.mjs` — run tsc --build across every package under packages/ in dependency order
 - `node packages/agent-org/src/carry-branch.mjs` — carry a stalled agent/* branch from a DETACHED checkout -- merge origin/main in and push,
-- `node packages/guards/src/changed-files.mjs` — list the paths a range changed, BOTH SIDES OF A RENAME
-- `node packages/guards/src/changed-packages.mjs` — list which packages/<name> directories a branch touched against origin/main
-- `node scripts/check-retired-heads.mjs` — refuse a candidate whose scorer head set shrank without declaring what it retired
-- `node scripts/check-scheduled-jobs.mjs` — compare every job this repo claims to schedule against its actual installed state
-- `node scripts/check-schema-migration.mjs` — refuse a release while a declared schema migration is still open
-- `node scripts/check-transfer-urls.mjs` — check-transfer-urls -- walk the tree for every URL naming PRODUCT_REPO (a11ign/a11ign) and
-- `node scripts/ci-changed.mjs` — classify what a PR's diff touches, so CI's conditional jobs know whether to run
 - `node packages/agent-org/src/close-rows-for-merged-pr.mjs` — close the issues a merged PR declared, because a bot merge does not close them itself
 - `node packages/agent-org/src/close-rows-sweep.mjs` — close the rows every PR merged in the window declared, riding trunk.yml's push and nightly's hourly cron
 - `node packages/agent-org/src/closes-mismatch-check.mjs` — refuse when a PR's declared Closes line disagrees with what GitHub will actually close
 - `node packages/agent-org/src/control-plane-hygiene.mjs` — print every control-plane hygiene number fresh, measured by command, never typed once
-- `node scripts/coverage-failure-classifier.mjs` — turn a nightly coverage.yml failure comment into an actual finding, not just 'it failed'
-- `node scripts/doc-cross-reference-report.mjs` — print the nightly doc cross-reference report -- every doc-to-doc and doc-to-tree check, as markdown
-- `node scripts/generate-commands-doc.mjs` — regenerate docs/commands.md from every script's own `// command:` header
-- `node scripts/generate-consumer-gate.mjs` — regenerate .github/workflows/consumer-gate.yml from README.md's own documented workflow
-- `node scripts/history-purge-rehearsal.mjs` — rehearse deleting non-standard refs and rewriting git history ahead of the org transfer
-- `node scripts/history-secret-scan.mjs` — scan every blob reachable from every ref for internal addresses and secret-shaped strings
-- `node scripts/install-git-hooks.mjs` — point git at this repo's tracked hooks; run automatically by npm install via prepare
-- `node packages/guards/src/isolation-gate.mjs` — prove a published package installs and works standalone, by actually installing and running it
-- `node scripts/known-gaps-index.mjs` — regenerate docs/known-gaps.md's own index of open sections from its headings
-- `node scripts/manifest-repository-check.mjs` — refuse a publish whose manifests name a different repository than the run publishing them
 - `node packages/agent-org/src/mark-primary-checkout.mjs` — mark or query whether this checkout is the fleet-driving primary, which the hooks read
 - `node packages/agent-org/src/merge-guard.mjs` — ask whether a PR's checks actually ran and passed, never trusting mergeStateStatus alone
 - `node packages/agent-org/src/merge-queue.mjs` — refuse any route onto main other than the open-PR merge queue
-- `node packages/guards/src/mutation-check.mjs` — prove a guard actually bites: mutate a file, confirm its test fails, restore, confirm it passes
-- `node scripts/npm-token-liveness.mjs` — say whether the first-publish npm token is still present after it should have been revoked
 - `node packages/agent-org/src/org-watch.mjs` — org-watch -- the org's clock. Hourly by default; `--weekly` renders the cost table.
 - `node packages/agent-org/src/owned-path-signoff.mjs` — check a PR touching a corpus-invalidating path named the facts its own body must state
 - `node packages/agent-org/src/parent-recheck-summary.mjs` — read a node:test TAP log and print its failing subtests by name -- #744, never a fixed tail
-- `node packages/guards/src/piped-exit-status-guard.mjs` — detect a piped command whose exit status was read from the wrong side of the pipe
 - `node packages/agent-org/src/pr-hold.mjs` — take or release a hold on a pull request, the record merge-guard reads before treating it as free
 - `node packages/agent-org/src/pr-open.mjs` — check a PR body's Acceptance/Closes with the tree's own parser before gh pr create/edit sends it
-- `node scripts/prune-stale-workspace-scope.mjs` — remove a stale workspace-scope's node_modules symlinks a rename left behind
 - `node packages/agent-org/src/prune-worktrees.mjs` — remove fully-merged, clean linked worktrees, and name every other one as dirty
 - `node packages/agent-org/src/queue-stalled.mjs` — name the armed, green PRs that can never merge because they are behind and conflicting
 - `node packages/agent-org/src/queue-table.mjs` — print the pipeline's sections -- trunk, open PRs, stalled work, red checks on merged PRs,
@@ -60,14 +37,9 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node packages/agent-org/src/row-claim.mjs` — check, claim, or decline a tracker row by reading its labels, the record, never git history
 - `node packages/agent-org/src/row-file.mjs` — refuse to file a backlog row via `gh issue create` when its body is missing a required
 - `node packages/agent-org/src/row-reachability.mjs` — compute whether a row is actually startable from the tree, never from a label alone
-- `node scripts/run.mjs` — the one-line dispatcher: run a named command from commands.mjs, or --list every command declared
-- `node scripts/select-changed-tests.mjs` — pick only the test files that reference a changed file, narrower than package scoping
-- `node scripts/spotlight-exclude.mjs` — stop Spotlight indexing every git worktree on this machine
-- `node scripts/stale-dist-diagnosis.mjs` — augment a resolution failure naming a missing export or module with a stale-dist diagnosis
 - `node packages/agent-org/src/stash-whose.mjs` — list every git stash entry with the branch it was made on, since git alone will not say
 - `node packages/agent-org/src/stranded-branches.mjs` — find pushed branches with no open PR, which are otherwise invisible to CI and review
 - `node packages/agent-org/src/tracker-comment.mjs` — read and edit a tracker comment safely -- the one place, so no edit is improvised again
-- `node packages/guards/src/tree-wide-guards.mjs` — every tracked *.test.ts file that DECLARES ITSELF a TREE-WIDE GUARD by importing and calling
 - `node packages/agent-org/src/trunk-revert-guard.mjs` — compare main's before/after state on a merge and refuse one that silently deletes prior work
 - `node packages/agent-org/src/trunk-revert.mjs` — revert a push to main that fails its own gate, unattended, since nothing else runs after it lands
 - `node packages/agent-org/src/trunk-sweep.mjs` — sweep main for a gate failure while GITHUB_TOKEN-authored merges suppress every triggering event
@@ -77,3 +49,31 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node packages/agent-org/src/workflow-lane-check.mjs` — check a PR changing a lane-owned path was opened from that lane's branch, or names its exception
 - `node packages/agent-org/src/workflow-run-liveness.mjs` — watchdog: did CI actually run before this commit reached main, checked automatically
 - `node packages/agent-org/src/worktree-owner.mjs` — print which session stamped a worktree, so a session can tell whose tree it is standing in
+- `node packages/guards/src/assert-glob-not-empty.mjs` — refuse a test glob that resolves to zero files instead of passing silently
+- `node packages/guards/src/changed-files.mjs` — list the paths a range changed, BOTH SIDES OF A RENAME
+- `node packages/guards/src/changed-packages.mjs` — list which packages/<name> directories a branch touched against origin/main
+- `node packages/guards/src/isolation-gate.mjs` — prove a published package installs and works standalone, by actually installing and running it
+- `node packages/guards/src/mutation-check.mjs` — prove a guard actually bites: mutate a file, confirm its test fails, restore, confirm it passes
+- `node packages/guards/src/piped-exit-status-guard.mjs` — detect a piped command whose exit status was read from the wrong side of the pipe
+- `node packages/guards/src/tree-wide-guards.mjs` — every tracked *.test.ts file that DECLARES ITSELF a TREE-WIDE GUARD by importing and calling
+- `node scripts/build-packages.mjs` — run tsc --build across every package under packages/ in dependency order
+- `node scripts/check-retired-heads.mjs` — refuse a candidate whose scorer head set shrank without declaring what it retired
+- `node scripts/check-scheduled-jobs.mjs` — compare every job this repo claims to schedule against its actual installed state
+- `node scripts/check-schema-migration.mjs` — refuse a release while a declared schema migration is still open
+- `node scripts/check-transfer-urls.mjs` — check-transfer-urls -- walk the tree for every URL naming PRODUCT_REPO (a11ign/a11ign) and
+- `node scripts/ci-changed.mjs` — classify what a PR's diff touches, so CI's conditional jobs know whether to run
+- `node scripts/coverage-failure-classifier.mjs` — turn a nightly coverage.yml failure comment into an actual finding, not just 'it failed'
+- `node scripts/doc-cross-reference-report.mjs` — print the nightly doc cross-reference report -- every doc-to-doc and doc-to-tree check, as markdown
+- `node scripts/generate-commands-doc.mjs` — regenerate docs/commands.md from every script's own `// command:` header
+- `node scripts/generate-consumer-gate.mjs` — regenerate .github/workflows/consumer-gate.yml from README.md's own documented workflow
+- `node scripts/history-purge-rehearsal.mjs` — rehearse deleting non-standard refs and rewriting git history ahead of the org transfer
+- `node scripts/history-secret-scan.mjs` — scan every blob reachable from every ref for internal addresses and secret-shaped strings
+- `node scripts/install-git-hooks.mjs` — point git at this repo's tracked hooks; run automatically by npm install via prepare
+- `node scripts/known-gaps-index.mjs` — regenerate docs/known-gaps.md's own index of open sections from its headings
+- `node scripts/manifest-repository-check.mjs` — refuse a publish whose manifests name a different repository than the run publishing them
+- `node scripts/npm-token-liveness.mjs` — say whether the first-publish npm token is still present after it should have been revoked
+- `node scripts/prune-stale-workspace-scope.mjs` — remove a stale workspace-scope's node_modules symlinks a rename left behind
+- `node scripts/run.mjs` — the one-line dispatcher: run a named command from commands.mjs, or --list every command declared
+- `node scripts/select-changed-tests.mjs` — pick only the test files that reference a changed file, narrower than package scoping
+- `node scripts/spotlight-exclude.mjs` — stop Spotlight indexing every git worktree on this machine
+- `node scripts/stale-dist-diagnosis.mjs` — augment a resolution failure naming a missing export or module with a stale-dist diagnosis
