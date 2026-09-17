@@ -841,8 +841,12 @@ export function examineWithinTheSite(cap: CaptureResponse):
  * the read-through and dropped every structural sweep and interaction probe — the evidence behind most
  * findings. A consumer reading it could not tell "this page has no links" from "links were never recorded",
  * and the local judge's evidence guard, given exactly that, suppressed a correct 4.1.2 finding scored at 0.993.
+ *
+ * Exported so `result-json-fields-documented.test.ts` (#1637) can drive it with a real recorded result and
+ * pin its emitted top-level keys to the Action guide's field table, the same way `examineWithinTheSite` and
+ * `conformanceFor` are exported for their own acceptance tests.
  */
-function printJson(
+export function printJson(
   { url, task, cap, verdict, ruleFindings, captureVerified, unverifiedReason, conformance, outcomes,
     leftSite: left, artifactPath }: {
     url: string; task: string; cap: CaptureResponse; verdict: Report["verdict"];
