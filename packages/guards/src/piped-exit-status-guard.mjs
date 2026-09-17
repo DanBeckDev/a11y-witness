@@ -167,6 +167,41 @@ if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.arg
       process.exit(EXIT_ERROR);
     }
     const cmd = process.argv[2];
+    if (cmd === undefined) {
+      // #1642: BATCH MODE -- one process for a whole commit instead of one per added line.
+      //
+      // `pre-commit` spawned this guard once per staged line of every .sh/.yml/.yaml/package.json it saw.
+      // Measured on this machine: 37ms per spawn, so a commit touching a 200-line workflow paid ~7.4
+      // SECONDS in node startup alone, and pre-commit-hook.test.ts -- which drives the hook thirteen times
+      // -- took 41s of the org suite's nine minutes. The work itself is microseconds; the process was the
+      // cost.
+      //
+      // ON STDIN, NOT A FLAG OR A POSITIONAL, and that is forced rather than chosen: the positional is
+      // arbitrary shell/YAML text that routinely starts with `-` or `---`, which is exactly why this CLI
+      // refuses flags at all (#349). Any new argv-shaped switch would be indistinguishable from a payload.
+      // stdin collides with nothing.
+      //
+      // ONE VERDICT LINE PER INPUT LINE, IN ORDER, each still `ALLOW:`/`REFUSE:` -- because #535's rule is
+      // that the caller discriminates on this guard's OUTPUT TEXT, never its exit code (an unresolvable
+      // import exits 1 before any of this runs, identically to a real hazard). A caller that reads N lines
+      // back for N lines in therefore keeps the same three-way answer per line that it had per process.
+      const stdin = readFileSync(0, "utf8");
+      if (stdin === "") {
+        console.error("usage: piped-exit-status-guard.mjs '<shell command string>'   (or lines on stdin)");
+        process.exit(EXIT_ERROR);
+      }
+      // A trailing newline is a terminator, not an empty command; anything else empty stays a line so the
+      // caller's Nth verdict is still its Nth line.
+      const lines = stdin.split("\n");
+      if (lines[lines.length - 1] === "") lines.pop();
+      let anyHazard = false;
+      for (const line of lines) {
+        const verdict = checkPipedExitStatus(line);
+        if (verdict.hazard) anyHazard = true;
+        console.log(`${verdict.hazard ? "REFUSE" : "ALLOW"}: ${verdict.reason}`);
+      }
+      process.exit(anyHazard ? EXIT_HAZARD : EXIT_ALLOW);
+    }
     if (!cmd) {
       console.error("usage: piped-exit-status-guard.mjs '<shell command string>'");
       process.exit(EXIT_ERROR);
