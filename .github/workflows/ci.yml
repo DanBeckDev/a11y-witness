@@ -487,8 +487,31 @@ jobs:
   # this step FAILED every time a push superseded its own run -- and that failure then sat on the head as
   # a `gate` check-run beside the real one. Two sessions read #996 as red from exactly that on
   # 2026-09-11. A superseded run should report nothing, not a red.
+  # `acceptance` AND `ownedPaths` ARE BACK IN THIS LIST -- 2026-09-17, reversing the half of #902 that
+  # removed them.
+  #
+  # `gate` is the ONLY required check on `main` (measured: branch protection's contexts are exactly
+  # `["gate"]`, and required approvals are 0). A job outside this list therefore runs, reports, and is
+  # IGNORED -- it cannot block anything. Two pull requests merged red in two days that way, and the
+  # second one was red while its own acceptance command had RUN AND PASSED.
+  #
+  # A check that cannot block is worse than no check: it teaches everyone to scroll past red, which is
+  # the habit that makes the checks that DO matter unreadable. So each of these is now one or the other,
+  # and these two are worth blocking on: `acceptance` is the only thing that ever EXECUTES a pull
+  # request's own stated acceptance command (#353 exists because nothing ever had), and `ownedPaths` is
+  # the only reader of the owned-path declarations.
+  #
+  # WHY THIS DOES NOT REPRODUCE #902's COMPLAINT, which was real: two of every three red pull requests
+  # were red for something that said nothing about whether the code works. Measured over the last 40
+  # pull-request runs, `acceptance` failed 4 times and caught ZERO broken builds -- all four were PR-BODY
+  # defects (twice a duplicated `Acceptance:` section, twice a missing `Closes` declaration), and in the
+  # two most recent the command itself had already reported `pass (exit 0)`. Those are fixable by the
+  # author in a minute, and `edited` is in this workflow's trigger list, so a corrected body re-runs the
+  # check. That trigger is what turned the 2026-09-07 deadlock (a body-only defect with no trigger that
+  # watched the body) from a queue stall into an edit -- the condition that made blocking unsafe then
+  # does not hold now.
   gate:
-    needs: [changed, ts, python, ansible, changeset, rulesFitness, deliberateRefusals]
+    needs: [changed, ts, python, ansible, changeset, rulesFitness, deliberateRefusals, acceptance, ownedPaths]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     steps:
@@ -501,7 +524,9 @@ jobs:
             "${{ needs.ansible.result }}" \
             "${{ needs.changeset.result }}" \
             "${{ needs.rulesFitness.result }}" \
-            "${{ needs.deliberateRefusals.result }}"
+            "${{ needs.deliberateRefusals.result }}" \
+            "${{ needs.acceptance.result }}" \
+            "${{ needs.ownedPaths.result }}"
           do
             if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
               echo "::error::a job reported '$result', which is neither success nor skipped"
