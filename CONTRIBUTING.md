@@ -17,7 +17,7 @@ on what you want to change. Read the section that matches.
 
 ```bash
 npm install
-npm test          # ~1,900 unit tests, no worker, no network
+npm test          # the product suite: 206 files, ~1,800 tests, no worker, no network, ~26s
 npm run lint
 npm run typecheck
 ```
@@ -89,9 +89,13 @@ working in the same checkout. A pre-commit hook refuses a commit containing file
 minutes, or more than 12 files at once, and names the offenders with their ages. If it is a false positive,
 check `git diff --cached` first, then `A11Y_COMMIT_ALL=1 git commit`.
 
-A **pre-push hook** runs lint, typecheck, tests, `check-signals` and `rules:gate` in about 5 seconds. It
-skips the corpus-dependent checks *loudly* when `runs/` is absent rather than passing quietly.
-`A11Y_SKIP_VERIFY=1 git push` overrides it and says so.
+A **pre-push hook** runs lint, typecheck and the leak scan — about ten seconds. It does *not* run the
+tests, `check-signals` or `rules:gate`; those are CI's, and #911 took them out of the hook on measurement.
+It skips corpus-dependent checks *loudly* when `runs/` is absent rather than passing quietly.
+
+To override it you must say why: `A11Y_SKIP_VERIFY_REASON="<why>" A11Y_SKIP_VERIFY=1 git push`. A bare
+`A11Y_SKIP_VERIFY=1` is **refused** — the reason is printed, so a deliberate skip is in the log rather
+than in somebody's memory.
 
 Commit messages here are longer than most projects'. They carry the measurement and the reasoning, because
 the git log is where the "why" survives after the diff stops being interesting. Match the surrounding style.

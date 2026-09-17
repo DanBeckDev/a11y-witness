@@ -9,7 +9,7 @@
 // time pressure.
 //
 // NOT a claim about where the repository lives after any future transfer — it is what the name IS today.
-// `scripts/board-data.mjs` and `scripts/row-claim.mjs` import `REPO` from here rather than declaring their
+// `packages/agent-org/src/board-data.mjs` and `packages/agent-org/src/row-claim.mjs` import `REPO` from here rather than declaring their
 // own copy; every other reference is a literal (a `package.json` field, a workflow string, prose) that
 // cannot import anything, and `repo-identity-consolidated.test.ts` pins each one against these constants
 // instead.

@@ -58,14 +58,16 @@ test("#902: the three deliberate refusals are all in one job the gate needs", ()
   // `merge-guard.mjs --ci-gate` anywhere in the job, and the comment above the step says those words too:
   // deleting the step left the test green on its own explanation. A guard satisfied by prose about itself
   // is the shape this repo has paid for more than once.
-  assert.match(job, /run: node scripts\/merge-guard\.mjs --ci-gate/,
+  assert.match(job, /run: node packages\/agent-org\/src\/merge-guard\.mjs --ci-gate/,
     "the hold refusal left this job; no other workflow in this repo reads a `hold:` label");
-  assert.match(job, /run: node scripts\/closes-mismatch-check\.mjs/,
+  assert.match(job, /run: node packages\/agent-org\/src\/closes-mismatch-check\.mjs/,
     "#549's comparison left this job, and only it has a token");
-  assert.match(job, /run: \|\n[\s\S]*?node scripts\/workflow-lane-check\.mjs/,
-    "the lane check left this job; an UNASSIGNED crossing would then merge with no record, which is the "
-    + "case ceo's second ruling of 2026-09-11 kept it for");
-  assert.ok(KEPT.includes("deliberateRefusals"), "the job carrying all three must be one the gate waits for");
+  // The lane check was the third refusal here and is RETIRED: docs/lane-ownership.json set its own end
+  // date (#916's CODEOWNERS, 2026-09-15) and that passed unbuilt, and it was the only guard in `gate` an
+  // outside contributor structurally could not satisfy. Its data survives for row-file's lane labels.
+  assert.doesNotMatch(job, /workflow-lane-check/,
+    "the lane check is retired; a step still calling it would refuse PRs on a rule nobody can satisfy");
+  assert.ok(KEPT.includes("deliberateRefusals"), "the job carrying both must be one the gate waits for");
 });
 
 test("#902: each job the gate stopped waiting for STILL RUNS -- dropped from needs, not deleted", () => {

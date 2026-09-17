@@ -24,7 +24,7 @@ import { stripComments } from "@a11ign/evidence/source-text";
 import { readFileSync, readdirSync, existsSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join, dirname, basename } from "node:path";
-import { declareTreeWideGuard, walkTree } from "../../../scripts/tree-wide-guard.mjs";
+import { declareTreeWideGuard, walkTree } from "../../guards/src/tree-wide-guard.mjs";
 
 // #716/#704: this file's own population is the whole tracked tree, not one file -- declared here
 // rather than inferred from its source, per ceo's ruling (2026-09-09) that the tree-wide-guard
@@ -221,7 +221,7 @@ test("every npm entry point refuses to run when imported", () => {
  * paths (#174), then workflows (#185), then git hooks (#202) — each time by adding the source that had
  * just bitten. The fifth instance bit anyway: `reconstitution-blank.mjs`… `reconstitution-drill.mjs` is
  * invoked by **none** of those (`package.json` 0, workflows 0, hooks 0). It is run by a human, because
- * `docs/roles/migrate.md` tells them to.
+ * `packages/agent-org/docs/roles/migrate.md` tells them to.
  *
  * **A doc telling a person to run something cannot be enumerated.** So the enumeration is inherently
  * incomplete, and the form check does not need it: **a file that is an entry point says so, in the guard
@@ -383,17 +383,15 @@ const KNOWN_PLAIN_ENTRY_GUARDS: readonly string[] = Object.freeze([
   "packages/worker-fleet/src/fleet-env.mjs",
   "packages/worker-fleet/src/guest-run.mjs",
   "packages/worker-fleet/src/normalise-fleet.mjs",
-  "scripts/carry-branch.mjs",
-  "scripts/changeset-precise.mjs",
+  "packages/agent-org/src/carry-branch.mjs",
   "scripts/check-retired-heads.mjs",
   "scripts/check-schema-migration.mjs",
   "scripts/ci-changed.mjs",
-  "scripts/close-merged-rows.mjs",
-  "scripts/control-plane-hygiene.mjs",
+  "packages/agent-org/src/control-plane-hygiene.mjs",
   "scripts/known-gaps-index.mjs",
-  "scripts/mark-primary-checkout.mjs",
-  "scripts/merge-queue.mjs",
-  "scripts/rescue-hunk.mjs",
+  "packages/agent-org/src/mark-primary-checkout.mjs",
+  "packages/agent-org/src/merge-queue.mjs",
+  "packages/agent-org/src/rescue-hunk.mjs",
   "scripts/select-changed-tests.mjs",
   "scripts/stale-dist-diagnosis.mjs",
 ]);

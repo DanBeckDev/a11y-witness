@@ -8,7 +8,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { sandboxGitEnv } from "../git-env.mjs";
+import { sandboxGitEnv } from "../../packages/guards/src/git-env.mjs";
 
 export const USES_DOCS = ["README.md", "docs/github-action.md", "examples/workflow.yml"];
 
