@@ -151,6 +151,61 @@ const EXIT_ALLOW = 0;
 const EXIT_HAZARD = 1;
 const EXIT_ERROR = 2;
 
+/**
+ * #1642: BATCH MODE -- one process for a whole commit instead of one per added line.
+      //
+      // `pre-commit` spawned this guard once per staged line of every .sh/.yml/.yaml/package.json it saw.
+      // Measured on this machine: 37ms per spawn, so a commit touching a 200-line workflow paid ~7.4
+      // SECONDS in node startup alone, and pre-commit-hook.test.ts -- which drives the hook thirteen times
+      // -- took 41s of the org suite's nine minutes. The work itself is microseconds; the process was the
+      // cost.
+      //
+      // ON STDIN, NOT A FLAG OR A POSITIONAL, and that is forced rather than chosen: the positional is
+      // arbitrary shell/YAML text that routinely starts with `-` or `---`, which is exactly why this CLI
+      // refuses flags at all (#349). Any new argv-shaped switch would be indistinguishable from a payload.
+      // stdin collides with nothing.
+      //
+      // ONE VERDICT LINE PER INPUT LINE, IN ORDER, each still `ALLOW:`/`REFUSE:` -- because #535's rule is
+      // that the caller discriminates on this guard's OUTPUT TEXT, never its exit code (an unresolvable
+      // import exits 1 before any of this runs, identically to a real hazard). A caller that reads N lines
+      // back for N lines in therefore keeps the same three-way answer per line that it had per process.
+ *
+ * EXTRACTED rather than inlined in the entry point: nested inside `if (main) { try { if (batch) { for ... } } }`
+ * it broke `max-depth` (3), and the rule is right -- the entry point should dispatch, not decide.
+ * @param {string} stdin every line to judge, newline-separated
+ * @returns {{ verdicts: string[], hazard: boolean }}
+ */
+export function judgeLines(stdin) {
+  // A trailing newline is a terminator, not an empty command; anything else empty stays a line so the
+  // caller's Nth verdict is still its Nth line.
+  const lines = stdin.split("\n");
+  if (lines[lines.length - 1] === "") lines.pop();
+  const results = lines.map((line) => checkPipedExitStatus(line));
+  return {
+    verdicts: results.map((v) => `${v.hazard ? "REFUSE" : "ALLOW"}: ${v.reason}`),
+    hazard: results.some((v) => v.hazard),
+  };
+}
+
+/**
+ * Batch mode's own frame: read stdin, print one verdict per line, answer with an exit code.
+ *
+ * A FUNCTION rather than a branch in `main`, because inside `if (entry) { try { if (batch) { … } } }` the
+ * body is already three deep and anything it needs breaks `max-depth`. The entry point dispatches; this
+ * decides.
+ * @returns {number} the process exit code
+ */
+function runBatchMode() {
+  const stdin = readFileSync(0, "utf8");
+  if (stdin === "") {
+    console.error("usage: piped-exit-status-guard.mjs '<shell command string>'   (or lines on stdin)");
+    return EXIT_ERROR;
+  }
+  const { verdicts, hazard } = judgeLines(stdin);
+  for (const verdict of verdicts) console.log(verdict);
+  return hazard ? EXIT_HAZARD : EXIT_ALLOW;
+}
+
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
   try {
     // Guarded per #164, WITHOUT a workspace import (#535, this file's own header) -- takes the command
@@ -167,6 +222,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.arg
       process.exit(EXIT_ERROR);
     }
     const cmd = process.argv[2];
+    if (cmd === undefined) process.exit(runBatchMode());
     if (!cmd) {
       console.error("usage: piped-exit-status-guard.mjs '<shell command string>'");
       process.exit(EXIT_ERROR);
