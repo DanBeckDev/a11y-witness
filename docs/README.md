@@ -8,8 +8,6 @@ human or agent, *working on* the repo rather than using it.
 
 | doc | read it when |
 |---|---|
-| [`roles/worker-loop-orchestrator.md`](roles/worker-loop-orchestrator.md) | **who owns the worker loop, what they hand up, and the measurement that decides whether the split was right.** Created because one agent was the serial step and the measurement said which part |
-| [`roles/orchestrator.md`](roles/orchestrator.md) | fleet, lab, `runs/`, gates — and why nothing is checked out in the primary |
 | [getting-started.md](./getting-started.md) | you have no capture worker and need one (~1.5–2 h, mostly downloading Windows) |
 | [try-it.md](./try-it.md) | you want the shortest honest path to a real run against your own page, before reading anything else — a GitHub Actions run, what to expect from a long marketing page, and the four questions we would like back |
 | [local-worker-vm.md](./local-worker-vm.md) | you are a single contributor on a Mac with no other hardware and want the scripted UTM worker. **Superseded by a declared fleet for anyone with more than one machine** — `leaseWorker` already prefers `inventory.yml` over a local VM |
@@ -85,3 +83,14 @@ human or agent, *working on* the repo rather than using it.
 Most tables here are **measured**, and the ones that are not say so. Where a document records a mistake, it
 records the wrong theories too, so nobody pays to rediscover them. If you find a claim without a
 measurement behind it, that is a bug — please report it.
+
+
+## Running the agent organisation (maintainers)
+
+These describe the AI agent org that develops this repository, not the product. A contributor never
+needs them; they live here because `@a11ign/agent-org` is private-by-boundary rather than by repository.
+
+| doc | read it when |
+|---|---|
+| [`roles/worker-loop-orchestrator.md`](roles/worker-loop-orchestrator.md) | **who owns the worker loop, what they hand up, and the measurement that decides whether the split was right.** Created because one agent was the serial step and the measurement said which part |
+| [`roles/orchestrator.md`](roles/orchestrator.md) | fleet, lab, `runs/`, gates — and why nothing is checked out in the primary |

@@ -9,7 +9,7 @@
  * config loads this file into every worker with `pool.execArgv: ["--import", …]`.
  *
  * ONLY THE `import` CONDITION IS REDIRECTED. Traced on #1315: a test file's `node:test` import reaches Node with
- * the `import` condition (its parent is rstest's own runtime chunk), while `scripts/walk-scope.mjs` `require`s
+ * the `import` condition (its parent is rstest's own runtime chunk), while `packages/guards/src/walk-scope.mjs` `require`s
  * `node:test` to WRAP the real module's functions. Redirecting that `require` too sent walk-scope a shim it
  * cannot wrap, and six files failed to load.
  *

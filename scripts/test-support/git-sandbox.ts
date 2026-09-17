@@ -34,9 +34,9 @@ import { mkdtempSync, rmSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { sandboxGitEnv, KNOWN_GIT_REDIRECT_VARS } from "../git-env.mjs";
+import { sandboxGitEnv, KNOWN_GIT_REDIRECT_VARS } from "../../packages/guards/src/git-env.mjs";
 
-// Re-exported rather than redefined: `scripts/git-env.mjs` is the ONE PLACE the GIT_* strip is stated,
+// Re-exported rather than redefined: `packages/guards/src/git-env.mjs` is the ONE PLACE the GIT_* strip is stated,
 // because a copy of a defensive filter is exactly the "fact stated twice" shape this repo's CLAUDE.md
 // warns about -- see that file's header for why production git-spawning code needs the identical
 // function and cannot simply import THIS module (worker-fleet publishes as `bin`; this file lives

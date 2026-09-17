@@ -1,5 +1,5 @@
 // @ts-check
-// Run by `scripts/isolation-gate.mjs` from a throwaway directory OUTSIDE this repository, against the
+// Run by `packages/guards/src/isolation-gate.mjs` from a throwaway directory OUTSIDE this repository, against the
 // installed tarball.
 //
 // It cannot call `judge()`: every backend needs something a fresh install does not have — the `local` default
