@@ -749,7 +749,7 @@ check, and the check then reports on its own prose.
 |---|---|
 | #1002 | a leak-scan pin satisfied by a **commented-out tail** |
 | #1001 | a gate assertion satisfied by prose about itself |
-| #1022 | the row's own open-check, `grep -c 'Merge already in progress\|…' scripts/arm-pr.mjs`, went `0 → 1` **entirely because a JSDoc line quotes the error the fix is about**. The fix deliberately does not match GitHub's message text — keying on prose is what `merge-guard`'s `FAULT.*` rule exists to avoid — so nothing in the code could ever have satisfied it |
+| #1022 | the row's own open-check, `grep -c 'Merge already in progress\|…' packages/agent-org/src/arm-pr.mjs`, went `0 → 1` **entirely because a JSDoc line quotes the error the fix is about**. The fix deliberately does not match GitHub's message text — keying on prose is what `merge-guard`'s `FAULT.*` rule exists to avoid — so nothing in the code could ever have satisfied it |
 
 **It fails in BOTH directions and neither is loud.**
 
@@ -981,7 +981,7 @@ VMs, the page server and NVDA.
   > `node -e "console.log(require.resolve('@a11y-witness/judge'))"`. A mutation check that BITES is
   > itself evidence the resolution reached the code under test — if a worktree's test were reading
   > another checkout's `dist`, editing the worktree's source could not have reached it and the mutation
-  > would never fail. See `docs/roles/worker-loop-orchestrator.md` for why the fleet-driving primary
+  > would never fail. See `packages/agent-org/docs/roles/worker-loop-orchestrator.md` for why the fleet-driving primary
   > checkout stays on `main` with nothing checked out in it, which is the second half of this fact.
 
 ## The same stale-compile defect in Python
@@ -1311,7 +1311,7 @@ own §3 gets re-checked rather than trusted forever once written.
 write time when it would displace one, after the word cap incident above cost a red `trunk-guard` until
 reverted.
 
-**`board-report.test.ts`** (#9) -- the detailed render-section test for `scripts/board-report.mjs`,
+**`board-report.test.ts`** (#9) -- the detailed render-section test for `packages/agent-org/src/board-report.mjs`,
 replaced by a single smoke test (`board-report-smoke.test.ts`) proving the renderer produces output
 without throwing. The detail this file asserted (individual section wording, pluralisation, edge counts)
 is now a human's read of the rendered document, not a build dependency.
@@ -1333,14 +1333,14 @@ retired label taxonomy:
 - `workflow-lane-check.mjs` runs as its own step inside `ci.yml`'s `mergeSafety` job, right now, on every
   pull request.
 - `merge-guard-pr-hold-rule.test.ts` covers one rule composed into `merge-guard.mjs`'s
-  `mergeSafetyVerdict`, which `mergeSafety` calls directly (`node scripts/merge-guard.mjs --ci-gate`).
+  `mergeSafetyVerdict`, which `mergeSafety` calls directly (`node packages/agent-org/src/merge-guard.mjs --ci-gate`).
   `mergeSafety` is removed as a job by #902 -- not yet merged at the time of this row -- and only then
   does this rule's test stop guarding something live.
 - `pr-hold.test.ts` and `a-hold-means-cannot-merge.test.ts` between them are the **only** test coverage
   for `pr-hold-state.mjs`'s `armVerdict`/`armabilityOf`/`disarmVerdict` -- the exact functions
   `auto-arm.yml`'s "Enable auto-merge... unless held" step calls on every arm attempt.
 - `arm-pr.test.ts` covers `arm-pr.mjs`'s `armDecision`, invoked by `auto-arm.yml` on every PR armed
-  (`node scripts/arm-pr.mjs --pr=... --repo=...`). `claim-provenance.mjs` (#848) is a durable *second*
+  (`node packages/agent-org/src/arm-pr.mjs --pr=... --repo=...`). `claim-provenance.mjs` (#848) is a durable *second*
   answer to "who worked this row" -- it does not make `arm-pr.mjs` itself dead code today.
 
 Deleting any of the five would leave a live, merge-blocking mechanism with no test at all until the row

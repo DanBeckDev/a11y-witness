@@ -55,11 +55,11 @@ import { dirname, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { stripComments } from "@a11ign/evidence/source-text";
 import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-flags.mjs";
-import { sandboxGitEnv } from "./git-env.mjs";
-import { changedFiles } from "./changed-files.mjs";
+import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
+import { changedFiles } from "../packages/guards/src/changed-files.mjs";
 import { knownPackages, readWorkspaceDependencyGraph, classify, ROOT_TS_FILES } from "./ci-changed.mjs";
 // The parser only: importing `walk-scope.mjs` would install its read observer in this process.
-import { parseWalkScope, inScope } from "./walk-scope-declaration.mjs";
+import { parseWalkScope, inScope } from "../packages/guards/src/walk-scope-declaration.mjs";
 
 /**
  * `import ... from "<spec>"` specifiers, in source order -- identical regex to
@@ -399,7 +399,7 @@ export function alwaysRunTests(testFiles, { closureOf, repoRoot, readSource }) {
  * `alwaysRunTests` is unchanged and stays broad: *"a file added anywhere can join the population of a guard
  * living anywhere else"*, which is right for a guard whose population is the repository. This only removes
  * a guard that has DECLARED a narrower population (`export const WALK_SCOPE = [...]`, see
- * `scripts/walk-scope.mjs`) when nothing in the diff lies inside it. A guard that declares nothing is kept
+ * `packages/guards/src/walk-scope.mjs`) when nothing in the diff lies inside it. A guard that declares nothing is kept
  * exactly as today -- undeclared is unbounded, because the failure mode of a wrong narrowing is a guard that
  * silently stops running.
  *
@@ -666,6 +666,15 @@ function describeAlwaysRun(alwaysRun, selectedTests) {
     + (shown.length > 0 ? `: ${shown.join("; ")}${added.length > SAMPLE ? ", ..." : ""}` : "");
 }
 
+// #1654: `agent-org` is tested from `packages/lab/src/packaging/` by declared, long-standing convention
+// (`work-tick.mjs`, `work-gate.mjs`, `wake.mjs`, ... all ship this way) -- its own `src/` carries zero
+// `*.test.ts` files, so the plain per-package fallback glob below is empty for it BY CONSTRUCTION, not by
+// a moved or typo'd path, and `assert-glob-not-empty.mjs` cannot tell the two apart on its own. Named
+// here, once, rather than guessed at: every OTHER package keeps the plain fallback, so a genuinely
+// uncovered change elsewhere still refuses.
+/** @type {Record<string, string>} */
+const FALLBACK_TEST_GLOB = { "agent-org": "packages/lab/src/packaging/**/*.test.ts" };
+
 /**
  * What the `ts` job actually runs: the precisely-selected tests, the always-run guards, and a full-suite
  * glob per package with an uncovered change -- UNIONED and DEDUPLICATED, because a guard that selection
@@ -677,7 +686,7 @@ function describeAlwaysRun(alwaysRun, selectedTests) {
  */
 export function testFilesToRun({ selectedTests, alwaysRun, fallbackPackages }) {
   const files = [...new Set([...selectedTests, ...alwaysRun.map((g) => g.test)])].sort();
-  return [...files, ...fallbackPackages.map((p) => `packages/${p}/src/**/*.test.ts`)];
+  return [...files, ...fallbackPackages.map((p) => FALLBACK_TEST_GLOB[p] ?? `packages/${p}/src/**/*.test.ts`)];
 }
 
 /**
@@ -726,7 +735,7 @@ function writeOutputs(result) {
   appendFileSync(outFile, `${lines.join("\n")}\n`);
 }
 
-// #939: the copy that lived here is now `scripts/changed-files.mjs`, which every reader of "which paths did
+// #939: the copy that lived here is now `packages/guards/src/changed-files.mjs`, which every reader of "which paths did
 // this change touch" imports. #938 wrote it here for `narrowByDeclaredScope` (#929), which needs the side a
 // file LEFT -- and eight other readers were still asking bare, one of them a lane-check bypass.
 

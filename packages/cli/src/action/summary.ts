@@ -135,6 +135,9 @@ const SEVERITY_ORDER: Severity[] = ["blocker", "serious", "moderate", "minor"];
 
 export type FailOn = "never" | "any" | Severity;
 
+/** #1618: `ceo`'s wording, stated wherever fail-on is: the input's description, the Action guide, and the log when it can decide the exit. */
+const FAIL_ON_RULE = "fail-on counts asserted findings; referrals are listed and never fail the run";
+
 /**
  * Should this run fail the check?
  *
@@ -144,12 +147,15 @@ export type FailOn = "never" | "any" | Severity;
  */
 export function shouldFail(findings: RunFinding[], failOn: FailOn): boolean {
   if (failOn === "never") return false;
-  if (failOn === "any") return findings.length > 0;
+  // #1618, `ceo`'s ruling (a): only an ASSERTED finding can fail the run. A referral is by definition a person's decision,
+  // and a threshold that fired on its severity made the tool assert what the judge had refused to.
+  const assertedFindings = findings.filter((f) => !isReferral(f));
+  if (failOn === "any") return assertedFindings.length > 0;
   const threshold = SEVERITY_ORDER.indexOf(failOn);
   // An unrecognised threshold must not silently mean "never fail" -- that would turn a typo in a
   // workflow file into a check that always passes, which is the failure mode nobody notices.
   if (threshold === -1) throw new Error(`unknown fail-on value ${JSON.stringify(failOn)}`);
-  return findings.some((f) => {
+  return assertedFindings.some((f) => {
     const rank = SEVERITY_ORDER.indexOf(f.severity);
     return rank !== -1 && rank <= threshold;
   });
@@ -406,6 +412,9 @@ export function logLines(result: RunResult, failOn: FailOn): string[] {
   }
   lines.push(`a11ign: ${findings.length} finding(s) (${breakdown})${left ? " in what was examined" : ""}; `
     + `fail-on=${failOn}`);
+  // #1618: its own line, so the count line above stays as #1366 pinned it, and only when a threshold is set -- at `never`
+  // nothing fails the run, and the rule would be a sentence about an exit that cannot happen.
+  if (failOn !== "never") lines.push(`a11ign: ${FAIL_ON_RULE}`);
   return lines;
 }
 

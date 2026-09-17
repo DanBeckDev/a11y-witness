@@ -5,7 +5,7 @@
 *(formerly a11y-witness — renamed 2026-09-07, before the transfer to the `a11ign` organisation; see #66.
 Nothing had been published under the old name, so this is a rename, not a migration.)*
 
-[![lint](https://github.com/DanBeckDev/a11y-witness/actions/workflows/lint.yml/badge.svg)](https://github.com/DanBeckDev/a11y-witness/actions/workflows/lint.yml)
+[![ci](https://github.com/DanBeckDev/a11y-witness/actions/workflows/ci.yml/badge.svg)](https://github.com/DanBeckDev/a11y-witness/actions/workflows/ci.yml)
 [![capture-regression](https://github.com/DanBeckDev/a11y-witness/actions/workflows/capture-regression.yml/badge.svg)](https://github.com/DanBeckDev/a11y-witness/actions/workflows/capture-regression.yml)
 [![licence: AGPL-3.0-or-later](https://img.shields.io/badge/licence-AGPL--3.0--or--later-blue)](./LICENSE)
 
@@ -508,7 +508,7 @@ you are trying to do. The four you are most likely to want:
 | document | what it is for |
 |---|---|
 | [`docs/getting-started.md`](./docs/getting-started.md) | **start here**: install, set up a worker by whichever route fits, run your first report, and what to do when it fails |
-| [`docs/adr/README.md`](./docs/adr/README.md) | 24 architecture decision records, indexed — the *why*, including the alternatives that were rejected |
+| [`docs/adr/README.md`](./docs/adr/README.md) | 37 architecture decision records, indexed — the *why*, including the alternatives that were rejected |
 | [`docs/METHODOLOGY.md`](./docs/METHODOLOGY.md) | how the numbers were produced, the biases we are exposed to, and why the eval figures must not be quoted as a headline |
 | `docs/coverage.md` | **every WCAG 2.2 A/AA criterion and whether we detect it** — each partial one names the gap. Generated from the code, deliberately not committed (issue #158: two branches regenerating the same tracked page produced conflicts in a file neither author wrote), so it is not a link — run `npm run docs:coverage` to read it |
 | [`docs/screenreader-coverage.md`](./docs/screenreader-coverage.md) | every behaviour we drive — and **what we do not drive yet**, which bounds what this tool can claim |
@@ -526,9 +526,11 @@ carries the known limitations, stated plainly. `CLAUDE.md` is operational instru
      gate result recorded in docs/board/reported/. Do not TYPE a number here: a figure the report
      cannot source is a figure that outlives its measurement, and one already did. -->
 
-**On our own corpus of 1,405 conformant records the deterministic rules asserted no failures. The real-page figure is under re-measurement since 2026-09-14. The last one published, from 2026-08-24 on the product path across 18 conformant real pages, was 0 criteria asserted wrongly and 4 referred, and it no longer describes the tool: a refreshed baseline on 2026-09-06 produced four findings on pages an older baseline had passed, and outcomes have changed since it was taken, so that some criteria which read as clean then read as undetermined now. A new figure is stated here, with its date, its denominator and the run it came from, once it is measured. The trained component refers, it never asserts, and a referral on a conformant page is expected rather than a defect.**
+**On our own corpus of 1,405 conformant records the deterministic rules asserted no failures. Measured 2026-09-14 on the 41 conformant real pages of the calibration set at the shipped floor (run 2f9c51aa): 0 criteria asserted wrongly, 422 referred. One count first read as wrong and was a publisher-declared exception the corpus lacked (networkrail careers, 4.1.2), corrected in the corpus. The 2026-08-24 18-page product-path figure is superseded: re-derived at today's code on the 17 of those pages still in the corpus, 0 asserted wrongly, 180 referred. The trained component refers, it never asserts, and a referral on a conformant page is expected rather than a defect.**
 
 <!-- CLAIM:END -->
+
+The corpus correction behind that line is tracked as #1610, and the product-path re-derivation as #1612.
 
 **Why the sentence above is worded that way, and never as an unbounded phrase.** A claim of the form
 *"this tool produces no false positives"* asserts something about the web; what was measured is a corpus.

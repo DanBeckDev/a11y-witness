@@ -28,6 +28,7 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 import { realpathSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
+import { TOOLING_ROOTS } from "../packages/guards/src/tooling-roots.mjs";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 export const OUT = resolve(REPO, "docs/commands.md");
@@ -51,11 +52,18 @@ const ENTRY_POINT_GUARD = /import\.meta\.url\s*===/;
  * @returns {string[]}
  */
 export function commandScripts(root = REPO) {
-  const dir = resolve(root, "scripts");
-  return readdirSync(dir)
-    .filter((f) => f.endsWith(".mjs") && !f.endsWith(".test.mjs"))
-    .filter((f) => ENTRY_POINT_GUARD.test(readFileSync(join(dir, f), "utf8")))
-    .sort();
+  // EVERY TOOLING ROOT, not just `scripts/`. The org moved to @a11ign/agent-org and the guards to
+  // @a11ign/guards; a discovery still pointing at scripts/ alone found 21 commands against a census of
+  // ~51 and reported that as a clean run. Returns REPO-RELATIVE paths now, because a bare basename
+  // cannot say which root it came from.
+  return TOOLING_ROOTS.flatMap((rel) => {
+    const dir = resolve(root, rel);
+    if (!existsSync(dir)) return [];
+    return readdirSync(dir)
+      .filter((f) => f.endsWith(".mjs") && !f.endsWith(".test.mjs"))
+      .filter((f) => ENTRY_POINT_GUARD.test(readFileSync(join(dir, f), "utf8")))
+      .map((f) => `${rel}/${f}`);
+  }).sort();
 }
 
 /**
@@ -104,9 +112,10 @@ export function buildPage(scripts, root = REPO) {
     "",
   ];
   for (const file of scripts) {
-    const text = readFileSync(resolve(root, "scripts", file), "utf8");
+    // `file` is repo-relative: commandScripts() spans every tooling root, so the path is the whole name.
+    const text = readFileSync(resolve(root, file), "utf8");
     const description = commandHeader(text);
-    lines.push(`- \`node scripts/${file}\` — ${description ?? "**MISSING `// command:` HEADER**"}`);
+    lines.push(`- \`node ${file}\` — ${description ?? "**MISSING `// command:` HEADER**"}`);
   }
   return `${lines.join("\n")}\n`;
 }
