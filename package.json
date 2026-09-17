@@ -18,6 +18,8 @@
     "branches:stranded": "node packages/agent-org/src/stranded-branches.mjs",
     "queue:table": "node packages/agent-org/src/queue-table.mjs",
     "work:gate": "node packages/agent-org/src/work-gate.mjs",
+    "work:wake": "node packages/agent-org/src/wake.mjs",
+    "work:tick": "node packages/agent-org/src/work-gate.mjs | node packages/agent-org/src/wake.mjs",
     "board:document": "node packages/agent-org/src/board-document.mjs",
     "tracker:comment": "node packages/agent-org/src/tracker-comment.mjs",
     "board:record": "node packages/agent-org/src/board-record.mjs",
