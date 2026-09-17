@@ -20,7 +20,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { realpathSync } from "node:fs";
 import { refuseUnknownFlags, flagValue } from "@a11ign/worker-fleet/cli-flags";
-import { sandboxGitEnv } from "./git-env.mjs";
+import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 
 /**
  * Each pattern's own name, regex source and what a match means. Kept as a STRING and re-compiled to a

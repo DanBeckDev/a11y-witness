@@ -26,7 +26,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { realpathSync } from "node:fs";
 import { refuseUnknownFlags, flagValue } from "@a11ign/worker-fleet/cli-flags";
-import { sandboxGitEnv } from "./git-env.mjs";
+import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 import { scanHistory } from "./history-secret-scan.mjs";
 
 /** @param {string} target */

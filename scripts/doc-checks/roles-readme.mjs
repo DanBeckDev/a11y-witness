@@ -1,12 +1,12 @@
 // @ts-check
-// DOC CROSS-REFERENCE CHECK (#905): `docs/roles/README.md`'s roster links each role to its file, and each linked
+// DOC CROSS-REFERENCE CHECK (#905): `packages/agent-org/docs/roles/README.md`'s roster links each role to its file, and each linked
 // file names its own agent, its reporter, its lane and its ban. Moved out of `roles-readme.test.ts`, which now
-// asserts on these same functions. If `docs/roles/` has gone stale with the org it describes, this is where the
+// asserts on these same functions. If `packages/agent-org/docs/roles/` has gone stale with the org it describes, this is where the
 // nightly report will say so -- deleting it is not #905's call (product-manager's ruling).
 import { existsSync, readFileSync } from "node:fs";
 import { resolve, dirname, join } from "node:path";
 
-export const README_PATH = "docs/roles/README.md";
+export const README_PATH = "packages/agent-org/docs/roles/README.md";
 
 /**
  * @typedef {{ role: string, agent: string, linkText: string, filePath: string, reporter: string | null }} RosterRow

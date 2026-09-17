@@ -14,7 +14,7 @@ name: auto-arm
 # is green for the head IT HAS RECORDED, with no requirement that the head still contains `main`'s current
 # tip. #195 (GitHub's recorded head disagreed with the branch's real tip) is exactly the defect a bare
 # version of this workflow would have let through. `ci.yml`'s `mergeSafety` job
-# (`scripts/merge-guard.mjs --ci-gate`) is now part of the required `gate` context and refuses that shape
+# (`packages/agent-org/src/merge-guard.mjs --ci-gate`) is now part of the required `gate` context and refuses that shape
 # (#294) -- see that job's own comment for why it is architecturally safe to run mid-workflow where
 # `merge-guard.mjs`'s human-facing check-run inspection is not, and why it deliberately does NOT also
 # check ancestry (#182) or closing-claim (#262): both refuse the NORMAL case when CI, which has no way to
@@ -193,7 +193,7 @@ jobs:
             echo "::warning::A11IGN_BOT_TOKEN is not set -- arming with GITHUB_TOKEN instead. A merge completed with it fires no workflow events (trunk-guard, close-rows, the push watchdogs) -- see #416. And arming with it fires no auto_merge_enabled run, so update-branch does not sweep on arming and #1094 returns with no log line -- see #1094."
             export GH_TOKEN="$FALLBACK_TOKEN"
           fi
-          node scripts/arm-pr.mjs --pr="${{ github.event.pull_request.number }}" --repo="${{ github.repository }}"
+          node packages/agent-org/src/arm-pr.mjs --pr="${{ github.event.pull_request.number }}" --repo="${{ github.repository }}"
 
   sweep:
     # ARM EVERY PR THE `arm` JOB ABOVE CANNOT SEE -- the ones already open, #344.
@@ -202,7 +202,7 @@ jobs:
     # it is the same question asked of the STANDING QUEUE rather than of the event's own PR. Arming is
     # idempotent, so re-running it costs one list call and nothing else.
     #
-    # The decision lives in `scripts/auto-arm-sweep.mjs` -- which PRs it refuses and why is documented and
+    # The decision lives in `packages/agent-org/src/auto-arm-sweep.mjs` -- which PRs it refuses and why is documented and
     # unit-tested there, because a predicate written in `run:` bash can only ever be checked by asserting
     # on the text of a shell script, and a guard whose expectations are scraped out of the source it tests
     # is this repository's own recorded defect. The script imports nothing but `node:*`, so this job needs
@@ -226,7 +226,7 @@ jobs:
             echo "::warning::A11IGN_BOT_TOKEN is not set -- arming with GITHUB_TOKEN instead. A merge completed with it fires no workflow events (trunk-guard, close-rows, the push watchdogs) -- see #416. And arming with it fires no auto_merge_enabled run, so update-branch does not sweep on arming and #1094 returns with no log line -- see #1094."
             export GH_TOKEN="$FALLBACK_TOKEN"
           fi
-          node scripts/auto-arm-sweep.mjs
+          node packages/agent-org/src/auto-arm-sweep.mjs
 
   stalled:
     # NAME THE ARMED, GREEN PRs THAT CAN NEVER MERGE -- #361, the gap `sweep` above closes at the OTHER
@@ -235,7 +235,7 @@ jobs:
     # conflict against the current `main`) and tells nobody -- measured 12.5 PR-hours of two workers'
     # finished work, invisible, found only by a dispatcher who happened to ask.
     #
-    # REPORTS, NEVER ACTS -- no rebase, no branch update, no close. `scripts/queue-stalled.mjs`'s own
+    # REPORTS, NEVER ACTS -- no rebase, no branch update, no close. `packages/agent-org/src/queue-stalled.mjs`'s own
     # header has the full derivation, the incident, and why `git merge-tree` rather than GitHub's own
     # (lazily-computed, and read `UNKNOWN` on both real PRs at the moment of measurement) `mergeable`.
     #
@@ -260,7 +260,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: node scripts/queue-stalled.mjs
+        run: node packages/agent-org/src/queue-stalled.mjs
 
   update-branch:
     # PUSH EVERY ARMED, GREEN-OR-RUNNING PR UP TO main's NEW TIP -- C2, #416's sibling.
@@ -268,7 +268,7 @@ jobs:
     # `arm` and `sweep` above get a PR INTO the queue; nothing pushed one back up once `main` moved past
     # it, which is `queue-stalled.mjs`'s entire subject one step further along -- it only ever REPORTS a
     # drifted PR. This job runs `gh pr update-branch` itself, on the one event that means "the queue just
-    # moved": a merge landing on `main`. `scripts/update-branch-sweep.mjs` has the full decision and why
+    # moved": a merge landing on `main`. `packages/agent-org/src/update-branch-sweep.mjs` has the full decision and why
     # `git merge-base --is-ancestor` is used instead of GitHub's lazily-computed `mergeStateStatus`.
     #
     # ONLY ON `push`, never on the `pull_request` events the jobs above ride -- a fresh PR being opened or
@@ -328,4 +328,4 @@ jobs:
             exit 0
           fi
           export GH_TOKEN="$A11IGN_BOT_TOKEN"
-          node scripts/update-branch-sweep.mjs
+          node packages/agent-org/src/update-branch-sweep.mjs

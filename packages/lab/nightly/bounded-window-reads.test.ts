@@ -66,8 +66,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "@a11ign/evidence/source-text";
-import { newestPerName, newestConclusionOf } from "../../../scripts/newest-check-run.mjs";
-import { declareTreeWideGuard, walkTree } from "../../../scripts/tree-wide-guard.mjs";
+import { newestPerName, newestConclusionOf } from "../../agent-org/src/newest-check-run.mjs";
+import { declareTreeWideGuard, walkTree } from "../../guards/src/tree-wide-guard.mjs";
 
 // #716/#704: this file's own population is the whole tracked tree, not one file -- declared here
 // rather than inferred from its source, per ceo's ruling (2026-09-09) that the tree-wide-guard
@@ -151,13 +151,13 @@ function rollupReaders(): string[] {
  * question the count never asked -- what answers this now?
  */
 const EXPECTED_READERS: Record<string, string> = {
-  "scripts/merge-queue.mjs":
+  "packages/agent-org/src/merge-queue.mjs":
     "checksBlocking -- THE site #634 found. If it is not in the population, the guard cannot have caught it",
-  "scripts/queue-stalled.mjs":
+  "packages/agent-org/src/queue-stalled.mjs":
     "head quiet time and the gate's conclusion, both narrowed per name",
-  "scripts/update-branch-sweep.mjs":
+  "packages/agent-org/src/update-branch-sweep.mjs":
     "the same two reads on the sweep's side -- #500 and #517 fixed this file twice",
-  // DEPARTED 2026-09-09 (dispatcher/table-reports-rate-limit): `scripts/queue-table.mjs` read the
+  // DEPARTED 2026-09-09 (dispatcher/table-reports-rate-limit): `packages/agent-org/src/queue-table.mjs` read the
   // rollup through `newestPerName` and now does not read it at all. Its checks moved from
   // `gh pr view --json statusCheckRollup` (GraphQL) to `gh api .../check-runs` (REST), because GraphQL
   // hit 5000/5000 account-wide at 14:41Z and a table that cannot be read during an outage reports
@@ -220,3 +220,45 @@ test("THE SHA IS NOT A RUN IDENTIFIER -- `pull_request: edited` re-runs CI witho
     "asking `did every run at this sha succeed` answers FAILURE here and is the wrong question");
 });
 
+
+// --- #1623: newest per name is the newest WORKFLOW RUN when both entries name one ---
+
+/**
+ * #1617's two `gate` entries at head `84f684dd`, as `statusCheckRollup` returned them (GraphQL, read 2026-09-14 by
+ * worker-tooling), in GitHub's order and with the fields `gh pr list --json statusCheckRollup` carries. The CANCELLED
+ * run is the NEWER workflow run (34858134371) and "completed" at 14:49:32Z, before it started and before the older
+ * run's gate (34858130620) succeeded at 14:51:42Z.
+ */
+const PR_1617_GATES = [
+  { __typename: "CheckRun", name: "gate", status: "COMPLETED", conclusion: "CANCELLED", startedAt: "2026-09-14T14:49:33Z",
+    completedAt: "2026-09-14T14:49:32Z", workflowName: "ci",
+    detailsUrl: "https://github.com/DanBeckDev/a11y-witness/actions/runs/34858134371/job/104022946741" },
+  { __typename: "CheckRun", name: "gate", status: "COMPLETED", conclusion: "SUCCESS", startedAt: "2026-09-14T14:51:37Z",
+    completedAt: "2026-09-14T14:51:42Z", workflowName: "ci",
+    detailsUrl: "https://github.com/DanBeckDev/a11y-witness/actions/runs/34858130620/job/104023707501" },
+];
+/**
+ * #1605's pair at its merged head `8c1ebc44` (REST check-runs, read 2026-09-14), in the rollup's field shape: the
+ * cancelled gate in the OLDER run 34855015256, the success in the LATER run 34855153052. Not blocked; merged.
+ */
+const PR_1605_GATES = [
+  { __typename: "CheckRun", name: "gate", status: "COMPLETED", conclusion: "CANCELLED", startedAt: "2026-09-14T14:22:34Z",
+    completedAt: "2026-09-14T14:22:33Z", workflowName: "ci",
+    detailsUrl: "https://github.com/DanBeckDev/a11y-witness/actions/runs/34855015256/job/104012833979" },
+  { __typename: "CheckRun", name: "gate", status: "COMPLETED", conclusion: "SUCCESS", startedAt: "2026-09-14T14:26:18Z",
+    completedAt: "2026-09-14T14:26:21Z", workflowName: "ci",
+    detailsUrl: "https://github.com/DanBeckDev/a11y-witness/actions/runs/34855153052/job/104014192412" },
+];
+/** The same entries with no run id -- what completion-time ordering alone sees. */
+const withoutRunIds = (runs: { detailsUrl?: string }[]) => runs.map(({ detailsUrl, ...rest }) => {
+  void detailsUrl; // dropped on purpose: what completion-time ordering alone sees
+  return rest;
+});
+
+test("#1623: NEWEST PER NAME orders by workflow run -- #1617's gate reads CANCELLED, #1605's SUCCESS, and entries "
+  + "without run ids read by time as before", () => {
+  assert.equal(newestConclusionOf(PR_1617_GATES, "gate"), "CANCELLED");
+  assert.equal(newestConclusionOf([...PR_1617_GATES].reverse(), "gate"), "CANCELLED");
+  assert.equal(newestConclusionOf(PR_1605_GATES, "gate"), "SUCCESS");
+  assert.equal(newestConclusionOf(withoutRunIds(PR_1617_GATES), "gate"), "SUCCESS");
+});

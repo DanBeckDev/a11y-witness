@@ -1,5 +1,5 @@
 // @ts-check
-// Run by `scripts/isolation-gate.mjs` from a throwaway directory OUTSIDE this repository, against the
+// Run by `packages/guards/src/isolation-gate.mjs` from a throwaway directory OUTSIDE this repository, against the
 // installed tarball.
 //
 // It cannot run the scorer: that needs Python, torch and an 87 MB encoder that is deliberately not shipped.

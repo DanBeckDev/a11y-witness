@@ -203,7 +203,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: node scripts/trunk-sweep.mjs
+        run: node packages/agent-org/src/trunk-sweep.mjs
   closeRowsSweep:
     if: github.event.schedule == '37 * * * *' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
@@ -218,7 +218,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: node scripts/close-rows-sweep.mjs --window=120
+        run: node packages/agent-org/src/close-rows-sweep.mjs --window=120
   watch:
     # Runs on the :37 cron AND on workflow_dispatch, so the one job whose failure mode is silence can be
     # asked to speak by hand (worker-judge's review of #1068).
@@ -240,7 +240,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set +e
-          node scripts/org-watch.mjs > /tmp/org-watch.md 2>&1; rc=$?
+          node packages/agent-org/src/org-watch.mjs > /tmp/org-watch.md 2>&1; rc=$?
           set -e
           cat /tmp/org-watch.md
           if [ "$rc" -ne 0 ]; then gh issue comment 928 --body-file /tmp/org-watch.md; fi

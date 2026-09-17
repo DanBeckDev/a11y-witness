@@ -5,7 +5,7 @@
 *(formerly a11y-witness — renamed 2026-09-07, before the transfer to the `a11ign` organisation; see #66.
 Nothing had been published under the old name, so this is a rename, not a migration.)*
 
-[![lint](https://github.com/DanBeckDev/a11y-witness/actions/workflows/lint.yml/badge.svg)](https://github.com/DanBeckDev/a11y-witness/actions/workflows/lint.yml)
+[![ci](https://github.com/DanBeckDev/a11y-witness/actions/workflows/ci.yml/badge.svg)](https://github.com/DanBeckDev/a11y-witness/actions/workflows/ci.yml)
 [![capture-regression](https://github.com/DanBeckDev/a11y-witness/actions/workflows/capture-regression.yml/badge.svg)](https://github.com/DanBeckDev/a11y-witness/actions/workflows/capture-regression.yml)
 [![licence: AGPL-3.0-or-later](https://img.shields.io/badge/licence-AGPL--3.0--or--later-blue)](./LICENSE)
 
@@ -508,7 +508,7 @@ you are trying to do. The four you are most likely to want:
 | document | what it is for |
 |---|---|
 | [`docs/getting-started.md`](./docs/getting-started.md) | **start here**: install, set up a worker by whichever route fits, run your first report, and what to do when it fails |
-| [`docs/adr/README.md`](./docs/adr/README.md) | 24 architecture decision records, indexed — the *why*, including the alternatives that were rejected |
+| [`docs/adr/README.md`](./docs/adr/README.md) | 37 architecture decision records, indexed — the *why*, including the alternatives that were rejected |
 | [`docs/METHODOLOGY.md`](./docs/METHODOLOGY.md) | how the numbers were produced, the biases we are exposed to, and why the eval figures must not be quoted as a headline |
 | `docs/coverage.md` | **every WCAG 2.2 A/AA criterion and whether we detect it** — each partial one names the gap. Generated from the code, deliberately not committed (issue #158: two branches regenerating the same tracked page produced conflicts in a file neither author wrote), so it is not a link — run `npm run docs:coverage` to read it |
 | [`docs/screenreader-coverage.md`](./docs/screenreader-coverage.md) | every behaviour we drive — and **what we do not drive yet**, which bounds what this tool can claim |

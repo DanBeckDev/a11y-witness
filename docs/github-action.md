@@ -53,7 +53,8 @@ A longer, commented version of the same workflow is in [`examples/workflow.yml`]
 
 **`fail-on` defaults to `never`.** A tool that breaks builds the day it is installed gets uninstalled. One
 that reports first, and fails when the team decides it should, gets adopted. Move to `blocker`, then
-`serious`, as you fix what it finds. A severity means *that or worse*.
+`serious`, as you fix what it finds. A severity means *that or worse*. **fail-on counts asserted findings;
+referrals are listed and never fail the run.** A referral is a person's decision, so no threshold fires on it.
 
 An **unrecognised** `fail-on` is a hard error rather than a fallback to `never`. A typo in a workflow file
 that silently produces a permanently green check is the failure nobody notices, because green is exactly
@@ -308,3 +309,52 @@ pressing submit part-way through filling would attribute the evidence to a state
 | `findings` | Count of lived-experience findings. |
 | `task-completable` | Whether the judge thinks a screen-reader user could finish the stated task. On the default `local` backend this only means nothing scored as a blocker, a coarse proxy. |
 | `result-json` | Path to the full result, including the transcript. Worth uploading as an artifact — the transcript is the evidence behind every finding. |
+
+`findings` counts every lived-experience finding, referred ones included; `fail-on` counts only the asserted ones. The one-line log splits them:
+`a11ign: 3 finding(s) (2 asserted: 1 serious, 1 moderate; 1 referred); fail-on=<your fail-on>`.
+
+## What `result-json` contains
+
+`result-json` is the CLI's `--json` output, written by the capture step before the summary is rendered. These are
+its top-level fields, and what each one lets you check.
+
+| Field | What it is |
+|---|---|
+| `url`, `task`, `screenReader` | What was examined, as given to the Action, and which screen reader read it (for example `NVDA`). |
+| `verdict.findings` | The lived-experience findings. Each carries `wcag`, `severity` (`blocker`, `serious`, `moderate` or `minor`), `issue`, `evidence` (what the screen reader announced), `confidence`, `layer` (`perceive`, `navigate` or `interact`, from the criterion's WCAG principle) and, when a rule produced it, `mapping`. **`mapping: "conformance"` is an assertion: the evidence establishes the criterion is not met. Absent or `"secondary"` is a referral: worth a person's eyes, not a verdict.** The log line and the summary table say which is which. |
+| `verdict.suppressed` | Predictions the trained scorer made and did not report, each with `criterion`, `score` and `reason`: a deterministic rule decides that criterion or subtype; the capture holds no evidence of the kind the criterion is about; or the page was outside the distribution the scorer was validated on, so nothing was scored. Recorded so a withheld prediction is visible, not silently dropped. |
+| `verdict.novelty` | How close this page is to the scorer's training data: `nearestTrainingCosine`, `floor` and `inSupport`. `inSupport: false` means the scorer abstained (`verdict.abstained: true`, and no scorer findings), so its criteria are unchecked, not clean. `inSupport: null` means unknown, never safe. |
+| `verdict.runtime`, `environment` | The versions that produced this result: the scorer's inference runtime, and the screen reader, browser, worker code and capture protocol. A disputed finding is traceable to them. |
+| `outcomes` | One ACT outcome per WCAG 2.2 A/AA criterion: `criterion`, `outcome`, `reason` and, when the rule layer supplied it, `assessor: "axe-core"`. See below. |
+| `conformance` | WCAG's five conformance requirements (Conformance Level, Full pages, Complete processes, Only Accessibility-Supported Ways of Using Technologies, Non-Interference), each with what this run `establishes` and its `limitation`. Neither is ever empty. This is where a partial examination is stated. |
+| `earl` | The same outcomes as W3C EARL (JSON-LD): one `earl:Assertion` per criterion, `earl:mode` automatic, and the `reason` in `dct:description`, so a team already merging axe or Lighthouse results can read ours without a parser. |
+| `transcript` | The screen reader's announcements, in order, while it read the page. A finding quoted from the page's announcements is borne out here. |
+| `interaction` | What happened when controls were activated or Tab was pressed, keyed by probe channel, for example `formChanges`, `postSubmitNames`, `routeChange`, `focusOrder` and `focusReveal`. [What each probe drives](screenreader-coverage.md) is documented separately. |
+| `structure` | What the structural sweeps found: headings, landmarks, form fields, graphics, links, lists, table cells, frames. |
+| `ruleBased` | The rule layer's axe-core violations, or `null` when the rule layer produced no results (`axe: false`, or a scan that failed), which is not the same as `[]`. |
+| `captureVerified`, `captureUnverifiedReason` | `false` when the capture could not be confirmed to have read the requested page. The reason is `wrong-content` (it read something else, such as browser chrome) or `contained` (it read only part of the page, usually a consent dialog). The summary then reports no findings and the run exits 2: a failed measurement, not a clean page. |
+| `leftSite` | Where the examination ended because an activation took the browser off the page's site: the `control` activated, `from` and `to` (`null` when unknown), whether the worker `recorded` it or it was `derived` from the announcements (`source`), and the quoted `evidence`. `null` when every activation stayed on the page. `structure` and `interaction` are then only what was observed before it. |
+| `artifactPath` | Where the capture behind this result was written, or `null` under `--no-keep`. |
+
+### Reading `outcomes`
+
+`outcome` is one of ACT's five values, and `reason` always says why:
+
+| `outcome` | Means |
+|---|---|
+| `failed` | Asserted: a conformance-mapped finding establishes this criterion is not met. |
+| `cantTell` | Referred: a finding suggests a problem but its rule is stricter or looser than the criterion, or the examination could not decide (for example the scorer abstained, the examination ended or a sweep stopped short, the evidence was not collected, only one control was examined, or two layers disagree). Not a pass. |
+| `passed` | Content of the relevant kind was examined in full and no failure was found. |
+| `inapplicable` | Nothing of the kind this criterion is about was on the page. |
+| `untested` | No assessor in this tool covers this criterion. |
+
+For a criterion the screen reader covers, a conformance-mapped finding decides first, then a scorer abstention, then an
+examination that ended or stopped short; only after those may nothing found read `inapplicable`. When axe-core covers
+the same criterion, what the screen reader met stands, and its own `failed` is never changed. An axe violation turns
+a screen-reader `cantTell` into `failed` with `assessor: "axe-core"`, but beside a screen-reader `passed` or
+`inapplicable` it becomes `cantTell`, because the two layers examined different things and disagree. For a criterion
+only axe-core covers, a clean axe result reads `cantTell`, never `passed`: automated rules cover only part of any
+criterion.
+
+**A result with no findings is not a clean page until `outcomes` and `conformance` say what was examined.** A CI job
+deciding whether to fail a build should read them, not `findings` alone.
