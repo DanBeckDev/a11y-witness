@@ -191,9 +191,13 @@ synthetic corpus will improve calibration, not generalisation.
 
 Run locally through `action-dry-run.sh`, full setup, both layers, LOCAL judge — no LLM, no key.
 
-**`w3.org/WAI` — the W3C's own accessibility site.** 143 announcements; 19 headings, 15 landmarks, 42
-links, 10 form fields captured. **Zero findings**, and not marginally: the highest score was 0.049 against
-a 0.4 threshold. A false positive here would have been damning.
+**`w3.org/WAI` — the W3C's own accessibility site.** 141 announcements, 19 headings, 15 landmarks captured.
+**3 findings, all true positives, none from the trained scorer:** axe-core's rule layer flags three
+`4.1.2` violations inside the page's embedded YouTube player (`aria-allowed-attr`, `aria-prohibited-attr`,
+`button-name`). Reproduced on every measurement taken of this page — the V1 rehearsal's original run, its
+re-run, and a fresh capture at commit `a8894c27`, 2026-09-17. (Announcement, heading and landmark counts
+are the stable part; how many links or form fields a run reaches on this page varies with whether the task
+follows a link into a second document — see #1663.)
 
 **`news.ycombinator.com` — a real site, not built for accessibility.** 151 announcements, 3 findings, all
 true positives: the search box is announced as a bare `edit` with no label (3.3.2, 4.1.2) and the logo has
