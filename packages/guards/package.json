@@ -47,6 +47,9 @@
     },
     "./walk-scope-declaration": {
       "default": "./src/walk-scope-declaration.mjs"
+    },
+    "./tooling-roots": {
+      "default": "./src/tooling-roots.mjs"
     }
   },
   "files": [
