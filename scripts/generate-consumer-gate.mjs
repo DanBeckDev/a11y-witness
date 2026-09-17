@@ -70,7 +70,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
-import { sandboxGitEnv } from "./git-env.mjs";
+import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 import { REPO as PRE_TRANSFER_REPO, PRODUCT_REPO } from "./repo-identity.mjs";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));

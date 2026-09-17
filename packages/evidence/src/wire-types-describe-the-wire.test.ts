@@ -198,3 +198,79 @@ test("Capture is a SUBSET of the published CaptureResult — server.mjs adds tas
     "capture-core.mjs's Capture typedef carries a field @a11ign/evidence's CaptureResult does not "
     + `name: ${undeclared.join(", ")}`);
 });
+
+/**
+ * #1616, done-when 3: each CHANGE ELEMENT's fields and nullability, against what the producer WRITES.
+ *
+ * The tests above compare top-level keys only, so an element could drop or gain a field -- or write `null` where the
+ * type says `string` -- and every one of them stays green. The producer is read as TEXT, the same way the typedef tests
+ * above read `capture-core.mjs`: every `interaction.stateChanges.push({ ... })` literal and the `formChanges` entry.
+ *
+ * TWO CHECKS AGAIN, and they live in different places. At RUNTIME this compares field names and the fields written as a
+ * literal `null` with the declared element, so a producer field dropped, added or no longer null goes red under `tsx`.
+ * Whether the TYPE admits `null` is `tsc`'s: the typed error entry below fails to compile without `| null`, which
+ * `npx tsx --test` cannot see. That is stated in the PR as a typecheck observation, not an Acceptance red.
+ */
+const PROBES_PATH = resolve(process.cwd(), "packages/nvda-worker/src/capture-probes.mjs");
+type StateChange = CaptureInteraction["stateChanges"][number];
+type FormChange = CaptureInteraction["formChanges"][number];
+
+/** The text of the balanced `{ ... }` object literal that starts at `open`. */
+function literalAt(source: string, open: number): string {
+  let depth = 0;
+  for (let i = open; i < source.length; i++) {
+    if (source[i] === "{") depth++;
+    else if (source[i] === "}" && --depth === 0) return source.slice(open + 1, i);
+  }
+  throw new Error("unbalanced object literal in capture-probes.mjs");
+}
+
+/** Field names, and the fields written as a literal `null`, of one single-level object literal body. */
+function literalFields(body: string): { keys: string[]; nulls: string[] } {
+  const keys: string[] = []; const nulls: string[] = [];
+  for (const part of body.split(",").map((p) => p.trim()).filter(Boolean)) {
+    const named = part.match(/^([A-Za-z_$][\w$]*)\s*:\s*([^]*)$/);
+    const key = named ? named[1] : (part.match(/^[A-Za-z_$][\w$]*$/) ?? [])[0];
+    assert.ok(key, `could not read a field name from "${part}" -- the producer's literal changed shape`);
+    keys.push(key as string);
+    if (named && named[2].trim() === "null") nulls.push(key as string);
+  }
+  return { keys: [...new Set(keys)].sort(), nulls: [...new Set(nulls)].sort() };
+}
+
+function stateChangeSites(source: string): { keys: string[]; nulls: string[] }[] {
+  return [...source.matchAll(/interaction\.stateChanges\.push\(\{/g)]
+    .map((m) => literalFields(literalAt(source, (m.index as number) + m[0].length - 1)));
+}
+
+test("#1616 every stateChanges field the producer writes is declared, and so is its null case", () => {
+  const sites = stateChangeSites(readFileSync(PROBES_PATH, "utf8"));
+  assert.equal(sites.length, 2, "the population: the measured and the errored push sites (capture-probes.mjs:2328, :2343)");
+  const written = [...new Set(sites.flatMap((s) => s.keys))].sort();
+  const writtenNull = [...new Set(sites.flatMap((s) => s.nulls))].sort();
+  const declared: Required<StateChange> = { control: "", after: "", afterSource: "", error: "" };
+  // Compile-time: the producer's own error entry must be assignable to the element. Without `| null` on `after` this
+  // line fails `tsc` (TS2322) -- the type-level half of done-when 3, which `tsx` does not check.
+  const erroredEntry: StateChange = { control: "Delivery options, button, collapsed", after: null, afterSource: "focus", error: "reportFocus timed out" };
+  const declaredNull = Object.entries(erroredEntry).filter(([, v]) => v === null).map(([k]) => k).sort();
+  assert.ok(written.length > 0, "#1123: the stateChanges fields read from the producer are empty -- the extraction is blind");
+  const undeclared = written.filter((key) => !Object.keys(declared).includes(key));
+  assert.deepEqual(undeclared, [], `the producer writes a stateChanges field the type does not declare: ${undeclared.join(", ")}`);
+  assert.deepEqual(written, Object.keys(declared).sort(), "the declared stateChanges element and the fields the producer writes differ");
+  assert.deepEqual(writtenNull, declaredNull,
+    `the producer writes null for [${writtenNull.join(", ")}] and the declared error entry is null for [${declaredNull.join(", ")}]`);
+  assert.deepEqual(writtenNull, ["after"], "the control: the producer's error path writes after: null");
+});
+
+test("#1616 every formChanges field the producer writes is declared, and none of them is null", () => {
+  const source = readFileSync(PROBES_PATH, "utf8");
+  const match = source.match(/const entry = \{([^}]*)\};\s*\n\s*interaction\.formChanges\.push\(entry\)/);
+  assert.ok(match, "the formChanges entry literal (capture-probes.mjs:2531-2532) has moved -- this test checks nothing");
+  const { keys: written, nulls } = literalFields(match[1]);
+  const declared: Required<FormChange> = { control: "", after: "", kind: "", baselineQuiet: false, baselineWaitedMs: 0 };
+  assert.ok(written.length > 0, "#1123: the formChanges fields read from the producer are empty -- the extraction is blind");
+  const undeclared = written.filter((key) => !Object.keys(declared).includes(key));
+  assert.deepEqual(undeclared, [], `the producer writes a formChanges field the type does not declare: ${undeclared.join(", ")}`);
+  assert.deepEqual(written, Object.keys(declared).sort(), "the declared formChanges element and the fields the producer writes differ");
+  assert.deepEqual(nulls, [], "the producer writes a literal null into a formChanges entry, which the type does not declare");
+});

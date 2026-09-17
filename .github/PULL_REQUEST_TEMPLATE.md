@@ -1,8 +1,20 @@
 <!--
-THE `Acceptance:` BLOCK BELOW IS RUN BY CI. `ci.yml`'s `acceptance` job (#353) hands each line to bash and
-its EXIT CODE is the verdict; a PR with no acceptance block FAILS `gate` with `ACCEPTANCE: MISSING`, and so
-does this template left unfilled. That is deliberate -- a check that finds nothing, runs nothing and
-reports green is this repository's most-recorded defect.
+THE `Acceptance:` BLOCK BELOW IS RUN BY CI, AND SINCE 2026-09-17 IT BLOCKS THE MERGE. `ci.yml`'s
+`acceptance` job (#353) hands each line to bash and its EXIT CODE is the verdict; a PR with no acceptance
+block reports `ACCEPTANCE: MISSING`, and so does this template left unfilled. That is deliberate -- a check
+that finds nothing, runs nothing and reports green is this repository's most-recorded defect.
+
+`acceptance` and `ownedPaths` are back in `gate`'s `needs`, so THIS IS NO LONGER RED-BUT-MERGEABLE. It was
+for a while: `gate` is the only required context, so a job outside its `needs` still ran, still reported and
+still painted the PR red -- it simply could not stop anything, and two pull requests merged red in two days
+through that gap. Both of the fields below are now worth getting right first time.
+
+IT NO LONGER BLOCKS THE MERGE, and this paragraph used to say it did. #902 removed `acceptance` from
+`gate`'s `needs:` (ci.yml:519 lists `changed, ts, python, ansible, changeset, rulesFitness,
+deliberateRefusals` and not this job) after measuring that of forty red `ci` runs on pull requests, THIRTEEN
+were a real test, lint or typecheck failure and the rest were process jobs. It still runs and still reports
+its own verdict; a red `acceptance` is a thing to read, not a wall. An outside contributor whose change is
+covered by `npm test` can say so in one line and move on.
 
 The enforcement shipped before the field was documented anywhere an author looks, and five open PRs failed
 a gate for something nobody had been told about. Hence these lines at the top, rather than the rules living
@@ -39,6 +51,12 @@ what you broke, and that the guard bit. `npm run mutate` makes it cheap.
 
 `Closes #N` still belongs on a PR that finishes a row. GitHub does not apply the reference when the bot
 performs the merge, so `trunk.yml`'s `closeRows` job does it explicitly (#298, #909) -- but the keyword is what it reads.
+
+  - NO ROW? Write `Closes: none -- <reason>` (em dash, like the `Acceptance:` escape hatch above). The
+    declaration is REQUIRED either way: a missing one reports `CLOSES: MISSING` and now blocks. This form
+    was undocumented here until 2026-09-17, and its absence is exactly how two PRs went red for a field
+    whose escape hatch the template never mentioned -- delete the `Closes #` line below and write this one
+    instead when there is no row.
 -->
 
 Closes #
@@ -55,7 +73,7 @@ Mutation:
 
 <!-- Tick what you ran. Not every box applies — see CONTRIBUTING.md for which apply to your change. -->
 
-- [ ] `npm test` (~850 tests, no worker)
+- [ ] `npm test` (the product suite: ~1,800 tests, no worker, no network)
 - [ ] `npm run lint` and `npm run typecheck`
 - [ ] `npm run training:check-signals` — if you touched a probe's output shape or a case definition
 - [ ] `npm run capture:check -- --worker=<url>` — **required** if you touched `capture-core.mjs`
