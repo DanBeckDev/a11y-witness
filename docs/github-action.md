@@ -98,7 +98,7 @@ new ignore rule with a negation under it.
 so a busy PR gets one comment that changes rather than one per push. The comment step runs `always()`, so
 the report still arrives when the check is failing — which is precisely when someone wants to read it.
 
-**Not on a pull request, no comment.** A run started by hand or by a push has nothing to comment on: the log shows one line (`a11ign: N finding(s)`), the report is in the run's job summary, and the full result, transcript included, is the `a11ign-result` artifact the upload step saves.
+**Not on a pull request, no comment.** A run started by hand or by a push has nothing to comment on: the log's last line is the count (`a11ign: N finding(s)`), with a line before it for anything that bounds that count (an examination that ended early, a capture spanning more than one document, criteria resting on an examination known to be partial), the report is in the run's job summary, and the full result, transcript included, is the `a11ign-result` artifact the upload step saves.
 
 **"Not run" is never rendered as "clean".** If you set `axe: false`, the report says the visual criteria
 are *unchecked*, not that they passed. This is the one thing the tool must never get wrong, and it did:
@@ -328,7 +328,7 @@ pressing submit part-way through filling would attribute the evidence to a state
 | `task-completable` | Whether the judge thinks a screen-reader user could finish the stated task. On the default `local` backend this only means nothing scored as a blocker, a coarse proxy. |
 | `result-json` | Path to the full result, including the transcript. Worth uploading as an artifact — the transcript is the evidence behind every finding. |
 
-`findings` counts every lived-experience finding, referred ones included; `fail-on` counts only the asserted ones. The one-line log splits them:
+`findings` counts every lived-experience finding, referred ones included; `fail-on` counts only the asserted ones. The log's count line splits them:
 `a11ign: 3 finding(s) (2 asserted: 1 serious, 1 moderate; 1 referred); fail-on=<your fail-on>`.
 
 ## What `result-json` contains
