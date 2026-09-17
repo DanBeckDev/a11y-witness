@@ -30,9 +30,9 @@
     "eval": "A11Y_PYTHON=.venv/bin/python tsx packages/lab/src/eval/run.ts",
     "rules-check": "tsx packages/lab/src/eval/rules-check.ts",
     "test": "npm run test:ts && npm run test:python",
-    "test:ts": "node packages/guards/src/assert-glob-not-empty.mjs \"packages/*/src/**/*.test.ts\" --min=300 --run --runner=rstest ${A11Y_TEST_CONCURRENCY:+--test-concurrency=$A11Y_TEST_CONCURRENCY}",
+    "test:ts": "node packages/guards/src/assert-glob-not-empty.mjs \"packages/{evidence,judge,scorer,cli,nvda-worker,worker-fleet,nvda-speech}/src/**/*.test.ts\" --min=180 --run --runner=rstest ${A11Y_TEST_CONCURRENCY:+--test-concurrency=$A11Y_TEST_CONCURRENCY}",
     "test:nightly": "node packages/guards/src/assert-glob-not-empty.mjs \"packages/*/nightly/**/*.test.ts\" --min=1 --run",
-    "test:python": "if [ -x .venv/bin/pytest ]; then PYTHONDONTWRITEBYTECODE=1 .venv/bin/pytest -p no:cacheprovider packages/*/tests -q; else echo \"SKIPPED: no .venv/bin/pytest \u2014 python tests need it. This is an honest skip, not a pass.\"; fi",
+    "test:python": "if [ -x .venv/bin/pytest ]; then PYTHONDONTWRITEBYTECODE=1 .venv/bin/pytest -p no:cacheprovider packages/*/tests -q; else echo \"SKIPPED: no .venv/bin/pytest — python tests need it. This is an honest skip, not a pass.\"; fi",
     "eval:capture": "A11Y_PYTHON=.venv/bin/python node packages/lab/src/harnesses/capture-fixtures.mjs",
     "eval:gate": "A11Y_PYTHON=.venv/bin/python EVAL_GATE=1 EVAL_RUNS=3 tsx packages/lab/src/eval/run.ts",
     "typecheck": "tsc --noEmit",
@@ -164,7 +164,9 @@
     "pr:edit": "node packages/agent-org/src/pr-open.mjs edit",
     "branches:inventory": "node packages/agent-org/src/branch-inventory-report.mjs",
     "worktree:whose": "node packages/agent-org/src/worktree-owner.mjs",
-    "worktree:stamp": "node packages/agent-org/src/worktree-owner.mjs --stamp"
+    "worktree:stamp": "node packages/agent-org/src/worktree-owner.mjs --stamp",
+    "test:org": "node packages/guards/src/assert-glob-not-empty.mjs \"packages/{agent-org,guards,lab,control}/src/**/*.test.ts\" --min=300 --run --runner=rstest ${A11Y_TEST_CONCURRENCY:+--test-concurrency=$A11Y_TEST_CONCURRENCY}",
+    "test:all": "node packages/guards/src/assert-glob-not-empty.mjs \"packages/*/src/**/*.test.ts\" --min=500 --run --runner=rstest ${A11Y_TEST_CONCURRENCY:+--test-concurrency=$A11Y_TEST_CONCURRENCY}"
   },
   "dependencies": {
     "@a11ign/evidence": "0.0.0",
