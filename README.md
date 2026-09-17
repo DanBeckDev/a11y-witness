@@ -194,7 +194,7 @@ jobs:
 **That is the job, not yet a workflow file.** Put it in `.github/workflows/a11ign.yml` under two more lines, `name: a11ign` and a trigger such as `on: [pull_request, workflow_dispatch]`; the whole runnable file, trigger included, is at the top of [the Action guide](./docs/github-action.md).
 
 **No API key and no account** — `judge-backend` defaults to `local`, this
-project's own trained scorer, which ships in the repo and never sends your page anywhere. On a pull request, findings appear as a PR comment. On any other run (started by hand, or by a push) there is no comment: the log shows a one-line count, the report is in the run's job summary, and the full result is the `a11ign-result` artifact the upload step saves. `fail-on` decides whether *findings* fail the build, and defaults to `never` so adding it
+project's own trained scorer, which ships in the repo and never sends your page anywhere. On a pull request, findings appear as a PR comment. On any other run (started by hand, or by a push) there is no comment: the log's last line is the count (`a11ign: N finding(s)`), with a line before it for anything that bounds that count (an examination that ended early, a capture spanning more than one document, criteria resting on an examination known to be partial), the report is in the run's job summary, and the full result is the `a11ign-result` artifact the upload step saves. `fail-on` decides whether *findings* fail the build, and defaults to `never` so adding it
 cannot break your pipeline on day one. `.github/workflows/action-smoke.yml` runs this shape
 against two W3C pages on every push, as a consumer would.
 
