@@ -21,6 +21,9 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
 import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-flags.mjs";
+// NEVER a bare `npm`/`npx` spawn -- unsafe on Windows (CVE-2024-27980), and this repo's own
+// guard refuses one anywhere in the tree. Same call shape as every other site.
+import { npmCliInvocation } from "./npm-cli-executable.mjs";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 
@@ -72,7 +75,8 @@ function run(args) {
 }
 
 function runAll() {
-  const r = spawnSync("npm", ["run", "test:all"], { stdio: "inherit", cwd: REPO });
+  const { command, args } = npmCliInvocation("npm", ["run", "test:all"]);
+  const r = spawnSync(command, args, { stdio: "inherit", cwd: REPO });
   return r.status ?? 1;
 }
 
