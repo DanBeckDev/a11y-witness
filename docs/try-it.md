@@ -111,14 +111,19 @@ this tool exists to hear actually happen.
 (#311, #915): 4 m 38 s, 4 m 50 s, 5 m 48 s, 7 m 52 s and 7 m 54 s. **There is a floor — the fastest run that
 reached the page was 4 m 38 s — and above it the spread is wide:** the slowest of the five is seventy per
 cent longer than the fastest, so a simpler page does not reliably mean a shorter run, and the range is a
-bound rather than a prediction for your page. Most of it is the screen reader reading, and
-that time is not parallelisable or recoverable.
+bound rather than a prediction for your page — and, per the runs below, not a guaranteed lower bound
+either. Most of it is the screen reader reading, and that time is not parallelisable or recoverable.
 
 <!-- TIMING:END -->
 
 **A sixth run took 3 m 45 s and that is not a faster run, it is a failed one** — it opened on a consent
-overlay and read almost none of the page. **Under four minutes is a finding, not a success**; see the
-consent-banner section below before you judge how long your own run took.
+overlay and read almost none of the page. **The 4 m 38 s figure above is not a floor either: a clean run on
+this exact page finished its capture-and-judge step in 4 m 22 s** (run 34774692947, 2026-09-13), **its
+result byte-identical to a 5 m 08 s run the same day** (34774183433); **a separate clean run elsewhere
+finished its capture alone, excluding judging, in 3 m 48.9 s, transcript byte-identical to a 4 m 44.7 s
+one** (runs 34782000257 and 34781484432). **So duration alone does not tell you which happened — check
+the report itself:** if it shows almost nothing on a page you know is large, you are looking at the banner
+(see the check below); a fast, full report is a good run.
 
 **Those are capture times, not the job you are billed for.** Setup comes on top. The two most recent jobs measured at a single build, both at `3bb1fddf` with warm caches (V1 rehearsal 4, runs 34781484432 and 34782000257, 2026-09-13), took 6 m 42 s and 5 m 56 s for the whole job. The only cold-cache job measured is older and at a different build, `0e809d13` (V1 rehearsal 1, run 34764686304, the same day): setup 85.3 s, capture and judging 7 m 30 s, and 9 m 20 s for the whole job. Budget runner time for the job, not the capture.
 
