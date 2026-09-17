@@ -1,5 +1,5 @@
 // @ts-check
-// Run by `scripts/isolation-gate.mjs` from a throwaway directory OUTSIDE this repository, against the
+// Run by `packages/guards/src/isolation-gate.mjs` from a throwaway directory OUTSIDE this repository, against the
 // installed tarball.
 //
 // It cannot drive a capture — that needs a Windows worker with NVDA. What it proves is that the bin

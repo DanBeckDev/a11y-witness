@@ -20,7 +20,7 @@ import { realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { flagValue, refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
-import { sandboxGitEnv } from "./git-env.mjs";
+import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 import * as actionReference from "./doc-checks/action-reference.mjs";
 import * as adrIndex from "./doc-checks/adr-index.mjs";
 import * as adrStatus from "./doc-checks/adr-status.mjs";

@@ -18,7 +18,7 @@
 // run (measured live: the V1 rehearsal's #568, a `setup-node` cache step dying before "Install a11ign"
 // ever starts). So the one step whose entire job is to report honestly on failure was, itself, silently
 // unable to run under exactly the failure shape it exists to handle -- the identical class #535 fixed in
-// `scripts/piped-exit-status-guard.mjs` the same day, missed here because this file was only ever tested
+// `packages/guards/src/piped-exit-status-guard.mjs` the same day, missed here because this file was only ever tested
 // inside this repo's own fully-installed checkout, never through the real composite-action path a
 // consumer's workflow actually uses. `flagValue`'s own body is four lines; reproduced inline below rather
 // than imported.

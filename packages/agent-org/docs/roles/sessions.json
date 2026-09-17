@@ -1,0 +1,84 @@
+{
+  "_owner": "ceo",
+  "_why": "ceo's ruling on #1453 (2026-09-13): the one file that says which sessions are live. packages/agent-org/src/arm-pr.mjs reads it and types no session list; a label is refused when its session is absent from `live`, and `retired` only chooses the sentence the refusal uses. The repository's session:* labels are not the source: four of them are retired.",
+  "live": [
+    {
+      "name": "ceo",
+      "role": "ceo",
+      "brief": "docs/roles/ceo.md",
+      "started": "2026-09-13T14:31:55Z",
+      "workspace": {
+        "herdr": "w6",
+        "primary": "/home/agent/repos/a11y-witness"
+      }
+    },
+    {
+      "name": "product-manager",
+      "role": "product-manager",
+      "brief": "docs/roles/product-manager.md",
+      "started": "2026-09-13T13:48:55Z",
+      "workspace": {
+        "herdr": "w2",
+        "primary": "/home/agent/repos/a11y-witness"
+      }
+    },
+    {
+      "name": "orchestrator",
+      "role": "orchestrator",
+      "brief": "docs/roles/orchestrator.md",
+      "started": "2026-09-13T14:24:38Z",
+      "workspace": {
+        "herdr": "w5",
+        "primary": "/home/agent/repos/a11y-witness"
+      }
+    },
+    {
+      "name": "worker-capture",
+      "role": "engineer",
+      "brief": "docs/roles/worker-capture.md",
+      "started": "2026-09-13T13:46:58Z",
+      "workspace": {
+        "herdr": "w3",
+        "primary": "/home/agent/repos/a11y-witness"
+      }
+    },
+    {
+      "name": "worker-judge",
+      "role": "engineer",
+      "brief": "docs/roles/worker-judge.md",
+      "started": "2026-09-13T13:46:46Z",
+      "workspace": {
+        "herdr": "w4",
+        "primary": "/home/agent/repos/a11y-witness"
+      }
+    },
+    {
+      "name": "worker-tooling",
+      "role": "engineer",
+      "brief": null,
+      "started": "2026-09-13T19:13:15Z",
+      "workspace": {
+        "herdr": "w9",
+        "primary": "/home/agent/repos/a11y-witness"
+      }
+    }
+  ],
+  "retired": [
+    {
+      "name": "dispatcher",
+      "retiredBy": "#913"
+    },
+    {
+      "name": "worker-audit",
+      "retiredBy": "#913"
+    },
+    {
+      "name": "worker-config",
+      "retiredBy": "#913"
+    },
+    {
+      "name": "worker-contracts",
+      "retiredBy": "#913"
+    }
+  ]
+}
