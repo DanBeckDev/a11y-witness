@@ -981,7 +981,7 @@ VMs, the page server and NVDA.
   > `node -e "console.log(require.resolve('@a11y-witness/judge'))"`. A mutation check that BITES is
   > itself evidence the resolution reached the code under test — if a worktree's test were reading
   > another checkout's `dist`, editing the worktree's source could not have reached it and the mutation
-  > would never fail. See `docs/roles/worker-loop-orchestrator.md` for why the fleet-driving primary
+  > would never fail. See `packages/agent-org/docs/roles/worker-loop-orchestrator.md` for why the fleet-driving primary
   > checkout stays on `main` with nothing checked out in it, which is the second half of this fact.
 
 ## The same stale-compile defect in Python
