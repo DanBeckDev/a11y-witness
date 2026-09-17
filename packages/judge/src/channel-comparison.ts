@@ -16,7 +16,7 @@
  * moves here; nothing here decides which criterion a finding belongs to.
  */
 import type { RuleInput } from "./rules.js";
-import { parseAnnouncement } from "@a11ign/evidence";
+import { addressBarHost, parseAnnouncement } from "@a11ign/evidence";
 
 
 /**
@@ -753,18 +753,13 @@ export function firstVisitEach(names: string[]): string[] {
 /**
  * THE BROWSER'S ADDRESS BAR, as NVDA reads it -- #1514.
  *
- * A COPY of `SPOKEN_ADDRESS` in `packages/evidence/src/left-site.ts`. That one is private to its package, and a
- * worktree resolves `@a11ign/evidence` to a built `dist`, so an export added there could not be proven from here
- * without rebuilding shared state (product-manager's ruling on #1514, route B). `focus-order-cycle.test.ts` pins the
- * two equal through the published `leftSite()`. #1559 replaces this copy with one exported from evidence.
+ * Re-exported from `@a11ign/evidence`'s `leftSite()` recogniser rather than kept as a local copy -- #1514
+ * pinned a copy of `SPOKEN_ADDRESS` here equal to evidence's private one by a parity test, because a
+ * worktree resolves `@a11ign/evidence` to a built `dist` and proving a new export from here meant
+ * rebuilding shared state. #1559 ends the copy: this file re-exports the single recogniser evidence now
+ * publishes, so callers of `./channel-comparison.js` see the identical name and behaviour as before.
  */
-const SPOKEN_ADDRESS_BAR = /\bAddress and search bar\b.*?\b(https?): slash slash ((?:[a-z0-9-]+ dot )+[a-z]{2,})\b/i;
-
-/** The scheme and host an address-bar stop names, in `leftSite().to`'s shape, or `null` for any other stop. */
-export function addressBarHost(entry: string): string | null {
-  const match = SPOKEN_ADDRESS_BAR.exec(String(entry));
-  return match ? `${match[1].toLowerCase()}://${match[2].toLowerCase().replace(/ dot /g, ".")}` : null;
-}
+export { addressBarHost };
 
 /**
  * The recorded Tab walk, rotated to start where Tab ENTERS THE DOCUMENT -- #1514.
