@@ -46,7 +46,6 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node packages/agent-org/src/update-branch-sweep.mjs` — push every armed, green-or-running PR up to main's new tip after a merge lands
 - `node packages/agent-org/src/update-primary.mjs` — the one sanctioned way to move the primary checkout: fetch, detach at origin/main, install if the lockfile moved, rebuild
 - `node packages/agent-org/src/work-gate.mjs` — work-gate -- is there work for any session? One cheap read; a wake order per line when yes.
-- `node packages/agent-org/src/workflow-lane-check.mjs` — check a PR changing a lane-owned path was opened from that lane's branch, or names its exception
 - `node packages/agent-org/src/workflow-run-liveness.mjs` — watchdog: did CI actually run before this commit reached main, checked automatically
 - `node packages/agent-org/src/worktree-owner.mjs` — print which session stamped a worktree, so a session can tell whose tree it is standing in
 - `node packages/guards/src/assert-glob-not-empty.mjs` — refuse a test glob that resolves to zero files instead of passing silently
@@ -58,7 +57,6 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node packages/guards/src/tree-wide-guards.mjs` — every tracked *.test.ts file that DECLARES ITSELF a TREE-WIDE GUARD by importing and calling
 - `node scripts/build-packages.mjs` — run tsc --build across every package under packages/ in dependency order
 - `node scripts/check-retired-heads.mjs` — refuse a candidate whose scorer head set shrank without declaring what it retired
-- `node scripts/check-scheduled-jobs.mjs` — compare every job this repo claims to schedule against its actual installed state
 - `node scripts/check-schema-migration.mjs` — refuse a release while a declared schema migration is still open
 - `node scripts/check-transfer-urls.mjs` — check-transfer-urls -- walk the tree for every URL naming PRODUCT_REPO (a11ign/a11ign) and
 - `node scripts/ci-changed.mjs` — classify what a PR's diff touches, so CI's conditional jobs know whether to run
