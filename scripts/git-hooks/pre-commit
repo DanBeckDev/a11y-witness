@@ -124,9 +124,17 @@ if [ "${A11Y_ALLOW_PIPED_EXIT_STATUS:-0}" != "1" ]; then
   # Resolved relative to THIS script, never `git rev-parse --show-toplevel` -- the hook is exercised in
   # `pre-commit-hook.test.ts` against a disposable sandbox repo whose toplevel is not this checkout, and
   # the guard script only exists here.
-  guard_script="$(cd "$(dirname "$0")/.." && pwd)/piped-exit-status-guard.mjs"
+  guard_script="$(cd "$(dirname "$0")/../.." && pwd)/packages/guards/src/piped-exit-status-guard.mjs"
   hazard_hits=""
   guard_errors=""
+  # #1642: ONE GUARD PROCESS PER COMMIT, not one per staged line. Measured on a 14-core Mac: 37ms of node
+  # startup per spawn, so a commit touching a 200-line workflow paid ~7.4 SECONDS before this guard did any
+  # work at all, and the test that drives this hook thirteen times took 41s. Batched, 20 lines cost 52ms
+  # against 626ms. The check itself was never the expense; the process was.
+  #
+  # TWO PARALLEL FILES, payload and label, so the Nth verdict still names the Nth line's file and text --
+  # the guard answers in input order and this is what lets the report stay exactly as specific as it was.
+  guard_in="$(mktemp)"; guard_ctx="$(mktemp)"; guard_out="$(mktemp)"
   while IFS= read -r f; do
     case "$f" in
       *.sh|*.yml|*.yaml|package.json|scripts/git-hooks/*) ;;
@@ -139,35 +147,37 @@ if [ "${A11Y_ALLOW_PIPED_EXIT_STATUS:-0}" != "1" ]; then
         +*)
           added="${line#+}"
           [ -z "$added" ] && continue
-          # #535: "A HAZARD" AND "I COULD NOT TELL" ARE DIFFERENT STATES AND MUST NOT COLLAPSE, and the
-          # guard's own EXIT CODE alone cannot be trusted to keep them apart. An import that fails to
-          # resolve throws before the guard's own code ever runs -- verified directly: Node exits 1 for an
-          # unresolvable ESM import, the IDENTICAL code the guard uses for a real HAZARD verdict, and no
-          # try/catch inside the guard's entry point can intercept a failure that happens before that entry
-          # point is reached. So the discriminator here is the guard's own OUTPUT TEXT, not its exit code:
-          # a real verdict is a `console.log` this repo controls and can rely on, always starting with
-          # `ALLOW:` or `REFUSE:`; anything else -- a stack trace, `GUARD ERROR:`, `usage:`, empty output --
-          # is "I could not tell", regardless of what exit code produced it. Captured rather than discarded
-          # (`>/dev/null 2>&1` used to throw away exactly the text that would have named the real cause the
-          # first time this broke: an unresolved `@a11ign/worker-fleet` import in a fresh worktree with no
-          # `node_modules`, reported as a hazard on every single staged line).
-          guard_status=0
-          guard_output="$(node "$guard_script" "$added" 2>&1)" || guard_status=$?
-          case "$guard_output" in
-            REFUSE:*)
-              hazard_hits="$hazard_hits  $f: $added"$'\n'
-              ;;
-            ALLOW:*)
-              : # a real, well-formed pass -- nothing to record
-              ;;
-            *)
-              guard_errors="$guard_errors  $f: $added"$'\n''    -> '"$guard_output (exit $guard_status)"$'\n'
-              ;;
-          esac
+          printf '%s\n' "$added" >> "$guard_in"
+          printf '%s\n' "  $f: $added" >> "$guard_ctx"
           ;;
       esac
     done <<< "$(git diff --cached -U0 --no-color -- "$f")"
   done <<< "$staged"
+
+  if [ -s "$guard_in" ]; then
+    guard_status=0
+    node "$guard_script" < "$guard_in" > "$guard_out" 2>&1 || guard_status=$?
+    # A SHORT ANSWER IS NO ANSWER. If the guard died partway (an unresolvable import throws before its own
+    # entry point, #535) the verdict file has fewer lines than the input, and every line it did not reach
+    # is "I could not tell" -- never a pass. Counted rather than assumed, so a truncated run fails closed
+    # exactly as a per-line spawn that exited non-zero used to.
+    want=$(wc -l < "$guard_in"); got=$(wc -l < "$guard_out")
+    if [ "$got" -ne "$want" ]; then
+      guard_errors="$(sed 's/$/\n    -> guard produced no verdict for this line/' "$guard_ctx")"$'\n'
+    else
+      n=0
+      while IFS= read -r verdict; do
+        n=$((n+1))
+        ctx="$(sed -n "${n}p" "$guard_ctx")"
+        case "$verdict" in
+          REFUSE:*) hazard_hits="$hazard_hits$ctx"$'\n' ;;
+          ALLOW:*)  : ;;
+          *) guard_errors="$guard_errors$ctx"$'\n''    -> '"$verdict (exit $guard_status)"$'\n' ;;
+        esac
+      done < "$guard_out"
+    fi
+  fi
+  rm -f "$guard_in" "$guard_ctx" "$guard_out"
 
   # A GUARD THAT CANNOT RUN FAILS CLOSED HERE, DELIBERATELY -- checked first, before the hazard report, so
   # a broken guard never gets read as "no hazards found" either. This is a judgment call, not a fact: the
@@ -182,7 +192,7 @@ if [ "${A11Y_ALLOW_PIPED_EXIT_STATUS:-0}" != "1" ]; then
     echo "pre-commit: refusing — the piped-exit-status guard could not examine a staged line" >&2
     echo "(this is a GUARD FAILURE, not a hazard finding):" >&2
     printf '%s' "$guard_errors" >&2
-    echo "Fix the guard (scripts/piped-exit-status-guard.mjs), or set" >&2
+    echo "Fix the guard (packages/guards/src/piped-exit-status-guard.mjs), or set" >&2
     echo "A11Y_ALLOW_PIPED_EXIT_STATUS=1 if you must commit before it is fixed." >&2
     exit 1
   fi

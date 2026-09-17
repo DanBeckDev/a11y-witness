@@ -39,10 +39,10 @@
  */
 /** @type {Record<string, Command>} */
 export const COMMANDS = {
-  "merge-guard": { argv: ["node", "scripts/merge-guard.mjs"] },
-  "auto-arm-sweep": { argv: ["node", "scripts/auto-arm-sweep.mjs"] },
-  "close-rows-for-merged-pr": { argv: ["node", "scripts/close-rows-for-merged-pr.mjs"] },
-  "reconstitution-drill": { argv: ["node", "scripts/reconstitution-drill.mjs"] },
+  "merge-guard": { argv: ["node", "packages/agent-org/src/merge-guard.mjs"] },
+  "auto-arm-sweep": { argv: ["node", "packages/agent-org/src/auto-arm-sweep.mjs"] },
+  "close-rows-for-merged-pr": { argv: ["node", "packages/agent-org/src/close-rows-for-merged-pr.mjs"] },
+  "reconstitution-drill": { argv: ["node", "packages/agent-org/src/reconstitution-drill.mjs"] },
   "select-changed-tests": { argv: ["node", "scripts/select-changed-tests.mjs"] },
   // #478 (A6b): registered here rather than as a new `package.json` script, on purpose -- this file
   // exists so a new command does not mean editing that one. `docs/commands.md` is committed and checked

@@ -40,7 +40,7 @@ on:
         type: boolean
         default: false
       ts-test-scope:
-        description: "'scoped' (select-changed-tests.mjs, with a per-package fallback) or 'unscoped' (npm run test:ts, the whole suite). Only meaningful when run-ts-tests is true. ci.yml's ts job is 'scoped'; trunk-guard's trunkGate is 'unscoped', matching its own unconditional, every-merge trigger rather than a diff."
+        description: "'scoped' (select-changed-tests.mjs, with a per-package fallback) or 'unscoped' (npm run test:all, every package). Only meaningful when run-ts-tests is true. ci.yml's ts job is 'scoped'; trunk-guard's trunkGate is 'unscoped', matching its own unconditional, every-merge trigger rather than a diff."
         type: string
         default: scoped
       base-ref:
@@ -193,7 +193,7 @@ jobs:
               echo "loudly rather than silently running nothing."
               exit 1
             fi
-            node scripts/assert-glob-not-empty.mjs "${globs[@]}" --min=1 --drop-empty --run --runner=rstest
+            node packages/guards/src/assert-glob-not-empty.mjs "${globs[@]}" --min=1 --drop-empty --run --runner=rstest
           else
             files=(${{ steps.select.outputs.testFiles }})
             if [ "${#files[@]}" -eq 0 ]; then
@@ -202,7 +202,7 @@ jobs:
               echo "running nothing, this job's whole reason for existing."
               exit 1
             fi
-            node scripts/assert-glob-not-empty.mjs "${files[@]}" --min=1 --run --runner=rstest
+            node packages/guards/src/assert-glob-not-empty.mjs "${files[@]}" --min=1 --run --runner=rstest
           fi
       # UNSCOPED path -- trunk-guard's own choice, unchanged: the whole tree, never a per-package slice,
       # because every merge to main needs the full answer regardless of what that merge's own diff touched.
@@ -210,8 +210,12 @@ jobs:
         if: inputs.run-ts-tests && inputs.ts-test-scope == 'unscoped'
         env:
           GH_TOKEN: ${{ github.token }}
-        # #1319: `test:ts` passes `--runner=rstest` to the floor, so this step runs rstest over the whole glob.
-        run: npm run test:ts
+        # #1319: the script passes `--runner=rstest` to the floor, so this step runs rstest over the glob.
+        # `test:all`, NOT `test:ts`: since the package split `test:ts` is the PRODUCT suite (206 files) and
+        # the org's 373 tests live in agent-org/guards/lab. "Unscoped" means every merge to main gets the
+        # full answer, so it must be the glob that covers every package -- `test:ts` here would drop two
+        # thirds of the suite and still read green, which is the exact shape this job exists to prevent.
+        run: npm run test:all
       # #1319: A CACHE THAT IS NEVER WRITTEN RESTORES NOTHING AND STILL READS GREEN. rstest ran above with its build cache
       # on, since CI is set, so the cache directory must now hold files. An empty one fails the job rather than leaving
       # the HIT or MISS line to describe a cache that does not exist. No workflow expressions, so

@@ -14,7 +14,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { sandboxGitEnv } from "../git-env.mjs";
+import { sandboxGitEnv } from "../../packages/guards/src/git-env.mjs";
 import { headingAnchors } from "./claude-md-links.mjs";
 
 /**
