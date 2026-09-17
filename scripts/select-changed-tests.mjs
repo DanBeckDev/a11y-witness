@@ -666,6 +666,15 @@ function describeAlwaysRun(alwaysRun, selectedTests) {
     + (shown.length > 0 ? `: ${shown.join("; ")}${added.length > SAMPLE ? ", ..." : ""}` : "");
 }
 
+// #1654: `agent-org` is tested from `packages/lab/src/packaging/` by declared, long-standing convention
+// (`work-tick.mjs`, `work-gate.mjs`, `wake.mjs`, ... all ship this way) -- its own `src/` carries zero
+// `*.test.ts` files, so the plain per-package fallback glob below is empty for it BY CONSTRUCTION, not by
+// a moved or typo'd path, and `assert-glob-not-empty.mjs` cannot tell the two apart on its own. Named
+// here, once, rather than guessed at: every OTHER package keeps the plain fallback, so a genuinely
+// uncovered change elsewhere still refuses.
+/** @type {Record<string, string>} */
+const FALLBACK_TEST_GLOB = { "agent-org": "packages/lab/src/packaging/**/*.test.ts" };
+
 /**
  * What the `ts` job actually runs: the precisely-selected tests, the always-run guards, and a full-suite
  * glob per package with an uncovered change -- UNIONED and DEDUPLICATED, because a guard that selection
@@ -677,7 +686,7 @@ function describeAlwaysRun(alwaysRun, selectedTests) {
  */
 export function testFilesToRun({ selectedTests, alwaysRun, fallbackPackages }) {
   const files = [...new Set([...selectedTests, ...alwaysRun.map((g) => g.test)])].sort();
-  return [...files, ...fallbackPackages.map((p) => `packages/${p}/src/**/*.test.ts`)];
+  return [...files, ...fallbackPackages.map((p) => FALLBACK_TEST_GLOB[p] ?? `packages/${p}/src/**/*.test.ts`)];
 }
 
 /**
