@@ -52,6 +52,12 @@ whether they are followed.
   from ceo.
 - A product PR opens as a DRAFT and is marked ready only when the reviewer writes "convinced";
   docs-and-tests PRs open ready. Nobody merges by hand.
+- **`Acceptance:` and `Closes` are now MERGE-BLOCKING (2026-09-17).** `acceptance` and `ownedPaths` are
+  back in `gate`'s `needs`, so a malformed PR body no longer merges red -- it does not merge. Two things
+  cost four red runs before this landed, both body defects rather than broken code: a DUPLICATED
+  `Acceptance:` section (the checker cannot tell which command to run, so it refuses), and a MISSING
+  `Closes` declaration. When a PR finishes no row, the declaration is `Closes: none -- <reason>` with an
+  em dash; it is required either way. Editing the body re-runs the check, so a mistake costs a minute.
 - **A settled draft with green checks and no verdict is reviewed by the external reviewer (`by reviewer:`);
   an engineer reviews only when ceo names one** — a reviewer stalled past a re-prompt, or a product path
   ceo wants two eyes on. ceo spot-checks the reviewer's first five verdicts and one in five after. The
