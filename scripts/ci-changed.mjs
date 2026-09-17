@@ -172,8 +172,8 @@ export const DOC_ROOT_FILES = new Set(["README.md", "CLAUDE.md", "CONTRIBUTING.m
  *   doc changed at all", and those are different questions with different callers. Two valid shapes,
  *   deliberately: `classify` pre-filters to doc-touching files only, because its `board`/`docs` decision
  *   is independent of the OTHER categories (`ts`, `python`, ...) it computes over the same diff in the
- *   same call -- a non-doc file is that diff's problem, not this function's. `isBoardOnlyDiff` (#296) is a
- *   single yes/no gate with no sibling categories to catch anything this function lets through, so it
+ *   same call -- a non-doc file is that diff's problem, not this function's. `isBoardOnlyDiff` (#296, since retired with
+ *   the pre-push board-only path) was a single yes/no gate with no sibling categories to catch anything this function lets through, so it
  *   passes the WHOLE, unfiltered diff -- a non-doc file must fail `.every()` here, or it fails nowhere.
  */
 export function boardOnly(docsFiles) {
