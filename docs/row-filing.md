@@ -21,10 +21,10 @@ npm run row-file -- --title "..." --body-file /path/to/body.md --session=<your-s
 ```
 
 `--session=<name>` is **required** — the same flag `row-claim.mjs` already uses for dispatch/claim/decline,
-reused rather than a second, independently-typed one. `scripts/row-file.mjs` reads exactly the body this
+reused rather than a second, independently-typed one. `packages/agent-org/src/row-file.mjs` reads exactly the body this
 invocation would file — from `--body`/`--body=` or `--body-file`/`--body-file=` — and checks it against the
 **same rule** `row-claim` already enforces at claim time (`missingTemplateFields`, imported unchanged from
-`scripts/row-claim/template-fields-rule.mjs`, #707). If a required section is missing, it refuses and names
+`packages/agent-org/src/row-claim/template-fields-rule.mjs`, #707). If a required section is missing, it refuses and names
 which one, before `gh` ever runs.
 
 If the body is complete, it is filed with a `Filed-by: <session>` line appended (#771) — a body line, never
@@ -110,7 +110,7 @@ grammar will change.** The check is one command, and it is the check to run befo
 region:
 
 ```bash
-node --input-type=module -e "import {declaredRegionFiles} from './scripts/region-paths.mjs';
+node --input-type=module -e "import {declaredRegionFiles} from './packages/agent-org/src/region-paths.mjs';
   import {readFileSync} from 'node:fs';
   console.log(declaredRegionFiles(readFileSync(process.argv[1],'utf8')))" <a file holding the row body>
 ```
@@ -160,7 +160,7 @@ reader anyway.
 unimportant. A row that is out of release and worth fixing soon is spelled "out of release, ready" —
 importance is said by the ready order, not by which milestone a row sits on.**
 
-Earned 2026-09-12 on #1161, a defect in `scripts/row-claim.mjs`'s refusal message. It was moved **into**
+Earned 2026-09-12 on #1161, a defect in `packages/agent-org/src/row-claim.mjs`'s refusal message. It was moved **into**
 the release on an argument from severity, and `worker-capture`'s objection was that the label had been
 answering its own question correctly all along: `row-claim.mjs` ships in no package, so it cannot block a
 publish however badly it behaves. **`ceo` reversed their own ruling** — no severity axis, because the

@@ -124,7 +124,7 @@ if [ "${A11Y_ALLOW_PIPED_EXIT_STATUS:-0}" != "1" ]; then
   # Resolved relative to THIS script, never `git rev-parse --show-toplevel` -- the hook is exercised in
   # `pre-commit-hook.test.ts` against a disposable sandbox repo whose toplevel is not this checkout, and
   # the guard script only exists here.
-  guard_script="$(cd "$(dirname "$0")/.." && pwd)/piped-exit-status-guard.mjs"
+  guard_script="$(cd "$(dirname "$0")/../.." && pwd)/packages/guards/src/piped-exit-status-guard.mjs"
   hazard_hits=""
   guard_errors=""
   while IFS= read -r f; do
@@ -182,7 +182,7 @@ if [ "${A11Y_ALLOW_PIPED_EXIT_STATUS:-0}" != "1" ]; then
     echo "pre-commit: refusing — the piped-exit-status guard could not examine a staged line" >&2
     echo "(this is a GUARD FAILURE, not a hazard finding):" >&2
     printf '%s' "$guard_errors" >&2
-    echo "Fix the guard (scripts/piped-exit-status-guard.mjs), or set" >&2
+    echo "Fix the guard (packages/guards/src/piped-exit-status-guard.mjs), or set" >&2
     echo "A11Y_ALLOW_PIPED_EXIT_STATUS=1 if you must commit before it is fixed." >&2
     exit 1
   fi

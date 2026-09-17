@@ -9,7 +9,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { sandboxGitEnv } from "../git-env.mjs";
+import { sandboxGitEnv } from "../../packages/guards/src/git-env.mjs";
 
 /** The documents a reader is most likely to follow an instruction from. */
 export const DOCS = ["README.md", "RELEASE.md", "PLAN.md", "CLAUDE.md"];
