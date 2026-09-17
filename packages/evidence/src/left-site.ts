@@ -119,6 +119,21 @@ const NEW_WINDOW = /\bopening new (window|tab)\b/i;
  */
 const SPOKEN_ADDRESS = /\bAddress and search bar\b.*?\b(https?): slash slash ((?:[a-z0-9-]+ dot )+[a-z]{2,})\b/i;
 
+/**
+ * The scheme and host one announcement names, when it is the browser's own address bar -- `null` for any
+ * other announcement, including one that merely mentions a URL (#1559).
+ *
+ * EXPORTED because `packages/judge/src/channel-comparison.ts`'s 2.4.3 Tab-cycle check (#1514) needs the
+ * identical recogniser to find the document-entry marker in a recorded Tab walk, and until this row it kept
+ * its own copy pinned equal by a parity test -- `SPOKEN_ADDRESS` itself stayed private, and a worktree
+ * resolves `@a11ign/evidence` to a built `dist`, so proving a new export from the judge meant rebuilding
+ * shared state (product-manager's ruling on #1514, route B).
+ */
+export function addressBarHost(entry: string): string | null {
+  const match = SPOKEN_ADDRESS.exec(entry);
+  return match ? `${match[1].toLowerCase()}://${match[2].toLowerCase().replace(/ dot /g, ".")}` : null;
+}
+
 /** Did this activation's announcement say a window or tab was opened? */
 export function announcesANewWindow(after: string | null | undefined): boolean {
   return NEW_WINDOW.test(String(after ?? ""));
@@ -172,8 +187,8 @@ function derivedLeftSite(capture: SiteBoundCapture): LeftSite | null {
 
 function spokenAddress(announcements: readonly string[]): string | null {
   for (const said of announcements) {
-    const match = SPOKEN_ADDRESS.exec(said);
-    if (match) return `${match[1].toLowerCase()}://${match[2].toLowerCase().replace(/ dot /g, ".")}`;
+    const host = addressBarHost(said);
+    if (host) return host;
   }
   return null;
 }
