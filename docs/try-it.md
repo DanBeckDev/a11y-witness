@@ -72,18 +72,27 @@ Save it as `.github/workflows/a11ign.yml`. It runs on every pull request, and `w
 
 **Not on a pull request, no comment.** A run started by hand or by a push has nothing to comment on: the log's last line is the count (`a11ign: N finding(s)`), with a line before it for anything that bounds that count (an examination that ended early, a capture spanning more than one document, criteria resting on an examination known to be partial), the report is in the run's job summary, and the full result, transcript included, is the `a11ign-result` artifact the upload step saves.
 
-**`task` is load-bearing.** It is what a user is trying to *do*, in plain words, and it changes what gets
-captured: a button whose announced name shares a meaningful word with the task gets activated, and
-whatever the screen reader says next is recorded. The word match is the safety guard — *"show only bags"*
-activates a **Bags** button and never a **Delete account** one. That is all it does on this shipped
-default — see [the README's "Using it"](../README.md#using-it) for why a well-chosen task does not also
-sharpen the verdict.
+**`task` is load-bearing, but the word match it enables is not the guard on what gets operated.** It is
+what a user is trying to *do*, in plain words. On this shipped default (`probe-forms` on), a run always
+expands disclosures and submits submit-like buttons, whatever the task says, and toggles checkboxes and
+radio buttons with no task-word test either; it activates any OTHER button only if its announced name
+shares a meaningful word with the task — so *"show only bags"* activates a **Bags** button and never a
+**Delete account** one. Separately, `probe-navigation` (on everywhere by default) follows the first link on
+the page, task or no task. See [SECURITY.md](../SECURITY.md#it-operates-controls-on-the-page-and-one-probe-presses-buttons)
+for the full rule and [the README's "Using it"](../README.md#using-it) for why a well-chosen task does not
+also sharpen the verdict.
 
 **Don't have a page picked yet?** Point it at `https://www.w3.org/WAI` — the W3C's own accessibility
 site — for a first look before choosing anything of your own. We have already run it there
 ([`docs/github-action.md`](./github-action.md#tested-against-real-sites-in-the-wild)): 143 announcements,
 zero findings, and not marginally — a false positive on the W3C's own site would have been damning, so
-that is a real, meaningful result rather than an untested placeholder. It is informational, with nothing to submit, so a `task` about learning something on the page (`"Learn about web accessibility"`) is enough. **The Action still presses buttons on it.** With `probe-forms` on, which is the Action's default, a control whose announced name shares a word with your task is activated: the V1 rehearsal's run on a Wikipedia article collapsed one of its navigation boxes that way. On a site you do not own, that is someone else's page; [the CLI defaults it off for exactly that reason](#the-other-route-run-it-from-the-repository).
+that is a real, meaningful result rather than an untested placeholder. It is informational, with nothing to submit, so a `task` about learning something on the page (`"Learn about web accessibility"`) is enough. **The Action still operates controls on it, and the task word only gates one of them.** With the
+defaults, a run against this exact page and task activated five controls: one button whose name happened
+to share the word "Web" with the task, and — with no task-word test at all — three submissions of the
+search form (landing on an empty query) and a followed link to a different page. On a site you do not own,
+that is someone else's application being submitted to and navigated on your behalf. The CLI defaults
+`probe-forms` off for exactly that reason; `probe-navigation`, which followed the link here, is on
+everywhere by default and needs `--no-probe-navigation` to turn off — [see below](#the-other-route-run-it-from-the-repository).
 
 **Once you have seen real output, point it at the page with your contact form on it.** A long page with a
 form exercises far more of this layer than a page of text alone — the form is where the announcements
