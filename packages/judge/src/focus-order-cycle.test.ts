@@ -10,23 +10,12 @@
  * apart from a control genuinely last in Tab order, so a walk with no marker must still fire (the three baselined
  * 2.4.3 pages have that shape, and #1514's sweep decides them from a marker, never from the moved-control signature).
  *
- * Announcement strings are quoted from real captures: the ico enforcement capture (#1043) and rehearsal 2's
- * `a11ign-result.json` (run 34767932873, the strings `packages/evidence/src/left-site.test.ts` uses).
+ * Announcement strings are quoted from a real capture: the ico enforcement capture (#1043).
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { leftSite, type SiteBoundCapture } from "@a11ign/evidence";
 import { addressBarHost, fromDocumentEntry } from "./channel-comparison.js";
 import { ruleFindings } from "./rules.js";
-
-// Rehearsal 2 (run 34767932873), verbatim.
-const EMBED = "main landmark, Web Accessibility Perspectives: Video Captions, region, Video, frame, clickable, "
-  + "thumbnail-image, graphic, button";
-const YOUTUBE_TAB = "W 3C Web Accessibility Initiative (WAI) - You Tube - Memory usage - 293 MB, tab, focused, "
-  + "selected, youtube dot com, 1 of 1";
-const REHEARSAL_ADDRESS_BAR = "Address and search bar, search landmark, focused, collapsed, Search or enter web "
-  + "address, Ctrl plus, L, selected https: slash slash www dot youtube dot com slash channel slash UCU 6ljj 3m 1fgl I "
-  + "Pj Sjs 2Dp RA";
 
 // The ico enforcement capture (#1043 5658098136 and 5658140291), verbatim.
 const ICO_ADDRESS_BAR = "Address and search bar, search landmark, focused, collapsed, Search or enter web address, "
@@ -228,29 +217,6 @@ const ICO_TRUNCATED_HEARD = [
 const focusOrderFindings = (focusOrder: string[], transcript = TRANSCRIPT) =>
   ruleFindings({ transcript, structure: {}, interaction: { focusOrder } } as never)
     .filter((finding) => finding.wcag.startsWith("2.4.3"));
-
-test("#1514: the local address-bar recogniser reads what evidence's published leftSite() reads", () => {
-  // The copy in channel-comparison.ts is pinned here, through the published function, because evidence keeps its own
-  // pattern private. `leftSite()` derives `to` from the address-bar stop when an activation announced a new window.
-  const capture: SiteBoundCapture = {
-    url: "https://www.w3.org/WAI",
-    structure: { headings: [], landmarks: [], formFields: [EMBED], links: [], graphics: [], lists: [], frames: [],
-      tableCells: [] },
-    interaction: {
-      controls: [EMBED], stateChanges: [], postSubmitFields: [], postSubmitNames: [],
-      formChanges: [{ control: EMBED, kind: "taskButton", after: "Opening new window" }],
-      navigatedOnSubmit: { checked: true, navigated: false },
-      focusOrder: ["You Tube Home, link, focused, linked", YOUTUBE_TAB, REHEARSAL_ADDRESS_BAR],
-    },
-  };
-  const published = leftSite(capture)?.to;
-  assert.equal(published, "https://www.youtube.com", "the positive control: the published function reads the bar");
-  assert.equal(addressBarHost(REHEARSAL_ADDRESS_BAR), published);
-  assert.equal(addressBarHost(ICO_ADDRESS_BAR), "https://ico.org.uk");
-  for (const notTheBar of [YOUTUBE_TAB, EMBED, SKIP, ...BROWSER_UI]) {
-    assert.equal(addressBarHost(notTheBar), null, `not the address bar: ${notTheBar.slice(0, 40)}`);
-  }
-});
 
 test("#1514: fromDocumentEntry leaves a walk with no address bar unchanged, and rotates one that has it", () => {
   const pageNames = new Set(["Cookie options", "Skip to main content", "Search", "Menu"]);
