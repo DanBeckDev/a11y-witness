@@ -15,8 +15,8 @@ import { builtinRules } from "eslint/use-at-your-own-risk";
 // #1155: the rule lives in its own module rather than inline -- this config already carries two rules and
 // their headers, and the third's reasoning is longer than the rule. Imported by RELATIVE path for the
 // reason `isolation-gate.mjs` states: a package specifier here dies before any install has run.
-import { derivedLocalRule } from "./scripts/uncontrolled-emptiness.mjs";
-import { gitSpawnScrubbed } from "./scripts/git-spawn-scrubbed.mjs";
+import { derivedLocalRule } from "./packages/guards/src/uncontrolled-emptiness.mjs";
+import { gitSpawnScrubbed } from "./packages/guards/src/git-spawn-scrubbed.mjs";
 
 // ESLint's OWN `max-lines-per-function`, registered a second time under a local name so it can run with
 // different options beside the first (#908). A rule takes one set of options per name, and the two budgets

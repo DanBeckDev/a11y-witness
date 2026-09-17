@@ -22,6 +22,8 @@ decide across whichever layers exist and so name none of them.
 
 | package | new scope | licence | contents |
 |---|---|---|---|
+| `agent-org` | `@a11ign/agent-org` — the organisation, private | AGPL-3.0-or-later | the AI agent org that develops this repo: rows and claims, the board and tracker, the merge queue, the trunk and merge guards, and the wake gate. Ships nothing and runs nowhere but this project — it is the half of `scripts/` that was never about the product, and ADR 0008 named it without giving it a home |
+| `guards` | `@a11ign/guards` — repo hygiene, private today | AGPL-3.0-or-later | the refusals that are about ENGINEERING PRACTICE rather than about this product: mutation-check, the emptiness and piped-exit lint rules, the tree-wide guard registry, walk-scope declarations, the changed-files helper and the isolation gate. Plain `.mjs` exported from `src` with no build step (ADR 0031's shape), so a pre-`npm ci` entry point can import one without a `dist` existing |
 | `control` | unchanged, private | AGPL-3.0-or-later | the control plane: holds the fleet SSH key, dispatches work to the fleet and to `lab`. Dependency-free by design — [ADR 0012](../docs/adr/0012-control-plane-split.md) |
 | `lab` | unchanged, private | AGPL-3.0-or-later | the eval harness, the training corpus pipeline, the release gates and the analysis programs. Ships nothing |
 | `nvda-speech` | `@a11ign/screenreader-speech` — screen-reader layer, private today | GPL-3.0-or-later | NVDA's announcement composition, ported to run without Windows — GPL because it is derived from NVDA, so `evidence` (Apache-2.0) must never import it. Named for publication now so it does not need renaming twice if it is ever published |
@@ -40,7 +42,7 @@ rather than asking a human to judge.
 |---|---|---|
 | workspace root | `package.json` `"workspaces": ["packages/*"]` | npm workspaces, not pnpm — `workspace:*` is rejected by npm 11.5.1 with `EUNSUPPORTEDPROTOCOL` (ADR 0005, measured) |
 | shared build options | `tsconfig.base.json` | `composite: true` so project references make the dependency graph compiler-enforced |
-| the isolation gate | `scripts/isolation-gate.mjs`, `npm run gate:isolation` | packs a package, installs it **outside the repo**, runs its smoke test |
+| the isolation gate | `packages/guards/src/isolation-gate.mjs`, `npm run gate:isolation` | packs a package, installs it **outside the repo**, runs its smoke test |
 | proof the gate works | `scripts/isolation-fixtures/` | one sound package it must accept, two broken ones it must reject |
 
 ## The contract every package follows

@@ -1,12 +1,12 @@
 // @ts-check
-// DOC CROSS-REFERENCE CHECK (#905): `docs/roles/memory/MEMORY.md` indexes the memory fact files, and the index
+// DOC CROSS-REFERENCE CHECK (#905): `packages/agent-org/docs/roles/memory/MEMORY.md` indexes the memory fact files, and the index
 // and the directory agree in both directions -- no entry links a missing file, no file goes unindexed. Moved
 // out of `roles-memory.test.ts`, which now asserts on these same functions. Its frontmatter-shape and leak
 // tests are not cross-references and stay there.
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
-export const MEMORY_DIR = "docs/roles/memory";
+export const MEMORY_DIR = "packages/agent-org/docs/roles/memory";
 export const INDEX_PATH = `${MEMORY_DIR}/MEMORY.md`;
 
 /** @typedef {{ title: string, file: string, hook: string }} IndexEntry `file` is resolved relative to MEMORY_DIR */

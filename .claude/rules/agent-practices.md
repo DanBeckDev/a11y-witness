@@ -27,13 +27,37 @@ whether they are followed.
 
 ## Timers and state
 
-- Every session holds one standing cron (engineers every 10 min, the fleet operator every 10 min while
-  fleet-gated rows remain, the product-manager every 30 min) and declares it on #912 after every start
-  or restart. `CronList` is the first command after any restart: a restart wipes every cron silently.
+- **No session holds a standing cron. This reverses the rule that stood here until 2026-09-17, and the
+  reversal is the point.** Every session used to hold one (engineers every 10 min, the fleet operator
+  every 10 min, the product-manager every 30 min), and each firing was a MODEL TURN that woke to ask a
+  question a script answers in one API call: about 672 turns a day, most finding nothing. That emptied a
+  weekly allowance in three days and put both Codex reviewers on their own quota the same way.
+  `CronList` after a restart is no longer the first command; **`CronDelete` on anything you find there
+  is.**
+- **THE CLOCK WAS NEVER THE DEFECT — a tick that costs no tokens can run all day.** The defect was that
+  the tick WAS a model turn. So the tick moved out of the model: `npm run work:tick` runs
+  `work-gate.mjs` (two `gh` calls, no model) and hands what it finds to `wake.mjs`, which prompts only a
+  session herdr reports as `idle` or `done`, and only once per cause. You are woken WITH the answer
+  already in your prompt; you no longer wake to go and look.
+- **So: do not create a cron to check for work.** If you think you need one, the gate is missing a
+  question rather than you needing a timer — add it to `work-gate.mjs`, where it costs an API call
+  instead of a turn, and where the repository can see it. A cron is still right for something that must
+  happen at a WALL-CLOCK time regardless of state (a nightly, a board edition); it is never right for
+  "has anything changed yet".
+- Measured on the agent host 2026-09-17, after the sessions were stopped: no user or root crontab, no
+  `at` queue, no systemd timer but `herdr.service`. These were in-session `CronCreate` crons, which is
+  why nothing outside the sessions could ever see them — and why this rule, not a host change, is what
+  keeps them from coming back.
 - The row is the state. Read the row, the PR and the API before acting on any message, including one
   from ceo.
 - A product PR opens as a DRAFT and is marked ready only when the reviewer writes "convinced";
   docs-and-tests PRs open ready. Nobody merges by hand.
+- **`Acceptance:` and `Closes` are now MERGE-BLOCKING (2026-09-17).** `acceptance` and `ownedPaths` are
+  back in `gate`'s `needs`, so a malformed PR body no longer merges red -- it does not merge. Two things
+  cost four red runs before this landed, both body defects rather than broken code: a DUPLICATED
+  `Acceptance:` section (the checker cannot tell which command to run, so it refuses), and a MISSING
+  `Closes` declaration. When a PR finishes no row, the declaration is `Closes: none -- <reason>` with an
+  em dash; it is required either way. Editing the body re-runs the check, so a mistake costs a minute.
 - **A settled draft with green checks and no verdict is reviewed by the external reviewer (`by reviewer:`);
   an engineer reviews only when ceo names one** — a reviewer stalled past a re-prompt, or a product path
   ceo wants two eyes on. ceo spot-checks the reviewer's first five verdicts and one in five after. The

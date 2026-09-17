@@ -116,7 +116,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if node scripts/board-discussion.mjs --exists; then
+          if node packages/agent-org/src/board-discussion.mjs --exists; then
             echo "ok=true" >> "$GITHUB_OUTPUT"
             echo "Today's edition exists - republishing over it."
           else
@@ -133,5 +133,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          node scripts/board-report.mjs --post --issue=20
-          node scripts/board-document.mjs --discussion
+          node packages/agent-org/src/board-report.mjs --post --issue=20
+          node packages/agent-org/src/board-document.mjs --discussion
