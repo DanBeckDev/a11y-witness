@@ -9,16 +9,24 @@
 // none was found concludes the gate is broken, which is a night spent on `ci.yml` rather than on `git
 // add .changeset/whatever.md`.
 //
+// RUN FROM `scripts/git-hooks/pre-push`, NEVER FROM `ci.yml` -- THE FIRST VERSION OF THIS ROW GOT THAT
+// WRONG, and reviewer-2's `not-convinced` on #1678 is why it moved (product-manager's independent
+// confirmation, 2026-09-18). `actions/checkout` clones the PUSHED tree, and "untracked" is a property of
+// a LOCAL working directory that, by definition, never survives a push -- there is no commit for an
+// untracked file to ride in on. A CI step reading `git status --porcelain -- .changeset` after checkout
+// would read 0 untracked files on every run, always, regardless of what the author's machine looked
+// like: a check placed somewhere the state it exists to catch cannot occur. The one place this state is
+// real is client-side, before the push, which is exactly what the pre-push hook is for.
+//
 // PURE PARSE, THEN A THIN CLI -- `untrackedChangesetReason` takes `git status --porcelain`'s own text and
 // returns a message or `null`, so it is tested directly against a fixture string with no git process
 // involved, the shape this repo already favours (`parseWorktreeList`, `worktreeStatus` in
 // `packages/agent-org/src/prune-worktrees.mjs` / `row-claim.mjs`).
 //
 // RETURNS `null` RATHER THAN THROWING WHEN NOTHING IS UNTRACKED, and that is load-bearing: the caller
-// (`ci.yml`'s `changeset` job) must fall through to the EXISTING `npx changeset status` step unchanged in
-// that case, so the genuine-absence message ("no changesets were found", when none was written at all)
-// is untouched. Making the untracked case loud by making the genuine-absence case quiet would move the
-// defect rather than fix it.
+// (the pre-push hook) must let the push proceed unchanged in that case. The genuine-absence message from
+// `npx changeset status` itself ("no changesets were found", when none was written at all) is a
+// SEPARATE, correct message this script never touches -- it only ever fires for the untracked shape.
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
@@ -62,7 +70,7 @@ function main() {
     { encoding: "utf8", env: sandboxGitEnv() });
   const reason = untrackedChangesetReason(porcelain);
   if (reason) {
-    process.stderr.write(`::error::${reason}\n`);
+    process.stderr.write(`${reason}\n`);
     process.exitCode = 1;
     return;
   }
