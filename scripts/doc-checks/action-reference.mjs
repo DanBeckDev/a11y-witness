@@ -39,7 +39,8 @@ export function usesLines(root) {
     if (!existsSync(path)) continue;
     for (const m of readFileSync(path, "utf8").matchAll(/uses:\s*([\w.-]+\/[\w.-]+)@([\w.-]+)/g)) {
       // BOTH names, deliberately, during the #66/#325 transition: the Action reference itself still
-      // says `DanBeckDev/a11y-witness` (kept that way until #325 actually moves the repository), while
+      // said `DanBeckDev/a11y-witness` until #63 moved the repository on 2026-09-18; it says
+      // `a11ign/a11ign` now, and REPO is what it follows, while
       // everything else in these docs now says `a11ign`.
       if (!/a11ign|a11y-witness/i.test(m[1])) continue; // third-party actions are not ours to validate
       found.push({ file, owner: m[1], ref: m[2] });

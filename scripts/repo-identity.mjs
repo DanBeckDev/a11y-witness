@@ -8,12 +8,18 @@
 // plus a failing test naming every site that still disagrees, rather than a hunt through 25 files under
 // time pressure.
 //
+// CHANGED 2026-09-18 BY #63 ITSELF -- the day this file was written for. The transfer landed
+// (`a11ign/a11ign`, repo id 1280353940 unchanged), so `REPO` follows it and every site that was
+// deliberately still citing the old name because `https://github.com/a11ign/a11ign` 404d now resolves.
+// The two constants are NOT merged even though they agree today: they answer different questions, and
+// the next rename would split them again.
+//
 // NOT a claim about where the repository lives after any future transfer — it is what the name IS today.
 // `packages/agent-org/src/board-data.mjs` and `packages/agent-org/src/row-claim.mjs` import `REPO` from here rather than declaring their
 // own copy; every other reference is a literal (a `package.json` field, a workflow string, prose) that
 // cannot import anything, and `repo-identity-consolidated.test.ts` pins each one against these constants
 // instead.
-export const REPO = "DanBeckDev/a11y-witness";
+export const REPO = "a11ign/a11ign";
 export const REPO_URL = `https://github.com/${REPO}`;
 export const REPO_GIT_URL = `${REPO_URL}.git`;
 
@@ -30,7 +36,7 @@ export const REPO_GIT_URL = `${REPO_URL}.git`;
 //     waiting for the day the repository itself moves.
 //
 // Exceptions inside PRODUCT_REPO's own territory, all live GitHub fetches or executions rather than prose
-// a reader interprets: a `uses: DanBeckDev/a11y-witness@main` line still has to resolve on GitHub TODAY,
+// a reader interprets: a `uses: <owner>/<repo>@main` line still has to resolve on GitHub TODAY,
 // and (#569, found by the V1 rehearsal) so does a CI badge -- it is an image fetched the instant the page
 // renders, before any surrounding prose about the rename is read. `https://github.com/a11ign/a11ign` 404s
 // until #63 lands, so both keep citing REPO, not PRODUCT_REPO, until #325 (the transfer rehearsal) changes

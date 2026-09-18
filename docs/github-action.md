@@ -18,7 +18,7 @@ jobs:
       pull-requests: write       # for the PR comment below; omit it and the report still runs, only quieter
     steps:
       - uses: actions/checkout@v4
-      - uses: DanBeckDev/a11y-witness@main
+      - uses: a11ign/a11ign@main
         # Pin it: @main moves under you. Use the full 40-character commit SHA if your CI must not
         # change -- GitHub refuses an abbreviated one outright, it does not just discourage it.
         id: a11ign
@@ -46,7 +46,7 @@ no log and no artifact, and any diagnostic step you add with `if: always()` does
 > **Pin this deliberately.** There is no tagged release yet, so `@main` is the only ref that resolves —
 > and it moves. If your CI must not change under you, pin the full commit SHA — all 40 characters;
 > GitHub refuses an abbreviated one outright rather than merely discouraging it
-> (`uses: DanBeckDev/a11y-witness@<sha>`), which is what GitHub itself recommends for third-party actions.
+> (`uses: a11ign/a11ign@<sha>`), which is what GitHub itself recommends for third-party actions.
 > A `@v1` tag is a release decision this project has not taken; see
 > [ADR 0007](./adr/0007-versioning-and-release.md).
 
@@ -278,7 +278,7 @@ error handling most needs reviewing. On such a page 3.3.1, 3.3.3 and 4.1.3 are n
 `forms` names a config that says how to operate it (ADR 0024):
 
 ```yaml
-- uses: DanBeckDev/a11y-witness@main
+- uses: a11ign/a11ign@main
   # Pin it: @main moves under you. Use the full 40-character commit SHA if your CI must not
   # change -- GitHub refuses an abbreviated one outright, it does not just discourage it.
   with:

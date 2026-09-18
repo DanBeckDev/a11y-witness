@@ -71,7 +71,7 @@ import { realpathSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
-import { REPO as PRE_TRANSFER_REPO, PRODUCT_REPO } from "./repo-identity.mjs";
+import { REPO as ACTION_REPO, PRODUCT_REPO } from "./repo-identity.mjs";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 export const README_PATH = `${REPO}README.md`;
@@ -79,11 +79,22 @@ export const OUT = `${REPO}.github/workflows/consumer-gate.yml`;
 
 /**
  * The Action's published identities, either side of the transfer -- #1555. This was one constant,
- * `"DanBeckDev/a11y-witness"`, used to find README's fence and to pin and read back its `uses:` line; the transfer (#63)
+ * `"a11ign/a11ign"`, used to find README's fence and to pin and read back its `uses:` line; the transfer (#63)
  * rewrites that line to `a11ign/a11ign`, and the generator and its `--check` would then refuse README outright. README's
  * own fence now decides which name is found and pinned, from `repo-identity.mjs`'s two answers.
  */
-const ACTION_IDENTITY_NAMES = [PRE_TRANSFER_REPO, PRODUCT_REPO];
+/**
+ * The name this repository had BEFORE #63 moved it, BUILT rather than written, so a transfer sweep of
+ * repository literals cannot rewrite it into agreeing with the new one -- `consumer-gate.test.ts` states
+ * the same reason for its own fixture. It has to stay recognised: a consumer's README, and a pinned
+ * `uses:` in somebody else's workflow, still carry it.
+ */
+const PRE_TRANSFER_REPO = ["DanBeckDev", "a11y-witness"].join("/");
+
+/** Both published identities. `REPO` and `PRODUCT_REPO` agree since the transfer; the old name does not. */
+// CURRENT NAME FIRST. Messages that name only the first one or two entries must name the identity a
+// reader is expected to write today; the pre-transfer name is accepted, not recommended.
+const ACTION_IDENTITY_NAMES = [...new Set([ACTION_REPO, PRODUCT_REPO, PRE_TRANSFER_REPO])];
 
 /** `uses: <either identity>`, with the identity captured as group 1 -- a RegExp SOURCE, matched case-insensitively. */
 const ACTION_USES = `uses: (${ACTION_IDENTITY_NAMES.map((name) => escapeRegExp(name)).join("|")})`;
