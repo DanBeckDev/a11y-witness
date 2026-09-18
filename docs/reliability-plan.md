@@ -439,7 +439,7 @@ ships*, for the fifth time here, and the first where the two halves of ONE gate 
    changeset is the only record of their provenance.
 
 **Before a real publish, run the full gate on the lab** — `npm run lab:job -- -e job=release-gate`. The
-workflow can only prove 4 of its 12 stages, and the person typing `publish-for-real` is asserting the
+workflow can only prove 5 of its 13 stages, and the person typing `publish-for-real` is asserting the
 other eight passed somewhere a corpus and a venv exist.
 
 ---
@@ -473,7 +473,7 @@ into one entry or keeps the lineage is a call for whoever decides the name, and 
 conversation. Flagged so it is not discovered mid-publish.
 
 **Before a real publish, run the full gate on the lab** — `npm run lab:job -- -e job=release-gate`. The
-workflow can only prove 4 of its 12 stages; the human typing `publish-for-real` is asserting the other
+workflow can only prove 5 of its 13 stages; the human typing `publish-for-real` is asserting the other
 eight passed somewhere a corpus and a venv exist.
 
 ---
