@@ -22,8 +22,11 @@
 // comment nobody can act on without first re-deriving what the workflow already knew and threw away.
 //
 // PURE, so every shape is testable without a real CI run -- including the one that matters most and
-// cannot be produced on demand: c8's real threshold-miss message, `ERROR: Coverage for lines (76.2%) does
-// not meet global threshold (78%)` (verbatim from `node_modules/c8/lib/commands/check-coverage.js`).
+// cannot be produced on demand: the real threshold-miss message, `ERROR: Coverage for lines (76.2%) does
+// not meet global threshold (78%)`. That wording was c8's own, verbatim, until #1321 (rstest adoption step
+// 5/5) removed c8 as a dependency; it is now `scripts/coverage.mjs`'s `thresholdMissLines` (#1320), which
+// kept the wording so this regex would not need to change. `coverage-is-rstest.test.ts` pins that coupling
+// end to end.
 import { readFileSync } from "node:fs";
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
@@ -41,7 +44,7 @@ export const KIND = {
   UNKNOWN: "UNKNOWN",         // the job failed and neither pattern above matched -- never silently "fine"
 };
 
-/** c8's own error line, verbatim, from `checkCoverage()` in `node_modules/c8/lib/commands/check-coverage.js`. */
+/** The threshold-miss error line, verbatim -- c8's own wording until #1321, now `scripts/coverage.mjs`'s. */
 const THRESHOLD_MISS = /ERROR: Coverage for (\w+) \(([\d.]+)%\) does not meet (?:global )?threshold \((\d+)%\)/g;
 
 /**
