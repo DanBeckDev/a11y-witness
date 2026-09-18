@@ -20,10 +20,10 @@
 //
 // THE THRESHOLD-MISS MESSAGE IS c8's OWN WORDING, VERBATIM: `ERROR: Coverage for <metric> (<pct>%) does not
 // meet threshold (<pct>%)`. `scripts/coverage-failure-classifier.mjs` (#169) parses exactly this shape out of
-// nightly's captured log to tell a real regression from a test failure, against a regex pinned to c8's own
-// source (`coverage-failure-classifier.test.ts`) -- reusing the wording here is what keeps that classifier
-// working without editing it, since it is still checked against c8's real message and c8 is not gone until
-// step 5 (#1321).
+// nightly's captured log to tell a real regression from a test failure, against a regex that was pinned to
+// c8's own installed source until #1321 (rstest adoption step 5/5) removed c8 as a dependency -- reusing the
+// wording here is what keeps that classifier working without editing it, now that this function is the
+// wording's only producer. The coupling is pinned in `coverage-is-rstest.test.ts`.
 //
 // EXCLUDED FROM ITS OWN COVERAGE MEASUREMENT (`.c8rc.json`, which already names this file) for the same
 // reason `scripts/build-packages.mjs` is: it spawns the test runner, so measuring the measurer is circular.
