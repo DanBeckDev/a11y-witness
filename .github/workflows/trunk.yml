@@ -325,8 +325,16 @@ jobs:
           # value a `push` event would have carried for an ordinary single-commit push.
           BEFORE="${{ github.event.before }}"
           if [ -z "$BEFORE" ]; then BEFORE="$(git rev-parse HEAD^1)"; fi
+          # #1359: `--run-id`/`--parent-log` let `revertVerdict` compare WHICH tests failed on each side,
+          # rather than refusing on the bare fact that the parent re-check failed at all. `--run-id` reads
+          # THIS push's own failing tests from `trunkBuildTest`'s already-completed job in this same run
+          # (never a second suite run against a push already known to have failed); `--parent-log` points
+          # at the recheck step's own raw TAP log above, so both sides are parsed by the same function.
+          # Both are only consulted when `--parent-recheck` is `fail` -- see `revertVerdict`'s own header.
           node packages/agent-org/src/trunk-revert.mjs \
             --push-sha=${{ github.sha }} \
             --before-sha="$BEFORE" \
             --parent-recheck="${{ steps.recheck.outputs.result }}" \
+            --run-id=${{ github.run_id }} \
+            --parent-log=/tmp/parent-test.log \
             --run-url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
