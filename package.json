@@ -7,7 +7,7 @@
   "license": "AGPL-3.0-or-later",
   "scripts": {
     "mutate": "node packages/guards/src/mutation-check.mjs",
-    "guards:sweep": "node packages/guards/src/tree-wide-guards.mjs | xargs npx tsx --test",
+    "guards:sweep": "node packages/guards/src/tree-wide-guards.mjs | xargs node packages/guards/src/assert-glob-not-empty.mjs --min=1 --run --runner=rstest",
     "row-claim": "node packages/agent-org/src/row-claim.mjs",
     "row-file": "node packages/agent-org/src/row-file.mjs",
     "board:summary-check": "node packages/agent-org/src/board-summary-check.mjs",
@@ -188,7 +188,6 @@
     "@rstest/core": "0.11.12",
     "@rstest/coverage-v8": "0.11.12",
     "@types/node": "^26.0.1",
-    "c8": "^12.0.0",
     "eslint": "^10.5.0",
     "globals": "^17.7.0",
     "tsx": "^4.22.4",

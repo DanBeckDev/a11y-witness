@@ -41,6 +41,13 @@ jobs:
       # `gh-token-jobs.test.ts` pins the CLASS: it walks each job's test glob and every LOCAL import
       # beneath it, and requires GH_TOKEN on any job that can reach a `gh` spawn. A test grepping the test
       # FILES alone would have found nothing here -- neither board test names `gh` at all.
+      # THROUGH THE SAME FLOOR `test:ts`/`test:org`/`test:all`/`guards:sweep` all use (#1321), not a bare
+      # `npx rstest run --config <rstest's config, under scripts/rstest> ...`: spelling that config file's
+      # path here, even in a comment, is exactly what `entry-points.test.ts` reads (over this whole file's
+      # text, unstripped) as an unguarded npm/workflow entry point -- the config module is meant to be
+      # imported, not run, so guarding it the way an entry point is guarded would be the wrong fix. Keeping
+      # its path OUT of this file entirely is the real one: `assert-glob-not-empty.mjs` computes that path
+      # internally, and is already a guarded, already-discovered entry point everywhere else this row touches.
       - env:
           GH_TOKEN: ${{ github.token }}
-        run: npx tsx --test "packages/lab/src/packaging/board-*.test.ts" "packages/lab/src/packaging/public-claim.test.ts"
+        run: node packages/guards/src/assert-glob-not-empty.mjs "packages/lab/src/packaging/board-*.test.ts" "packages/lab/src/packaging/public-claim.test.ts" --min=1 --run --runner=rstest
