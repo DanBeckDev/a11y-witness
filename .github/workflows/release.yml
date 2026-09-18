@@ -116,6 +116,19 @@ jobs:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
 
+      # #1452: `changeset status`'s divergence check (`@changesets/git`'s `getDivergedCommit`) runs
+      # `git merge-base main HEAD` -- a literal LOCAL branch named `main`, never `origin/main`. Dispatched on
+      # any other branch, `actions/checkout` above creates a local ref only for the branch actually checked
+      # out; `main` exists solely as `origin/main`, so that lookup fails with "Failed to find where HEAD
+      # diverged from main" before a single version prints (measured on run 34783509737, dispatched off
+      # `agent/first-publish-0-1-0-1396`). Dispatched on `main` itself the local branch already exists --
+      # forcing it here would be `git branch -f` on the branch currently checked out, which git refuses.
+      - name: Make a local `main` ref available for changesets' divergence check
+        run: |
+          if [ "$(git symbolic-ref --short HEAD)" != "main" ]; then
+            git fetch origin main:main
+          fi
+
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm, registry-url: https://registry.npmjs.org }
 
