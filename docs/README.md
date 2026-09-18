@@ -94,3 +94,5 @@ needs them; they live here because `@a11ign/agent-org` is private-by-boundary ra
 |---|---|
 | [`roles/worker-loop-orchestrator.md`](roles/worker-loop-orchestrator.md) | **who owns the worker loop, what they hand up, and the measurement that decides whether the split was right.** Created because one agent was the serial step and the measurement said which part |
 | [`roles/orchestrator.md`](roles/orchestrator.md) | fleet, lab, `runs/`, gates — and why nothing is checked out in the primary |
+
+<!-- merge-queue proof, #63 step 4: this line is removed by the same PR that proves the queue. -->
