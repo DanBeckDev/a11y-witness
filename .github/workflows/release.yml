@@ -78,7 +78,7 @@ jobs:
   capture-regression:
     uses: ./.github/workflows/capture-regression.yml
 
-  # #494. `consumer-gate.yml`'s own `uses: DanBeckDev/a11y-witness@<sha>` step is pinned to a LITERAL sha
+  # #494. `consumer-gate.yml`'s own `uses: a11ign/a11ign@<sha>` step is pinned to a LITERAL sha
   # baked in at generation time (see scripts/generate-consumer-gate.mjs's own header for why `${{ }}` does
   # not work in a `uses:` field) -- so unlike action-smoke/capture-regression, this job does NOT
   # automatically track "the exact sha this workflow was dispatched at" by virtue of being a local

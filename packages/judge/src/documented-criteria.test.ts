@@ -164,7 +164,7 @@ test("#1353: only the a11y-witness step's own `with:` is read as its inputs -- n
   const steps = (a11yStep: string[]) => [
     "    steps:",
     "      - uses: actions/checkout@v4",
-    "      - uses: DanBeckDev/a11y-witness@main",
+    "      - uses: a11ign/a11ign@main",
     ...a11yStep,
     "      # Keep the evidence -- a comment at the steps' own indentation",
     "      - uses: actions/upload-artifact@v4",
@@ -198,7 +198,7 @@ test("the README's quickstart workflow is one a stranger can actually paste", ()
 
   assert.match(snippet!, /runs-on:\s*windows-/,
     "NVDA needs Windows; a snippet on ubuntu-latest fails after the reader has committed it");
-  // NOT `/a11ign@/` -- #66 (the rename) deliberately keeps every `uses: DanBeckDev/a11y-witness@main`
+  // NOT `/a11ign@/` -- #66 (the rename) deliberately keeps every `uses: a11ign/a11ign@main`
   // reference pointing at where the Action ACTUALLY is today; #325 (the transfer rehearsal) owns
   // changing it once the repository really moves.
   assert.match(snippet!, /uses:\s*\S+\/a11y-witness@/, "the snippet must reference this action");

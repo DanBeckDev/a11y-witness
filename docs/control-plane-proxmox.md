@@ -87,11 +87,11 @@ One script builds either, so the shared half cannot drift:
 ```bash
 pct enter 120   # control
 apt-get update && apt-get install -y curl
-A11Y_ROLE=control bash <(curl -fsSL https://raw.githubusercontent.com/DanBeckDev/a11y-witness/main/packages/worker-fleet/src/provisioning/bootstrap-control-plane.sh)
+A11Y_ROLE=control bash <(curl -fsSL https://raw.githubusercontent.com/a11ign/a11ign/main/packages/worker-fleet/src/provisioning/bootstrap-control-plane.sh)
 
 pct enter 121   # lab
 apt-get update && apt-get install -y curl
-A11Y_REPO_PATH=/opt/a11y A11Y_ROLE=lab bash <(curl -fsSL https://raw.githubusercontent.com/DanBeckDev/a11y-witness/main/packages/worker-fleet/src/provisioning/bootstrap-control-plane.sh)
+A11Y_REPO_PATH=/opt/a11y A11Y_ROLE=lab bash <(curl -fsSL https://raw.githubusercontent.com/a11ign/a11ign/main/packages/worker-fleet/src/provisioning/bootstrap-control-plane.sh)
 ```
 
 `bash <(curl ...)` rather than `curl | bash`: the role comes from the environment, and a piped script

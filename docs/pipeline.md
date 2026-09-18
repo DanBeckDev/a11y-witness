@@ -61,7 +61,7 @@ that DISCUSSES a file is not a test that exercises it.
 
 ### `GITHUB_REPOSITORY`
 
-`owner/name` of the repository to act on — `DanBeckDev/a11y-witness`. **GitHub Actions sets it
+`owner/name` of the repository to act on — `a11ign/a11ign`. **GitHub Actions sets it
 automatically on every runner**, so no workflow here assigns it a literal; each job passes
 `${{ github.repository }}` through, which is the same value by a route that cannot drift from the repo the
 job is actually running in.
@@ -76,7 +76,7 @@ answer — the rule this repository states most often.
 **Set it yourself when running either script by hand**, which is the normal way to rehearse one:
 
 ```bash
-GITHUB_REPOSITORY=DanBeckDev/a11y-witness node packages/agent-org/src/auto-arm-sweep.mjs
+GITHUB_REPOSITORY=a11ign/a11ign node packages/agent-org/src/auto-arm-sweep.mjs
 ```
 
 Note that the sweep **arms real PRs** when it runs, so a rehearsal is not free. To see its decisions
