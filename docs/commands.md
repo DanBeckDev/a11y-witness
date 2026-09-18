@@ -39,14 +39,15 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node packages/agent-org/src/row-reachability.mjs` — compute whether a row is actually startable from the tree, never from a label alone
 - `node packages/agent-org/src/stash-whose.mjs` — list every git stash entry with the branch it was made on, since git alone will not say
 - `node packages/agent-org/src/stranded-branches.mjs` — find pushed branches with no open PR, which are otherwise invisible to CI and review
+- `node packages/agent-org/src/token-audit.mjs` — token-audit -- what the org actually spent, read from the transcripts it already writes.
 - `node packages/agent-org/src/tracker-comment.mjs` — read and edit a tracker comment safely -- the one place, so no edit is improvised again
 - `node packages/agent-org/src/trunk-revert-guard.mjs` — compare main's before/after state on a merge and refuse one that silently deletes prior work
 - `node packages/agent-org/src/trunk-revert.mjs` — revert a push to main that fails its own gate, unattended, since nothing else runs after it lands
 - `node packages/agent-org/src/trunk-sweep.mjs` — sweep main for a gate failure while GITHUB_TOKEN-authored merges suppress every triggering event
 - `node packages/agent-org/src/update-branch-sweep.mjs` — push every armed, green-or-running PR up to main's new tip after a merge lands
 - `node packages/agent-org/src/update-primary.mjs` — the one sanctioned way to move the primary checkout: fetch, detach at origin/main, install if the lockfile moved, rebuild
-- `node packages/agent-org/src/work-gate.mjs` — work-gate -- is there work for any session? One cheap read; a wake order per line when yes.
 - `node packages/agent-org/src/wake.mjs` — wake -- deliver work-gate's orders to the sessions that can take them. The other half of #912.
+- `node packages/agent-org/src/work-gate.mjs` — work-gate -- is there work for any session? One cheap read; a wake order per line when yes.
 - `node packages/agent-org/src/work-tick.mjs` — work-tick -- one tick of the org: ask work-gate, hand the orders to wake. Runs on a timer.
 - `node packages/agent-org/src/worker-profile.mjs` — worker-profile -- which model and effort a wake order's CAUSE deserves. Data, not judgment.
 - `node packages/agent-org/src/workflow-run-liveness.mjs` — watchdog: did CI actually run before this commit reached main, checked automatically
@@ -59,11 +60,13 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node packages/guards/src/piped-exit-status-guard.mjs` — detect a piped command whose exit status was read from the wrong side of the pipe
 - `node packages/guards/src/tree-wide-guards.mjs` — every tracked *.test.ts file that DECLARES ITSELF a TREE-WIDE GUARD by importing and calling
 - `node scripts/build-packages.mjs` — run tsc --build across every package under packages/ in dependency order
+- `node scripts/changeset-untracked-check.mjs` — refuse with the RIGHT message when the tree carries an untracked changeset
 - `node scripts/check-retired-heads.mjs` — refuse a candidate whose scorer head set shrank without declaring what it retired
 - `node scripts/check-schema-migration.mjs` — refuse a release while a declared schema migration is still open
 - `node scripts/check-transfer-urls.mjs` — check-transfer-urls -- walk the tree for every URL naming PRODUCT_REPO (a11ign/a11ign) and
 - `node scripts/ci-changed.mjs` — classify what a PR's diff touches, so CI's conditional jobs know whether to run
 - `node scripts/coverage-failure-classifier.mjs` — turn a nightly coverage.yml failure comment into an actual finding, not just 'it failed'
+- `node scripts/coverage.mjs` — the whole-repo coverage gate `npm run coverage` runs, now through rstest, not c8
 - `node scripts/doc-cross-reference-report.mjs` — print the nightly doc cross-reference report -- every doc-to-doc and doc-to-tree check, as markdown
 - `node scripts/generate-commands-doc.mjs` — regenerate docs/commands.md from every script's own `// command:` header
 - `node scripts/generate-consumer-gate.mjs` — regenerate .github/workflows/consumer-gate.yml from README.md's own documented workflow
@@ -75,7 +78,10 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/npm-token-liveness.mjs` — say whether the first-publish npm token is still present after it should have been revoked
 - `node scripts/prune-stale-workspace-scope.mjs` — remove a stale workspace-scope's node_modules symlinks a rename left behind
 - `node scripts/release-gate-scope.mjs` — warn which release:gate stages release:gate:ci does not run, and how many
+- `node scripts/release-print-versions.mjs` — print the version each published package's manifest now holds
+- `node scripts/release-reuses-verdict.mjs` — does the release job need to run coverage itself, or can it reuse nightly's verdict for this sha
 - `node scripts/run.mjs` — the one-line dispatcher: run a named command from commands.mjs, or --list every command declared
 - `node scripts/select-changed-tests.mjs` — pick only the test files that reference a changed file, narrower than package scoping
 - `node scripts/spotlight-exclude.mjs` — stop Spotlight indexing every git worktree on this machine
 - `node scripts/stale-dist-diagnosis.mjs` — augment a resolution failure naming a missing export or module with a stale-dist diagnosis
+- `node scripts/test-changed.mjs` — run only the tests a change can reach -- the local half of CI's scoped selection

@@ -130,7 +130,7 @@
     "worker:ctl": "packages/worker-fleet/src/local-worker/worker-ctl.sh",
     "worktrees:prune": "node packages/agent-org/src/prune-worktrees.mjs",
     "primary:update": "node packages/agent-org/src/update-primary.mjs",
-    "coverage": "c8 node packages/guards/src/assert-glob-not-empty.mjs \"packages/*/src/**/*.test.ts\" --min=300 --run",
+    "coverage": "node scripts/coverage.mjs",
     "identity:rate": "tsx packages/lab/src/harnesses/page-identity-rate.mjs",
     "verdict:stability": "tsx packages/lab/src/harnesses/occurrence-verdict-stability.mjs",
     "verdict:preregistered": "node packages/lab/scripts/check-preregistered-verdict.mjs",
