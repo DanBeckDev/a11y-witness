@@ -25,7 +25,7 @@
  */
 import { createSocket } from "node:dgram";
 import { readFileSync } from "node:fs";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
 
 // MOVED here from packages/worker-fleet/src 2026-09-06 (architecture audit §3.2) -- see fleet-status.mjs's
 // header for why. `fleet-discover.mjs` moved alongside it, so that import stays local; the other two
@@ -33,6 +33,11 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { inventoryHosts } from "./fleet-discover.mjs";
 import { requestJson } from "../../worker-fleet/src/worker-http.mjs";
 import { refuseUnknownFlags } from "../../worker-fleet/src/cli-flags.mjs";
+// #1683/#1684: SHARED, not restated -- both this file and fleet-discover.mjs need "the durable copy
+// first, the in-tree checkout second", and defining it here would make fleet-discover.mjs (which this
+// file already imports `inventoryHosts` from) import back FROM here, a cycle. `control-plane-fleet.mjs`
+// is neither's dependent, so it is the shared home.
+import { inventoryPathFor } from "./control-plane-fleet.mjs";
 
 /**
  * takes no flags: it wakes every box in the inventory.
@@ -137,7 +142,7 @@ export async function wakeFleet(workers, { port = 8765, broadcast, deadlineMs = 
 
 async function main() {
   const wanted = process.argv.slice(2).filter((a) => !a.startsWith("--"));
-  const inventory = fileURLToPath(new URL("../ansible/inventory.yml", import.meta.url));
+  const inventory = inventoryPathFor();
   // `inventory.yml` is gitignored (real addresses, restored from the secrets store at bring-up) --
   // absence is now a state a fresh clone hits routinely, not an edge case, so it gets a named error
   // rather than an uncaught ENOENT stack. Same message shape as `fleet-status.mjs`'s `fleetToProbe()`.
