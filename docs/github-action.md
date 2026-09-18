@@ -19,7 +19,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: DanBeckDev/a11y-witness@main
-        # Pin it: @main moves under you. Use the full commit SHA if your CI must not change.
+        # Pin it: @main moves under you. Use the full 40-character commit SHA if your CI must not
+        # change -- GitHub refuses an abbreviated one outright, it does not just discourage it.
         id: a11ign
         with:
           url: https://example.com/contact
@@ -43,7 +44,8 @@ no log and no artifact, and any diagnostic step you add with `if: always()` does
 `docs/try-it.md`.
 
 > **Pin this deliberately.** There is no tagged release yet, so `@main` is the only ref that resolves —
-> and it moves. If your CI must not change under you, pin the full commit SHA
+> and it moves. If your CI must not change under you, pin the full commit SHA — all 40 characters;
+> GitHub refuses an abbreviated one outright rather than merely discouraging it
 > (`uses: DanBeckDev/a11y-witness@<sha>`), which is what GitHub itself recommends for third-party actions.
 > A `@v1` tag is a release decision this project has not taken; see
 > [ADR 0007](./adr/0007-versioning-and-release.md).
@@ -249,6 +251,12 @@ controls — one button whose name happened to share the word "Web" with the tas
 three submissions of the search form (submit-like, no task word needed) and one followed link
 (`probe-navigation`, no task word tested at all). The word match governed exactly one of the five.
 
+**A run can leave the page you gave it entirely, and this one did** — the followed link landed on a
+second document, and the result says so itself: "THIS CAPTURE NAMED MORE THAN ONE DOCUMENT ... its
+evidence was gathered across more than one page" is the tell. See
+[SECURITY.md](../SECURITY.md#it-operates-controls-on-the-page-and-one-probe-presses-buttons) for the full
+table of what a default run operates.
+
 So on the defaults the task **does** shape what gets captured — it decides which non-submit, non-disclosure
 buttons get activated, and therefore whether some 3.3.1 and 4.1.3 evidence exists at all — but most of what
 a default run presses does not read the task. It does not shape the judgement, because the default scorer
@@ -271,7 +279,8 @@ error handling most needs reviewing. On such a page 3.3.1, 3.3.3 and 4.1.3 are n
 
 ```yaml
 - uses: DanBeckDev/a11y-witness@main
-  # Pin it: @main moves under you. Use the full commit SHA if your CI must not change.
+  # Pin it: @main moves under you. Use the full 40-character commit SHA if your CI must not
+  # change -- GitHub refuses an abbreviated one outright, it does not just discourage it.
   with:
     url: https://staging.example.com/signup
     task: "Create an account"
