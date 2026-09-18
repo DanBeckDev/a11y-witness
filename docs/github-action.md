@@ -251,6 +251,12 @@ controls — one button whose name happened to share the word "Web" with the tas
 three submissions of the search form (submit-like, no task word needed) and one followed link
 (`probe-navigation`, no task word tested at all). The word match governed exactly one of the five.
 
+**A run can leave the page you gave it entirely, and this one did** — the followed link landed on a
+second document, and the result says so itself: "THIS CAPTURE NAMED MORE THAN ONE DOCUMENT ... its
+evidence was gathered across more than one page" is the tell. See
+[SECURITY.md](../SECURITY.md#it-operates-controls-on-the-page-and-one-probe-presses-buttons) for the full
+table of what a default run operates.
+
 So on the defaults the task **does** shape what gets captured — it decides which non-submit, non-disclosure
 buttons get activated, and therefore whether some 3.3.1 and 4.1.3 evidence exists at all — but most of what
 a default run presses does not read the task. It does not shape the judgement, because the default scorer
