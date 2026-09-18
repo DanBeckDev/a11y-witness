@@ -672,8 +672,23 @@ function describeAlwaysRun(alwaysRun, selectedTests) {
 // a moved or typo'd path, and `assert-glob-not-empty.mjs` cannot tell the two apart on its own. Named
 // here, once, rather than guessed at: every OTHER package keeps the plain fallback, so a genuinely
 // uncovered change elsewhere still refuses.
+//
+// #1695: `guards` shares the exact same shape as `agent-org` -- `tooling-roots.mjs` names both as
+// tooling censused from `packages/lab/src/packaging/` (`assert-glob-not-empty.test.ts`,
+// `runner-is-rstest.test.ts`, ...), and its own `src/` has never carried a `*.test.ts` file.
+// `nvda-speech` has no `src/` at all (a Python package tested under its own `tests/`, never by the `ts`
+// job) -- also empty by construction. Neither was in this map, so a `scripts/*.mjs` change nothing
+// imports (the shape that names every `testPackages` entry as a fallback) reproduced #1648 one level
+// over: `packages/guards/src/**/*.test.ts` and `packages/nvda-speech/src/**/*.test.ts` both matched 0
+// and the non-broad branch, unlike the broad one, has no `--drop-empty` to fall back on. Measured on
+// PR #1695 (`ts / run`, run 35335772105): `scripts/release-print-versions.mjs` is a new file no test's
+// declared walk scope reaches, so `fallbackPackages` names all eleven `testPackages`, including these two.
 /** @type {Record<string, string>} */
-const FALLBACK_TEST_GLOB = { "agent-org": "packages/lab/src/packaging/**/*.test.ts" };
+const FALLBACK_TEST_GLOB = {
+  "agent-org": "packages/lab/src/packaging/**/*.test.ts",
+  guards: "packages/lab/src/packaging/**/*.test.ts",
+  "nvda-speech": "packages/lab/src/packaging/**/*.test.ts",
+};
 
 /**
  * What the `ts` job actually runs: the precisely-selected tests, the always-run guards, and a full-suite
