@@ -68,6 +68,26 @@ whether they are followed.
   drafts unasked, because every verdict from 14:02Z that day was engineer-to-engineer and a draft could
   wait thirty minutes between wake-ups for the clock to name someone.
 
+## `lane:ceo` protects review, not authorship (ceo's ruling, 2026-09-18)
+
+- **A `lane:<owner>` label refuses any OTHER session unconditionally** (`laneReason`,
+  `packages/agent-org/src/row-claim/runner-rule.mjs`) — a `Lane-exception:` line in a PR body, or even a
+  comment saying "assigned to X", changes nothing at claim time. Only the label does. If the owner is the
+  only session that can ever claim the row, the owner's own turn budget is the queue's throughput.
+- **Measured 2026-09-18:** 3 engineers idle all morning behind 4 `lane:ceo` rows clearing at ~1/tick,
+  because `ceo` was trying to personally author all four and repeatedly lost the claim to B4 file-overlap
+  refusals against `ceo`'s own other open `.github/workflows/` PRs — a self-inflicted bottleneck, not a
+  property of the rows.
+- **The test before leaving a row in a lane other than `any`: does the label protect a DECISION only the
+  owner can make (the publish order, a freeze, a ruling — a genuine choice between behaviours), or a PATH
+  that needs the owner's REVIEW but not the owner's hands?** `docs/lane-ownership.json`'s own rationale for
+  `lane:ceo` is a trunk-health/merge-queue REVIEW concern, and its own `_exception` already contemplates an
+  engineer building under a `Lane-exception:` line — the lane was never meant to require `ceo`'s authorship.
+  Where it is a path, re-lane to `lane:any` (engineer builds, owner still reviews via the
+  `Lane-exception:` line and normal review). Where it is genuinely a decision, it stays, and the wait
+  behind it is then a real cost of the decision rather than an accident of the path rule. Full ruling and
+  the per-row reasoning: `docs/lane-ownership.json`'s `_claimVsAuthorRuling`, and #1320/#1257/#1397/#1452.
+
 ## Routing — who reads what (chairman's direction, 2026-09-14)
 
 - **`product-manager` is the first reader for rows, the queue and process, and rules on them:** filing and
