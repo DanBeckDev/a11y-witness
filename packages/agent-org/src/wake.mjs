@@ -330,6 +330,62 @@ export function deliveryCounts(path, read = readFileSync) {
  */
 export const MAX_DELIVERIES = 6;
 
+/** How long to wait for a `/clear` to settle before giving up and delivering on a stale context. */
+export const CLEAR_TIMEOUT_MS = 30_000;
+
+/**
+ * WHY EVERY DELIVERY CLEARS FIRST, and it is the largest single saving this system has made.
+ *
+ * A standing session's context only grows. Measured on the live org, 2026-09-18, within one session:
+ *
+ *   turn 1    37k cache-read        turn 548   895k cache-read
+ *
+ * Every turn re-reads the whole accumulated conversation, so turn 548 pays 24 times what turn 1 paid to
+ * produce the same few hundred output tokens. Across the org that day: 786M input tokens against 782k
+ * output -- a thousand to one -- and 7% of a weekly allowance for a day in which very little shipped.
+ * The work was never the cost. Carrying yesterday into every turn was.
+ *
+ * `/clear` IS THE REPOSITORY'S OWN ANSWER, not an invention: `.claude/rules/agent-practices.md` says
+ * *"`/clear` between unrelated topics; a fresh window beats stale history"*. It was a habit nobody could
+ * keep because nothing reminded anyone. Here it is mechanical.
+ *
+ * SAFE BECAUSE OF WHO IS BEING WOKEN. `wake` only ever delivers to a session herdr reports `idle` or
+ * `done`, so it is between tasks by definition -- and each order is its own task, which is the exact
+ * "unrelated topic" the rule is about. The row is the state (`agent-practices.md` again), so a session
+ * carries nothing across tasks worth keeping.
+ *
+ * NOT `agent start`. Spawning a fresh worker per cause reaches the same context floor and costs a process
+ * restart, a pane at a shell prompt, and a window where the session is neither old nor new. `/clear`
+ * reaches the floor -- measured 690k -> 37k on worker-capture -- without any of that.
+ *
+ * MEASURED, NOT ASSUMED: 690k -> 37k on a real session, an 18x cut in per-turn input.
+ *
+ * @param {(args: string[]) => string} run @param {string} label
+ * @returns {string | null} a refusal to report, or `null` when the context was reset
+ */
+export function clearContext(run, label) {
+  try {
+    // `--wait --until idle` IS LOAD-BEARING AND ITS ABSENCE BROKE THE LIVE ORG. `agent prompt` SUBMITS
+    // text and returns; it does not wait for the agent to consume it. Without this the order was typed
+    // into the same input the clear was still sitting in, and `ceo` received one concatenated line:
+    //
+    //     Unknown command: /clearYou are `ceo`, an org session in this repository...
+    //
+    // -- the clear refused as an unknown command AND the order mangled into its argument. Two turns
+    // wasted and the work not done, which is the opposite of what this function is for.
+    //
+    // The timeout bounds it: a clear that has not settled in 30s is reported rather than waited on for
+    // ever, and the caller delivers anyway on a stale context.
+    run(["--session", "org", "agent", "prompt", label, "/clear",
+      "--wait", "--until", "idle", "--timeout", String(CLEAR_TIMEOUT_MS)]);
+    return null;
+  } catch (err) {
+    // A REFUSED CLEAR IS NOT A REFUSED WAKE. The order still goes, on a bloated context: expensive is
+    // strictly better than undelivered, and the refusal is reported rather than swallowed.
+    return `${label}: /clear refused (${String(/** @type {any} */ (err)?.message ?? err).split("\n")[0].slice(0, 80)})`;
+  }
+}
+
 /**
  * Deliver each order, and say what happened to every one of them.
  *
@@ -363,6 +419,10 @@ export function deliver(orders, agents, roster, { run = defaultRun, record, coun
       refused.push(`${order.causeKey}: ${target.refusal}`);
       continue;
     }
+    // CLEARED BEFORE PROMPTED, always. See `clearContext` for the measurement; in short, a session on its
+    // 500th turn costs ~24x one on its 10th for identical output, and the clear costs one cheap turn.
+    const clearRefusal = clearContext(run, target.label);
+    if (clearRefusal) refused.push(`${order.causeKey}: ${clearRefusal} -- delivered anyway`);
     try {
       run(["--session", "org", "agent", "prompt", target.label, addressed(order, target.label)]);
     } catch (err) {
