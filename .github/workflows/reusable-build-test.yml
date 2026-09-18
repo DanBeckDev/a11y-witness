@@ -28,7 +28,7 @@ on:
   workflow_call:
     inputs:
       run-lint-typecheck:
-        description: "Run npm run lint and npm run typecheck. On for ci.yml's ts and trunk-guard's trunkGate; off for ci.yml's python (which never ran either)."
+        description: "Run npm run lint and npm run typecheck. On for ci.yml's ts and trunk's trunkGate; off for ci.yml's python (which never ran either)."
         type: boolean
         default: false
       run-docs-coverage:
@@ -40,7 +40,7 @@ on:
         type: boolean
         default: false
       ts-test-scope:
-        description: "'scoped' (select-changed-tests.mjs, with a per-package fallback) or 'unscoped' (npm run test:all, every package). Only meaningful when run-ts-tests is true. ci.yml's ts job is 'scoped'; trunk-guard's trunkGate is 'unscoped', matching its own unconditional, every-merge trigger rather than a diff."
+        description: "'scoped' (select-changed-tests.mjs, with a per-package fallback) or 'unscoped' (npm run test:all, every package). Only meaningful when run-ts-tests is true. ci.yml's ts job is 'scoped'; trunk's trunkGate is 'unscoped', matching its own unconditional, every-merge trigger rather than a diff."
         type: string
         default: scoped
       base-ref:
@@ -52,7 +52,7 @@ on:
         type: string
         default: ""
       run-python-tests:
-        description: "Run the Python setup + pytest suite. On for ci.yml's python job and trunk-guard's trunkGate; off for ci.yml's ts job, which never touched Python."
+        description: "Run the Python setup + pytest suite. On for ci.yml's python job and trunk's trunkGate; off for ci.yml's ts job, which never touched Python."
         type: boolean
         default: false
       use-node-modules-cache:
