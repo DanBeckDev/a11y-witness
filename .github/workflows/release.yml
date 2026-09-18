@@ -129,8 +129,8 @@ jobs:
       # still be checked: nothing else on the release path re-runs the full suite, so a threshold
       # regression that a package-scoped PR run could not see would otherwise ship unnoticed.
       #
-      # #1308: BUT NOT TWICE FOR THE SAME SHA. `npm run coverage` is c8 over the whole suite (301s
-      # measured), and nightly already pays that cost once a day against whatever `main`'s tip was at
+      # #1308: BUT NOT TWICE FOR THE SAME SHA. `npm run coverage` is rstest (`@rstest/coverage-v8`, #1320)
+      # over the whole suite, and nightly already pays that cost once a day against whatever `main`'s tip was at
       # 06:17 London -- a release cut soon after a nightly run re-runs coverage for a sha nightly already
       # verified. This step reads nightly's own `coverage` JOB conclusion (never the run's -- a sibling
       # job like `gateSweep` failing must not make this refuse a genuinely reusable verdict) for the EXACT
