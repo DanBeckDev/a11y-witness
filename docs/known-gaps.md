@@ -2915,6 +2915,45 @@ looked reasonable.
 The 3.2.1 finding on that page stays in the baseline until the page is recaptured. It is a REFERRAL, not an
 accusation, and removing it on the strength of a diagnosis rather than fresh evidence would be accepting a
 baseline edit as a substitute for the work.
+
+### CONFIRMED STILL OPEN, 12 DAYS LATER — 2026-09-18, from #866
+
+`a11y-job-evidence-check.service` sat in `failed` since a 2026-09-06 16:20 run whose journal read
+`postSubmitNames 59->63` on `form-error-silent`, cited on #866 as unreported drift. Re-run twice, back to
+back, at two consecutive commits (`e3b1d3608680`, then `26f5e0bd42f7` — the only change between them was
+#1714, an unrelated board-accessor fix, nothing capture-side):
+
+```
+run 1 (e3b1d3608680): 46 compared (2 rejected — a11y-worker-4 warming, excluded, not a code effect): 4 changed
+  icon-button-unnamed.good   postSubmitNames 53->49
+  media-autoplay-audio.good  structure.formFields / interaction.controls 4->4 (grouping label dropped)
+  form-error-silent.good     postSubmitNames 63->59
+  form-error-silent.bad      postSubmitNames 63->59
+
+run 2 (26f5e0bd42f7): 48 compared, 0 rejected: 2 changed
+  icon-button-unnamed.good   postSubmitNames 53->49   (identical to run 1)
+  media-autoplay-audio.good  same fields, same split   (identical to run 1)
+  form-error-silent.good/.bad: SAME (matches the baseline on disk)
+```
+
+Same shape as this section's own 2026-09-06 correction, above: `form-error-silent` flips between JOINED and
+SPLIT run to run with no code change in between, and #866's cited pair (`59->63`) is the same two numbers as
+today's (`63->59`) read in the opposite direction. **Still intermittent, still unresolved, still gated on
+`gate:stability`** (this section's own named remedy) — which is itself one of #866's originally-failed
+units, unrunnable since 2026-09-06 with no workers in `inventory.yml`, its own open row.
+
+**New to this section:** `icon-button-unnamed.good` and `media-autoplay-audio.good` reproduced IDENTICALLY
+across both runs — same fields, same numbers, same lost/gained text — unlike `form-error-silent`. Two
+readings fit that too, and neither is settled by two runs: either those two cases fragment consistently
+while `form-error-silent` alone is the flaky one, or two runs is too small a sample to tell a stable case
+from one that happened to land the same way twice. Not concluded here — `gate:stability`, when it can run
+again, is what would settle it.
+
+Answering #866's Acceptance item 3 (`evidence-check`'s exit is answered): not a new, undocumented drift —
+the SAME already-recorded intermittency as above, confirmed still live 12 days later. No
+`CAPTURE_PROTOCOL_VERSION` bump is warranted on this evidence; bumping now would bake whichever way each
+flaky case happened to land into the corpus, which is exactly the risk the 2026-09-06 correction named.
+
 ## 45. `focusEvents` IS NOT DETERMINISTIC, and nothing compared it until the day before this was found
 
 **`gate:stability` FAILED 2026-09-06, blocking a recapture.** Nine canaries, five captures each, compared by
