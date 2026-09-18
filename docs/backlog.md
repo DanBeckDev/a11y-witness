@@ -816,7 +816,7 @@ is settled: **`a11y-witness` and the `@a11y-witness` scope are both unclaimed on
 remains is mechanical, in this order:
 
 1. `npm run lab:job -- -e job=release-gate` — the full gate on the lab. `release:gate:ci` is the subset a
-   GitHub runner can prove and is **not** a substitute; seven of its twelve stages need the Python venv or
+   GitHub runner can prove and is **not** a substitute; eight of its thirteen stages need the Python venv or
    the corpus.
 2. Create the `@a11y-witness` scope on the publishing account, and add `NPM_TOKEN` to the repository
    secrets.

@@ -74,6 +74,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/manifest-repository-check.mjs` — refuse a publish whose manifests name a different repository than the run publishing them
 - `node scripts/npm-token-liveness.mjs` — say whether the first-publish npm token is still present after it should have been revoked
 - `node scripts/prune-stale-workspace-scope.mjs` — remove a stale workspace-scope's node_modules symlinks a rename left behind
+- `node scripts/release-gate-scope.mjs` — warn which release:gate stages release:gate:ci does not run, and how many
 - `node scripts/run.mjs` — the one-line dispatcher: run a named command from commands.mjs, or --list every command declared
 - `node scripts/select-changed-tests.mjs` — pick only the test files that reference a changed file, narrower than package scoping
 - `node scripts/spotlight-exclude.mjs` — stop Spotlight indexing every git worktree on this machine
