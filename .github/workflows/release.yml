@@ -122,12 +122,27 @@ jobs:
       - run: npm ci
       - run: npm run build
 
-      # THE WHOLE-REPO COVERAGE THRESHOLD, HERE AND ON A NIGHTLY SCHEDULE (`coverage.yml`) -- chairman's
-      # direction, 2026-09-06, follow-up to #133/#140. It left `ci.yml`'s per-PR job entirely (154s of a
-      # measured 269s, re-testing packages a given PR could not have touched), and a release is the other
-      # place it must still be checked: nothing else on the release path re-runs the full suite, so a
-      # threshold regression that a package-scoped PR run could not see would otherwise ship unnoticed.
+      # THE WHOLE-REPO COVERAGE THRESHOLD, HERE AND ON A NIGHTLY SCHEDULE (`nightly.yml`'s `coverage`
+      # job -- moved there from the now-deleted `coverage.yml`, #901) -- chairman's direction, 2026-09-06,
+      # follow-up to #133/#140. It left `ci.yml`'s per-PR job entirely (154s of a measured 269s,
+      # re-testing packages a given PR could not have touched), and a release is the other place it must
+      # still be checked: nothing else on the release path re-runs the full suite, so a threshold
+      # regression that a package-scoped PR run could not see would otherwise ship unnoticed.
+      #
+      # #1308: BUT NOT TWICE FOR THE SAME SHA. `npm run coverage` is c8 over the whole suite (301s
+      # measured), and nightly already pays that cost once a day against whatever `main`'s tip was at
+      # 06:17 London -- a release cut soon after a nightly run re-runs coverage for a sha nightly already
+      # verified. This step reads nightly's own `coverage` JOB conclusion (never the run's -- a sibling
+      # job like `gateSweep` failing must not make this refuse a genuinely reusable verdict) for the EXACT
+      # sha being released, never "the latest nightly run" (which is usually the PARENT sha, not this
+      # one). No verdict for this sha, or a failed one, and it runs coverage exactly as before.
+      - id: coverage-verdict
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release-reuses-verdict.mjs --sha=${{ github.sha }}
+
       - name: Coverage — the whole-repo threshold
+        if: steps.coverage-verdict.outputs.reuse != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: npm run coverage
@@ -188,14 +203,27 @@ jobs:
       # found" and exits 1 — which is correct behaviour for a question asked at the wrong moment. Measured
       # 2026-08-30 on this workflow's second ever dry run, where it failed the step it was meant to
       # illustrate.
+      #
+      # #1466: `--verbose` is the whole fix for this step. Plain `changeset status` prints only a BUMP
+      # LEVEL per package ("minor"), never a version -- every reading of "0.1.0 for all six" up to run
+      # 34785498618 was arithmetic done by whoever read the log, not something the log said. `--verbose`
+      # prints `<name> -> <newVersion>` for every package the release plan touches.
       - name: What is pending, before anything is applied
-        run: npx changeset status
+        run: npx changeset status --verbose
 
       # `changeset version` does NOT update package-lock.json under npm workspaces. Without the install
       # that follows, the lockfile ships describing the PREVIOUS versions — invisible until a consumer's
       # clean install resolves the wrong tree. `npm run release:version` does both; see .changeset/README.md.
       - name: Apply the pending changesets
         run: npm run release:version
+
+      # #1466: AFTER `release:version`, the manifests hold the version this run would actually publish --
+      # the applied half of "pending and applied" (`git diff --stat` below names which FILES changed, never
+      # what they now say). `release-print-versions.mjs` reads the same six manifests
+      # `manifest-repository-check.mjs` already treats as "published", so this names exactly the packages
+      # the pending step above named.
+      - name: What each package's version now is
+        run: node scripts/release-print-versions.mjs
 
       # AFTER, and it asks a different question: what did `version` actually write? The two together are
       # "what was asked for" and "what happened", which is the shape every verification here takes.
