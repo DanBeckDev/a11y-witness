@@ -54,7 +54,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: DanBeckDev/a11y-witness@main
-        # Pin it: @main moves under you. Use the full commit SHA if your CI must not change.
+        # Pin it: @main moves under you. Use the full 40-character commit SHA if your CI must not
+        # change -- GitHub refuses an abbreviated one outright, it does not just discourage it.
         id: a11ign
         with:
           url: https://your-site.example/the-page
