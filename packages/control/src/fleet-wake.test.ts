@@ -31,3 +31,6 @@ test("anything that is not a MAC is refused, not padded into a packet nobody wil
     assert.throws(() => magicPacket(bad), /not a MAC address/, `${bad} should be refused`);
   }
 });
+
+// #1683's own "durable copy first" tests moved to control-plane-fleet.test.ts -- `inventoryPathFor` now
+// lives there (shared with fleet-discover.mjs, #1684), not restated here.

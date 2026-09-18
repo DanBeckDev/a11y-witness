@@ -664,6 +664,35 @@ if [ "$BRANCH" != "main" ]; then
 fi
 # END #386 ARMED-PR PUSH GUARD
 
+# `npx changeset status` (CI's `changeset` job, `ci.yml`) reads the changeset directory THROUGH GIT, so a
+# written-but-unadded `.changeset/*.md` is invisible to it and reports the message for having written
+# NONE AT ALL -- #1127. THIS CANNOT MOVE TO CI: `actions/checkout` clones the PUSHED tree, and "untracked"
+# is a property of a local working directory that never survives a push at all -- a CI-side version of
+# this check (the row's own first draft) would read 0 untracked files on every single run, always,
+# regardless of what the author's machine looked like. Client-side, before the push, is the one place
+# this state is real, which is exactly why it lives here rather than as a fourth `run` call above.
+# BEGIN #1127 UNTRACKED-CHANGESET GUARD -- extraction markers for pre-push-hook-scope.test.ts; keep both if edited.
+if [ -n "${A11Y_ALLOW_UNTRACKED_CHANGESET:-}" ]; then
+  echo "pre-push: untracked-changeset-guard overridden: $A11Y_ALLOW_UNTRACKED_CHANGESET" >&2
+else
+  # `if VAR=$(cmd); then ... else ...; fi`, NEVER a bare `VAR=$(cmd); CODE=$?` -- under `set -e` (this
+  # file's own #386 guard already states why) a plain assignment IS a simple command, so a non-zero
+  # command substitution aborts the script before the next line can read `$?` at all.
+  if UNTRACKED_CHANGESET_OUT="$(node scripts/changeset-untracked-check.mjs 2>&1)"; then
+    UNTRACKED_CHANGESET_CODE=0
+  else
+    UNTRACKED_CHANGESET_CODE=$?
+  fi
+  if [ "$UNTRACKED_CHANGESET_CODE" -ne 0 ]; then
+    echo "pre-push: $UNTRACKED_CHANGESET_OUT" >&2
+    echo "If this is deliberate: A11Y_ALLOW_UNTRACKED_CHANGESET=\"<why>\" git push ... -- the reason is" >&2
+    echo "printed, not just the override, so a deliberate exception is in the log rather than in" >&2
+    echo "somebody's memory." >&2
+    exit 1
+  fi
+fi
+# END #1127 UNTRACKED-CHANGESET GUARD
+
 # ONE PATH, NOT THREE -- #911. This used to branch: `main` ran the gate plus the corpus checks, a
 # BOARD-ONLY diff ran the board guards INSTEAD of lint and typecheck, and every other branch ran the gate
 # plus a changeset gate. The three paths were a way of paying less on the diffs that needed less, and with
