@@ -155,8 +155,8 @@ jobs:
       # prevent; if the gate cannot run in CI, fix the gate rather than skipping it here.
       #
       # SO IT WAS FIXED, BY SPLITTING IT -- 2026-08-30, on this workflow's first ever dry run, which died
-      # `sh: 1: .venv/bin/python: not found` at stage 4 of 12. Seven of the twelve stages need the Python
-      # venv or the CORPUS, and the corpus is gitignored and hours of fleet time: `scorer:shortcuts`,
+      # `sh: 1: .venv/bin/python: not found` at stage 4 of 12. Eight of the chain's thirteen stages need
+      # the Python venv or the CORPUS, and the corpus is gitignored and hours of fleet time: `scorer:shortcuts`,
       # `corpus:distribution`, `check-signals`, `rules:gate`, `rules:coverage`, `rules:real-pages`,
       # `evaluate-acceptance:shipped` and `eval:gate`. No amount of runner setup makes them possible, so
       # `npm run release:gate` here could only ever fail -- and a gate that cannot pass is one people stop
@@ -192,11 +192,12 @@ jobs:
       - name: consumer-gate.yml matches README.md's documented workflow (sha aside -- guard 7 checks that)
         run: node scripts/generate-consumer-gate.mjs --check
 
+      # #1397: THIS COUNT USED TO BE TYPED INTO THE MESSAGE ("4 of release:gate's 12 stages") rather than
+      # read from the two chains it describes, and drifted the day release:gate grew a stage: the true
+      # count was 5 of 13. `release-gate-scope.mjs` reads `package.json`'s own `release:gate` and
+      # `release:gate:ci` scripts every run, so the warning can only ever describe the chain that exists.
       - name: Name what this runner did NOT check
-        run: |
-          echo "::warning::release:gate:ci ran 4 of release:gate's 12 stages. The other 8 need the Python"
-          echo "::warning::venv or the corpus and cannot run on a runner. Run them on the lab BEFORE"
-          echo "::warning::publishing for real:  npm run lab:job -- -e job=release-gate"
+        run: node scripts/release-gate-scope.mjs
 
       # BEFORE `version`, and the order is the whole point. `changeset status` reports what is PENDING, so
       # after `version` has consumed them it says "Some packages have been changed but no changesets were
