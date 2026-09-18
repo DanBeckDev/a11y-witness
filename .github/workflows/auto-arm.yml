@@ -190,7 +190,7 @@ jobs:
           if [ -n "$A11IGN_BOT_TOKEN" ]; then
             export GH_TOKEN="$A11IGN_BOT_TOKEN"
           else
-            echo "::warning::A11IGN_BOT_TOKEN is not set -- arming with GITHUB_TOKEN instead. A merge completed with it fires no workflow events (trunk.yml's closeRows, watchdogs and trunkGate/trunkBuildTest/decideRevert chain) -- see #416. And arming with it fires no auto_merge_enabled run, so update-branch does not sweep on arming and #1094 returns with no log line -- see #1094."
+            echo "::warning::A11IGN_BOT_TOKEN is not set -- arming with GITHUB_TOKEN instead. A merge completed with it fires no workflow events (trunk-guard, close-rows, the push watchdogs) -- see #416. And arming with it fires no auto_merge_enabled run, so update-branch does not sweep on arming and #1094 returns with no log line -- see #1094."
             export GH_TOKEN="$FALLBACK_TOKEN"
           fi
           node packages/agent-org/src/arm-pr.mjs --pr="${{ github.event.pull_request.number }}" --repo="${{ github.repository }}"
@@ -223,7 +223,7 @@ jobs:
           if [ -n "$A11IGN_BOT_TOKEN" ]; then
             export GH_TOKEN="$A11IGN_BOT_TOKEN"
           else
-            echo "::warning::A11IGN_BOT_TOKEN is not set -- arming with GITHUB_TOKEN instead. A merge completed with it fires no workflow events (trunk.yml's closeRows, watchdogs and trunkGate/trunkBuildTest/decideRevert chain) -- see #416. And arming with it fires no auto_merge_enabled run, so update-branch does not sweep on arming and #1094 returns with no log line -- see #1094."
+            echo "::warning::A11IGN_BOT_TOKEN is not set -- arming with GITHUB_TOKEN instead. A merge completed with it fires no workflow events (trunk-guard, close-rows, the push watchdogs) -- see #416. And arming with it fires no auto_merge_enabled run, so update-branch does not sweep on arming and #1094 returns with no log line -- see #1094."
             export GH_TOKEN="$FALLBACK_TOKEN"
           fi
           node packages/agent-org/src/auto-arm-sweep.mjs
