@@ -146,7 +146,11 @@ function takeDeeperThan(lines: string[], indent: number): string[] {
  */
 function inputsGivenToTheAction(snippet: string): Set<string> {
   const lines = snippet.split("\n").filter((line) => line.trim() !== "" && !line.trim().startsWith("#"));
-  const stepAt = lines.findIndex((line) => /^\s*- uses:\s*\S+\/a11y-witness@/.test(line));
+  // #63 (the transfer, 2026-09-18): the action moved from DanBeckDev/a11y-witness to a11ign/a11ign, and this
+  // pattern still named the pre-transfer repo -- the step it looks for stopped matching, so every input read
+  // back empty rather than failing loudly. Matches the CURRENT identity, not a frozen one: this is our own
+  // README's quickstart, not a consumer's pin, so there is only ever one right answer at a time.
+  const stepAt = lines.findIndex((line) => /^\s*- uses:\s*\S+\/a11ign@/.test(line));
   if (stepAt < 0) return new Set();
   const step = takeDeeperThan(lines.slice(stepAt + 1), indentOf(lines[stepAt]));
   const withAt = step.findIndex((line) => /^\s*with:\s*$/.test(line));
@@ -198,10 +202,10 @@ test("the README's quickstart workflow is one a stranger can actually paste", ()
 
   assert.match(snippet!, /runs-on:\s*windows-/,
     "NVDA needs Windows; a snippet on ubuntu-latest fails after the reader has committed it");
-  // NOT `/a11ign@/` -- #66 (the rename) deliberately keeps every `uses: a11ign/a11ign@main`
-  // reference pointing at where the Action ACTUALLY is today; #325 (the transfer rehearsal) owns
-  // changing it once the repository really moves.
-  assert.match(snippet!, /uses:\s*\S+\/a11y-witness@/, "the snippet must reference this action");
+  // #63 (the transfer) landed 2026-09-18: the reference now resolves at `a11ign/a11ign`, not the
+  // pre-transfer `DanBeckDev/a11y-witness`, so this asserts the CURRENT identity, same reasoning as
+  // `inputsGivenToTheAction`'s own pattern above.
+  assert.match(snippet!, /uses:\s*\S+\/a11ign@/, "the snippet must reference this action");
 
   const given = inputsGivenToTheAction(snippet!);
   assert.ok(given.size > 0, "no inputs parsed out of the snippet — the shape changed and this guard went blind");
