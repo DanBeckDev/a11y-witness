@@ -86,15 +86,21 @@ also sharpen the verdict.
 
 **Don't have a page picked yet?** Point it at `https://www.w3.org/WAI` — the W3C's own accessibility
 site — for a first look before choosing anything of your own. We have already run it there
-([`docs/github-action.md`](./github-action.md#tested-against-real-sites-in-the-wild)): 143 announcements,
-zero findings, and not marginally — a false positive on the W3C's own site would have been damning, so
-that is a real, meaningful result rather than an untested placeholder. It is informational, with nothing to submit, so a `task` about learning something on the page (`"Learn about web accessibility"`) is enough. **The Action still operates controls on it, and the task word only gates one of them.** With the
+([`docs/github-action.md`](./github-action.md#tested-against-real-sites-in-the-wild)): 141 announcements,
+and the same 3 findings on every measurement taken — axe-core's rule layer flags three `4.1.2` violations
+inside the page's embedded YouTube player, none from the trained scorer — a real, reproducible result
+rather than an untested placeholder. It is informational, with nothing to submit, so a `task` about learning something on the page (`"Learn about web accessibility"`) is enough. **The Action still operates controls on it, and the task word only gates one of them.** With the
 defaults, a run against this exact page and task activated five controls: one button whose name happened
 to share the word "Web" with the task, and — with no task-word test at all — three submissions of the
 search form (landing on an empty query) and a followed link to a different page. On a site you do not own,
 that is someone else's application being submitted to and navigated on your behalf. The CLI defaults
 `probe-forms` off for exactly that reason; `probe-navigation`, which followed the link here, is on
 everywhere by default and needs `--no-probe-navigation` to turn off — [see below](#the-other-route-run-it-from-the-repository).
+**A run can leave the page you gave it entirely, and this one did** — the followed link above landed on a
+second document, and the result says so itself: "THIS CAPTURE NAMED MORE THAN ONE DOCUMENT ... its
+evidence was gathered across more than one page" is the tell. See
+[SECURITY.md](../SECURITY.md#it-operates-controls-on-the-page-and-one-probe-presses-buttons) for the full
+table of what a default run operates.
 
 **Once you have seen real output, point it at the page with your contact form on it.** A long page with a
 form exercises far more of this layer than a page of text alone — the form is where the announcements
