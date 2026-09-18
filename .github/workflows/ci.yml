@@ -291,13 +291,6 @@ jobs:
       # SHIP this file -- and it is what decides whether the enforcement step below runs anything at all.
       - id: precise
         run: node scripts/ci-changed.mjs --event=${{ github.event_name }} --base=${{ needs.changed.outputs.base }} --precise
-      # #1127: `npx changeset status` below reads the changeset directory through git, so a changeset
-      # file that was written but never `git add`ed is invisible to it and prints the message for having
-      # written NONE at all. This runs FIRST and refuses with the real state before that step can print
-      # the wrong one.
-      - name: An untracked changeset is not the same as no changeset
-        if: steps.precise.outputs.changeset == 'true'
-        run: node scripts/changeset-untracked-check.mjs
       - name: A consumer-visible change must say what it does to a consumer
         if: steps.precise.outputs.changeset == 'true'
         run: |
