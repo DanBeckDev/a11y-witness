@@ -20,7 +20,7 @@
 // are standing in". The transfer itself and the force-push to origin are explicitly the owner's hands,
 // not this tool's.
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
@@ -64,6 +64,113 @@ function deleteRefs(repoDir, refs) {
   execFileSync("git", ["gc", "--prune=now"], { cwd: repoDir, env: sandboxGitEnv() });
 }
 
+
+/**
+ * The replacement rules a `--replace-text` file declares, and a REFUSAL for anything that is not one.
+ *
+ * **`git filter-repo --replace-text` HAS NO COMMENT SYNTAX, AND THAT COST THIS REPOSITORY ITS HISTORY.**
+ * Every non-empty line is a rule: one containing `==>` replaces the left with the right, and one WITHOUT
+ * replaces that literal text with filter-repo's default, `***REMOVED***`. The file used to open with
+ * twelve lines of explanation each beginning with `#`, two of them a bare `#`. Run for real on
+ * 2026-09-18, that rewrote EVERY `#` IN EVERY FILE ACROSS 6,108 COMMITS -- `***REMOVED***!/bin/sh`, so
+ * the repo's own hooks stopped being shell, which is how it surfaced. Full account:
+ * `docs/history-purge-replacements.md`.
+ *
+ * So prose cannot live in that file any more, and this refuses it rather than trusting that nobody adds
+ * any: a comment there is not a comment, it is an instruction to destroy every occurrence of itself.
+ *
+ * @param {string} text @returns {{ rules: { pattern: RegExp, replacement: string }[], refusals: string[] }}
+ */
+export function parseReplacementRules(text) {
+  const rules = [];
+  const refusals = [];
+  for (const [i, raw] of text.split(/\r?\n/).entries()) {
+    const line = raw.trim();
+    if (line === "") continue;
+    if (!line.includes("==>")) {
+      refusals.push(`line ${i + 1}: ${JSON.stringify(line)} has no \`==>\`, so filter-repo would replace `
+        + "every occurrence of that literal text with \"***REMOVED***\". If it is a comment, it belongs in "
+        + "docs/history-purge-replacements.md -- this file holds rules only.");
+      continue;
+    }
+    const [left, ...rest] = line.split("==>");
+    const replacement = rest.join("==>");
+    rules.push(left.startsWith("regex:")
+      ? { pattern: new RegExp(left.slice("regex:".length), "g"), replacement }
+      : { pattern: new RegExp(left.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), replacement });
+  }
+  return { rules, refusals };
+}
+
+/**
+ * What the declared rules SHOULD turn this content into. Pure, and the whole basis of `verifyRewrite`.
+ * @param {string} content @param {{ pattern: RegExp, replacement: string }[]} rules
+ */
+export function applyReplacementRules(content, rules) {
+  let out = content;
+  for (const rule of rules) out = out.replace(new RegExp(rule.pattern.source, "g"), rule.replacement);
+  return out;
+}
+
+/**
+ * Every path in a ref's tree and the blob it points at -- SHAs only, so finding what changed costs one
+ * `ls-tree` per side rather than reading a thousand files.
+ * @param {string} repoDir @param {string} ref @returns {Map<string, string>}
+ */
+function treeBlobs(repoDir, ref) {
+  const out = execFileSync("git", ["ls-tree", "-r", ref], { cwd: repoDir, env: sandboxGitEnv(),
+    encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
+  const blobs = new Map();
+  for (const line of out.split("\n")) {
+    const match = /^\d+ blob ([0-9a-f]+)\t(.*)$/.exec(line);
+    if (match) blobs.set(match[2], match[1]);
+  }
+  return blobs;
+}
+
+/** @param {string} repoDir @param {string} sha */
+const blobText = (repoDir, sha) => execFileSync("git", ["cat-file", "blob", sha],
+  { cwd: repoDir, env: sandboxGitEnv(), encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+
+/**
+ * DOES THE REWRITE DO ONLY WHAT THE RULES SAY? The check that was missing, and whose absence let a rewrite
+ * that changed every file in the repository read as a clean one.
+ *
+ * `history-secret-scan.mjs` looks for SECRET PATTERNS. A rewrite that mangles every `#` still scores zero,
+ * because `#` is not a secret -- so `CLEAN: 0 findings` meant "the target pattern is gone", never
+ * "nothing else changed", and it was read as the latter. This asks the other question: for every path
+ * whose blob MOVED, is the new content exactly `applyReplacementRules(old)`? A file the rules cannot
+ * explain is a refusal, named, and the rewrite is not to be pushed.
+ *
+ * THE TIP, NOT ALL OF HISTORY, and that is a deliberate limit rather than an oversight: filter-repo
+ * applies one blob transform uniformly, so a rule that misbehaves misbehaves at the tip too -- under the
+ * 2026-09-18 defect this refuses on the FIRST file it reads. Verifying every blob in 6,108 commits would
+ * cost hours to catch a class this catches in seconds.
+ *
+ * @param {{ sourceRepo: string, rewrittenRepo: string, ref?: string,
+ *           rules: { pattern: RegExp, replacement: string }[] }} args
+ * @returns {{ changed: number, unexplained: string[] }}
+ */
+export function verifyRewrite({ sourceRepo, rewrittenRepo, ref = "refs/heads/main", rules }) {
+  const before = treeBlobs(sourceRepo, ref);
+  const after = treeBlobs(rewrittenRepo, ref);
+  const unexplained = [];
+  for (const [path, sha] of before) {
+    const now = after.get(path);
+    if (now === undefined) { unexplained.push(`${path}: present before the rewrite, gone after`); continue; }
+    if (now === sha) continue;
+    const expected = applyReplacementRules(blobText(sourceRepo, sha), rules);
+    if (blobText(rewrittenRepo, now) !== expected) {
+      unexplained.push(`${path}: changed, and NOT by the declared rules`);
+    }
+  }
+  for (const path of after.keys()) {
+    if (!before.has(path)) unexplained.push(`${path}: absent before the rewrite, present after`);
+  }
+  const changed = [...before].filter(([p, sha]) => after.get(p) !== sha).length;
+  return { changed, unexplained };
+}
+
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
   refuseUnknownFlags(["--source", "--clone-into", "--replacements"],
     { entry: import.meta.url, command: "node scripts/history-purge-rehearsal.mjs" });
@@ -80,6 +187,21 @@ if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.arg
   const replacements = flagValue(process.argv, "replacements")
     ?? fileURLToPath(new URL("./history-purge-replacements.txt", import.meta.url));
 
+  // READ AND REFUSE BEFORE ANYTHING IS CLONED, let alone rewritten. A file carrying a line without
+  // `==>` is a file that will destroy every occurrence of that text, and the only safe moment to say
+  // so is before the rewrite -- not after, when the damage is already in a mirror somebody may push.
+  const { rules, refusals } = parseReplacementRules(readFileSync(replacements, "utf8"));
+  if (refusals.length > 0) {
+    console.error(`REFUSING: ${replacements} is not rules-only.\n  ${refusals.join("\n  ")}`);
+    process.exit(2);
+  }
+  if (rules.length === 0) {
+    console.error(`REFUSING: ${replacements} declares no rules, so the rewrite would change nothing `
+      + "and a CLEAN reading afterwards would mean nothing.");
+    process.exit(2);
+  }
+  console.error(`${rules.length} replacement rule(s) declared.`);
+
   console.error(`Mirror-cloning ${source} into ${cloneInto} ...`);
   execFileSync("git", ["clone", "--mirror", source, cloneInto], { env: sandboxGitEnv(), stdio: "inherit" });
 
@@ -91,6 +213,21 @@ if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.arg
   console.error("\nRunning git filter-repo --replace-text ...");
   execFileSync("git", ["filter-repo", "--replace-text", replacements, "--force"],
     { cwd: cloneInto, env: sandboxGitEnv(), stdio: "inherit" });
+
+  // THE REWRITE IS CHECKED FOR WHAT IT DID, BEFORE IT IS CHECKED FOR WHAT IT REMOVED. This order is
+  // the lesson of 2026-09-18: the secret scan read CLEAN on a rewrite that had changed every file in
+  // the repository, because `#` is not a secret. A rewrite that does something the rules do not
+  // explain is not a rewrite worth scanning.
+  console.error("\nVerifying the rewrite did ONLY what the rules declare ...");
+  const { changed, unexplained } = verifyRewrite({ sourceRepo: source, rewrittenRepo: cloneInto, rules });
+  if (unexplained.length > 0) {
+    console.error(`\nREFUSING: ${unexplained.length} path(s) at the tip changed in a way the declared `
+      + `rules do not explain (${changed} changed in total). DO NOT PUSH THIS REWRITE.\n  `
+      + unexplained.slice(0, 20).join("\n  "));
+    process.exit(3);
+  }
+  console.error(`Verified: ${changed} file(s) changed at the tip, every one of them exactly what the `
+    + "declared rules produce.");
 
   console.error("\nRe-scanning the rewritten history ...");
   const findings = await scanHistory(cloneInto);
