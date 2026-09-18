@@ -22,7 +22,8 @@
 name: nightly
 
 # NIGHTLY COVERAGE, OFF THE PR PATH -- chairman's direction, 2026-09-06, follow-up to #133/#140. `npm run
-# coverage` re-runs the WHOLE suite under c8 against `.c8rc.json`'s 78% threshold, measured at 154s of
+# coverage` re-runs the WHOLE suite under rstest (`@rstest/coverage-v8`, #1320) against `.c8rc.json`'s 78%
+# threshold. Before the move to rstest (#1320), it ran under c8, measured at 154s of
 # `ci/ts`'s 269s on a one-package PR -- most of it re-testing packages that PR could not have touched. It
 # left the PR job entirely (`ci.yml`'s own header explains the split), but the threshold still needs
 # checking regularly or it rots silently: a package could lose coverage over several PRs, each one only
@@ -64,7 +65,7 @@ jobs:
         run: npm run build
       # GH_TOKEN: `board-style.test.ts` and `row-claim.test.ts`'s live `fetchLabels` shell out to real `gh`
       # calls against this repo's own Issues -- read-only, and `github.token` already has that scope for
-      # the repo the workflow runs in. `npm run coverage` runs the whole suite under c8, so it reaches
+      # the repo the workflow runs in. `npm run coverage` runs the whole suite under rstest, so it reaches
       # both.
       #
       # CAPTURED TO A FILE, NOT JUST THE ACTIONS LOG -- `scripts/coverage-failure-classifier.mjs` (#169)

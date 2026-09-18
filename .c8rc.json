@@ -47,11 +47,18 @@
     "",
     "A COVERAGE THRESHOLD IS A SHARED BUDGET. One untestable file spends everyone's, and the cost lands on whoever pushes next - here, on a main that six PRs were queued behind. The floor is not lowered to fit a file; the file is either made testable, or excluded with its reason stated here.",
     "",
-    "THRESHOLD: 78, ratcheted to the achieved figure so CI enforces no-regression from the day it lands.",
-    "The TARGET is 80. The remaining ~133 statements are in files that export nothing and run their whole",
-    "program on import — preflight-screenreader-dataset (101), page-server (73), wait-for-capture (71) — so",
-    "closing the gap means adding main guards and extracting their pure cores, not writing more assertions.",
-    "Raise this number as that lands; never lower it."
+    "THRESHOLD WAS 78 UNDER c8's UNITS, ratcheted to the achieved figure so CI enforces no-regression from the",
+    "day it lands. #1320 (step 4 of the rstest adoption, #1317) moved `npm run coverage` onto",
+    "`@rstest/coverage-v8`, whose AST-based statement counting is on a coarser scale than c8/istanbul's — measured",
+    "on the whole population at the same sha, c8 counted 85,065 total statements against rstest's 19,202 (~4.4x),",
+    "and #1350/F2 measured the same gap for lines alone at 5.34x. c8's 78 does not transfer: RE-DERIVED HERE BY",
+    "THIS FILE'S OWN METHOD (floor of the achieved figure), 2026-09-18, on rstest's own units, whole suite, 0",
+    "failing: lines 73.14% -> 73, statements 72.77% -> 72. #1350/F2 had already re-derived this the same way",
+    "(70.94%/70.70% -> 70/70) but explicitly deferred applying it to #1320 (\"not applied here; that switch is",
+    "#1320\") — this is that switch. Raise these numbers as coverage improves; never lower them. c8's own 78/80",
+    "target, and the specific untested-statement counts under its units, are superseded by the unit change and",
+    "not re-stated here; re-derive a target the same way once there is a concrete gap to close under rstest's",
+    "units."
   ],
   "all": true,
   "include": [
@@ -94,14 +101,15 @@
     "packages/scorer/bin/fetch-encoder.mjs",
     "packages/cli/src/scan/axe.ts",
     "packages/cli/src/scan/run-axe.ts",
-    "scripts/build-packages.mjs"
+    "scripts/build-packages.mjs",
+    "scripts/coverage.mjs"
   ],
   "reporter": [
     "text-summary",
     "text"
   ],
   "check-coverage": true,
-  "lines": 78,
-  "statements": 78,
+  "lines": 73,
+  "statements": 72,
   "skip-full": true
 }
