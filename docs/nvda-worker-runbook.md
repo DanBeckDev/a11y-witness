@@ -711,6 +711,74 @@ on-demand only.
   it is **bundled with any other pending `CAPTURE_PROTOCOL_VERSION` bump**, so 2,122 captures are
   recaptured once rather than twice.
 
+#### The corpus baseline, corrected on protocol 17 — #21, 2026-09-12
+
+**The ~12.4 s figure above and the ~48.7 s once set against it were never comparable, and #21 refuted the
+"3.9x gap" framing on those grounds: three different things compared as one ratio** — population (three
+retired local guests vs. today's bare-metal fleet), recording format (an older protocol vs. the current
+one), and statistic (a median with IQR from side-by-side sampling vs. inverted throughput, by that
+figure's own admission). Kept above verbatim as dated history for the same reason the old
+`windowsActivate` figure is kept below. What follows is the baseline actually re-derived on the current
+fleet, at the current protocol, from the authoritative corpus — the row's rescoped question.
+
+**`bench-capture.mjs --from-disk --protocol=17`, corpus snapshot `corpus-2026-09-12_04-29-48`, 3,324
+captures, one code hash (`16eed4d3`), one OS, nine of ten fleet workers** (`a11y-worker-4` was blocked by
+a desktop dialog from a rollback reboot until 02:33Z and contributed zero captures to this run; the
+recapture job's own summary line reads "across 10 workers", which is the pool it was given, not the boxes
+that did the work):
+
+```
+phase cost (p50 / p95, seconds), top of the table:
+  focusOrder          14.6s   18.9s
+  sweep               13.0s   26.1s
+  titleSource         12.2s   26.1s
+  focusReveal         11.6s   12.1s
+  readThrough          9.3s   11.8s
+  pageState            7.0s   10.8s
+  tableCells           6.8s    7.7s
+  afterStart           6.7s    8.2s
+  establishBrowseMode  6.0s    6.2s
+  (then a long tail of ~5s probe phases; the census phases round to 0.0s)
+  WALL(in-capture)    48.8s   77.4s
+```
+
+**p50 in-capture wall is 48.8 s, and it is not one runaway phase** — the top four (`focusOrder`,
+`sweep`, `titleSource`, `focusReveal`) sum to ~51 s of p50 cost across a 48.8 s capture, so the cost is
+spread across probes rather than lost to a single stall. Per worker, p50 in-capture ranges 46.7 s
+(fastest) to 50.0 s (slowest) across the nine boxes — a 3.3 s spread, so this is a fleet property, not
+one machine's. The tool refused to average the whole `runs/` directory first, and was right to: it spans
+five capture protocols and the protocol is a cache key, so a p50 across them would describe no fleet that
+ever existed. 1,068 files on the lab predate protocol 17 and are excluded here.
+
+##### The reads/waits split — live cross-check, 2026-09-12
+
+`worker:compare` against one plain page with default probes, 21 interleaved captures across three boxes
+chosen for maximum contrast in history within a CONSISTENT fleet, 12:41–12:57Z, 0 recoveries on all
+three:
+
+| box | wall (median) | READS — NVDA actually reading | WAITS — settles and budgets we set | other |
+|---|---|---|---|---|
+| a11y-worker-2 | 42.2 s | 25.7 s — 61.0% | **15.4 s — 36.5%** | 1.0 s |
+| a11y-worker-4 | 40.8 s | 24.1 s — 59.1% | **15.7 s — 38.4%** | 1.0 s |
+| a11y-worker-7 | 46.1 s | 27.1 s — 58.9% | **15.9 s — 34.5%** | 1.1 s |
+
+READS = `sweep` + `readThrough` + `pageState`. WAITS = `afterStart` + `establishBrowseMode` + the nine
+small fixed settles. **The waits are a fixed ~15.7 s tax, identical on every box — a spread of half a
+second. Every second of difference between a fast box and a slow one is in the reads — a spread of three
+seconds.** So about 37% of every capture is time this project chose to wait, and it is the same on a
+fast box and a slow one: not bought with hardware, bought with code. The other ~60% is NVDA reading, and
+is not recoverable.
+
+The live number (40.8–46.1 s) lands just under the from-disk p50 (48.8 s), which is the expected
+direction rather than a discrepancy: this page pays no `focusOrder` (14.6 s p50 corpus-wide) and no
+`focusReveal` (11.6 s), two of the corpus's largest phases, because `worker:compare` only accepts
+`--rounds=`/`--runs=` and cannot request the opt-in probes.
+
+**This is the composition #21 was filed to establish, and the split it asked for**: irreducible NVDA
+round trips versus waits this project chose, measured rather than inferred. What a capture should cost
+on the current format, on the current fleet, is ~48.8 s p50 (77.4 s p95) corpus-wide, of which ~60% is
+NVDA reading and ~37% is a fixed wait.
+
 #### What a REAL page is made of — #397, measured 2026-09-09
 
 ##### What CLAUDE.md said until 2026-09-09, kept verbatim
