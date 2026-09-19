@@ -14,6 +14,12 @@ name: capture-regression
 # filter is possible or needed under either trigger — this does not run on a diff at all now, so a probe
 # and its signal being coupled (the reason the old filter had to reach `packages/lab/src/training/**` as
 # well as the capture package) is no longer this workflow's problem to solve by naming files.
+#
+# Also this repo's answer for a capture machine an outside contributor cannot self-host (#41):
+# `workflow_dispatch` here needs write access to THIS repo, so the route for someone else is to copy
+# this job into their own fork or repo rather than dispatch it here — `docs/getting-started.md`'s
+# "Route C — no machine to spare" points at this file as that working example. Nobody needs Windows
+# hardware of their own to run it: NVDA runs on the GitHub-hosted runner below.
 on:
   workflow_call:
   workflow_dispatch:
