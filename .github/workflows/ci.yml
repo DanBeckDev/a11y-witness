@@ -359,6 +359,12 @@ jobs:
   # (does this head match what GitHub recorded for the branch). That is NOT #277's "behind main", which
   # branch protection's `strict` now owns -- it is the racy-push case, it fires rarely, and it is not among
   # the ten reds this row measured for this job.
+  #
+  # EXEMPT ON `merge_group`, RECORDED (#1109) -- `gate-needs.test.ts`'s `EXEMPT_ON_MERGE_GROUP` pins this
+  # same reason so the exemption cannot drift silently apart from what actually skips. All three steps read
+  # `github.event.pull_request` (the hold check, and #549's Closes comparison against the PR body), which a
+  # `merge_group` event carries none of -- there is no PR body, no PR number, nothing to diff a `Closes:`
+  # line against. Not widened to run there: a queue entry has no author-editable body left to re-check.
   deliberateRefusals:
     if: github.event_name == 'pull_request' && github.event.pull_request.state == 'open'
     runs-on: ubuntu-latest
@@ -432,6 +438,10 @@ jobs:
   # A1 (#452): CALLS `reusable-acceptance.yml` -- see that file for the full reasoning, restated there
   # because after this split it is the ONLY place a reader would think to look for this job's blast
   # radius (no GH_TOKEN, contents:read only, pull_request never pull_request_target).
+  #
+  # EXEMPT ON `merge_group`, RECORDED (#1109) -- `gate-needs.test.ts`'s `EXEMPT_ON_MERGE_GROUP` pins the
+  # same reason. This job runs a command out of `github.event.pull_request.body`; a `merge_group` event has
+  # no pull request and no body to run. Not widened: there is nothing here left to execute on a queue entry.
   acceptance:
     if: github.event_name == 'pull_request' && github.event.pull_request.state == 'open'
     uses: ./.github/workflows/reusable-acceptance.yml
@@ -459,6 +469,12 @@ jobs:
   # The fact list is `docs/owned-path-facts.json`, which `orchestrator` owns -- data, so the owner can
   # correct it without touching the mechanism, and so the mechanism cannot quietly decide what the
   # facts are.
+  #
+  # EXEMPT ON `merge_group`, RECORDED (#1109) -- `gate-needs.test.ts`'s `EXEMPT_ON_MERGE_GROUP` pins the
+  # same reason. The diff step below reads `github.base_ref`, empty on a `merge_group` event (its base
+  # lives at `github.event.merge_group.base_ref` instead, a different shape -- see `changed`'s own `base`
+  # step for the two). Not widened to read the other field: a queue entry's own PR already passed this
+  # check to be armed, so there is no new declaration here to re-check against.
   ownedPaths:
     needs: changed
     if: github.event_name == 'pull_request' && github.event.pull_request.state == 'open'
