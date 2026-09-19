@@ -248,9 +248,13 @@ jobs:
     # other open PR's head, which a shallow clone cannot supply. `queue-stalled.mjs`'s own `main()` does
     # the branch-tip fetch; this step only needs enough history depth for `git merge-tree` to find a
     # common ancestor at all.
-    # #1103: not on workflow_run -- a gate completing changes nothing this job reads, and every `ci`
-    # completion would otherwise add a run to the runs-per-merge count the CI reset measures.
-    if: github.event_name != 'workflow_run'
+    # #1633: ADMITS workflow_run (unlike `sweep` and `arm`, which stay off it) -- #1103's own exclusion
+    # reasoned that a gate completing changes nothing this job reads, and #1623 is exactly the case where
+    # that stops being true: a PR held BLOCKED by a newer cancelled `ci` run beside an older success at the
+    # same head exists only AFTER that `ci` run completes, which is precisely a `workflow_run` event. Without
+    # it, the report only names such a PR on the queue's NEXT `pull_request` or `push`, which can be
+    # arbitrarily far away (#1617 was found only because main happened to move). Still REPORTS, NEVER ACTS --
+    # this trades one more read-only run of the report per `ci` completion for not missing the PR at all.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
