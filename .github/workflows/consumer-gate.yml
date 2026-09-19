@@ -22,8 +22,8 @@ jobs:
           fetch-depth: 0
       - name: Refuse a pin that is not an ancestor of the commit this run is executing at
         run: |
-          if ! git merge-base --is-ancestor 9c7371c03b61d15a909a0cc6fe356b18448fd124 "${{ github.sha }}"; then
-            echo "::error::consumer-gate.yml's uses: step is pinned to 9c7371c03b61d15a909a0cc6fe356b18448fd124, which is not an"
+          if ! git merge-base --is-ancestor 13af98bf9aaa98d6cb66ee0d9d0926ffbb122618 "${{ github.sha }}"; then
+            echo "::error::consumer-gate.yml's uses: step is pinned to 13af98bf9aaa98d6cb66ee0d9d0926ffbb122618, which is not an"
             echo "::error::ancestor of the commit this run is executing at, ${{ github.sha }} (ref"
             echo "::error::${{ github.ref_name }}, ${{ github.event_name }}) -- regenerate (node"
             echo "::error::scripts/generate-consumer-gate.mjs) against a commit in this history"
@@ -31,9 +31,9 @@ jobs:
           fi
       - name: Refuse a pin that predates a change to what it pins
         run: |
-          changed=$(git diff --name-only --no-renames 9c7371c03b61d15a909a0cc6fe356b18448fd124 "${{ github.sha }}" -- README.md scripts/generate-consumer-gate.mjs)
+          changed=$(git diff --name-only --no-renames 13af98bf9aaa98d6cb66ee0d9d0926ffbb122618 "${{ github.sha }}" -- README.md scripts/generate-consumer-gate.mjs)
           if [ -n "$changed" ]; then
-            echo "::error::consumer-gate.yml is pinned to 9c7371c03b61d15a909a0cc6fe356b18448fd124, but this changed since:"
+            echo "::error::consumer-gate.yml is pinned to 13af98bf9aaa98d6cb66ee0d9d0926ffbb122618, but this changed since:"
             echo "::error::$changed"
             echo "::error::regenerate (node scripts/generate-consumer-gate.mjs) and dispatch again"
             exit 1
@@ -48,8 +48,9 @@ jobs:
       pull-requests: write         # for the PR comment below; omit it and the report still runs, only quieter
     steps:
       - uses: actions/checkout@v4
-      - uses: a11ign/a11ign@9c7371c03b61d15a909a0cc6fe356b18448fd124
-        # Pin it: @main moves under you. Use the full commit SHA if your CI must not change.
+      - uses: a11ign/a11ign@13af98bf9aaa98d6cb66ee0d9d0926ffbb122618
+        # Pinned to v0.1.0, the first tagged release. Use the full commit SHA instead if your CI must
+        # not move even across a release.
         id: a11ign
         with:
           url: https://www.w3.org/WAI/demos/bad/before/home.html

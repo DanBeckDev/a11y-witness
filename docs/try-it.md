@@ -53,9 +53,10 @@ jobs:
       pull-requests: write       # for the PR comment below; omit it and the report still runs, only quieter
     steps:
       - uses: actions/checkout@v4
-      - uses: a11ign/a11ign@main
-        # Pin it: @main moves under you. Use the full 40-character commit SHA if your CI must not
-        # change -- GitHub refuses an abbreviated one outright, it does not just discourage it.
+      - uses: a11ign/a11ign@v0.1.0
+        # Pinned to v0.1.0, the first tagged release. Use the full 40-character commit SHA instead if
+        # your CI must not move even across a release -- GitHub refuses an abbreviated one outright, it
+        # does not just discourage it.
         id: a11ign
         with:
           url: https://your-site.example/the-page
