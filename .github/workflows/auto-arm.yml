@@ -255,6 +255,15 @@ jobs:
     # it, the report only names such a PR on the queue's NEXT `pull_request` or `push`, which can be
     # arbitrarily far away (#1617 was found only because main happened to move). Still REPORTS, NEVER ACTS --
     # this trades one more read-only run of the report per `ci` completion for not missing the PR at all.
+    #
+    # A REAL workflow_run-TRIGGERED RUN OF THIS JOB IS CLOSING EVIDENCE FOR #1633, NOT A GATE ON THIS PR.
+    # No such run can exist before this change reaches `main` -- it needs a `ci` completion evaluated
+    # against the MERGED copy of this file, which only exists after the merge it would otherwise be asked
+    # to gate. Same shape as #1103/#1125: that row's done-when also named "the first workflow_run-caused
+    # run of update-branch" as its measurement, #1125 merged and closed #1103 first, and the confirming run
+    # (workflow_run for #1132) was posted as a follow-up comment on the already-closed issue, not held up
+    # front. This row follows the identical order -- merge on the code and mutation evidence below, then
+    # name the first real run on #1633 once it fires.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
