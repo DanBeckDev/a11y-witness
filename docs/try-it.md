@@ -221,6 +221,23 @@ more* is the tool saying it cannot tell from the announcement alone whether the 
 the link clear — which is exactly the judgement a person makes in a second and a scanner cannot make at
 all.
 
+**Zero of each is also a real answer, and the run does not let it read like a failed one.** A page with
+nothing to flag — no missing alt text, no unnamed controls, nothing worth a referral — is a real, tested
+outcome: it is how this project checks for over-flagging in the first place, scoring the W3C's own
+accessibility site (a reference-quality accessible page) against an expectation of no findings at all. What
+tells that apart from a run that never actually read your page is not the count, it is the shape of the
+report. **A capture the tool doubts never gets to report a finding count.** With the GitHub Action, a
+doubted capture replaces the usual summary entirely with **"a11ign — could not read this page,"** and the
+job fails rather than passes, with its own reason on the log: *"the capture could not be confirmed to have
+read the requested page; reporting no findings. This is a failed measurement, not a clean page."* Running
+from the repository, the same doubt reaches you as a `WARNING` printed to stderr above a report that still
+runs underneath it. So a report that runs normally — the usual heading, a non-zero announcement count,
+findings and per-criterion outcomes both printed — and says `0 finding(s)` (the Action's own words for it:
+**"No lived-experience findings. The screen-reader layer found nothing it could evidence"**) is a clean
+read of your page. A "could not read this page" summary, a `WARNING`, or a job that failed instead of
+finished is the tell that it was not — check
+[the consent banner](#the-consent-banner-is-the-real-risk-and-you-can-check-for-it-in-ten-seconds) first.
+
 ### The contact form needs one thing from you
 
 The command-line tool **never submits a form on a page it does not own** — pressing *Send* on somebody's
