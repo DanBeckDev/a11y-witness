@@ -26,7 +26,6 @@ jobs:
         with:
           url: https://example.com/contact
           task: Send an enquiry
-          fail-on: never           # report first; gate when your team asks for it
       # Keep the evidence: the full result, including the transcript behind every finding. Guarded on the
       # output existing, so a run that failed does not also fail the upload.
       - uses: actions/upload-artifact@v4
