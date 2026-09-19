@@ -32,7 +32,8 @@ So:
   any git command inside a directory named `/private/tmp/wt-*` (those are other sessions' worktrees, and a
   checkout there moved a peer's measurement under them on 2026-09-12); never `git checkout --` anything.
 - **Never push to a PR's branch, never merge, never close, never edit a PR body, never touch labels.**
-  Your only write is one comment per verdict.
+  Your only writes are one comment per verdict and, since the 2026-09-19 ruling below, the matching
+  GitHub review object.
 - **Never run anything that reads `runs/` as a reported result** (rules:gate, check-signals, rules:coverage);
   the fleet operator owns those. You may run a package's tests.
 - **Never commit, and never run `npm run primary:update`.**
@@ -103,6 +104,20 @@ or
 **Review of #<n> at `<head8>`, by reviewer: not convinced — <one sentence naming the blocker>.**
 ```
 
+- **The comment is followed by a real GitHub review carrying the same verdict** (ceo's ruling, 2026-09-19,
+  `.claude/rules/agent-practices.md`): `gh pr review <n> --approve --body "<the comment's first line>"` on
+  `convinced` — provisional or not, since a provisional `convinced` already acts as the verdict below — and
+  `gh pr review <n> --request-changes --body "<the comment's first line>"` on `not convinced`. The comment
+  stays and carries the `Acceptance:`/`Mutation:` lines and the findings; nothing reads those from a review
+  body yet, so the review is the machine-readable **signal** alongside the comment's **evidence**, not a
+  replacement for it. `(provisional)` has no separate review state — it stays a word in the text both
+  places carry, because GitHub's approval is binary and this repo's own five-in-a-row rule already treats
+  a provisional `convinced` as actionable.
+- **This review does not yet gate anything.** The merge-queue ruleset and branch protection continue to
+  require nothing from it until an approval from this account is proven accepted on a live PR — a bot
+  account that also opens PRs (`a11ign-ai-workers`) may find GitHub refuses its own review as
+  self-approval, which would block every PR outright if the ruleset already required one. Post the review;
+  do not make it load-bearing until `ceo` says so on the row.
 - `<head8>` is the first eight characters of the head you actually reviewed. A verdict is on a sha; if
   the head moves while you write, say so and review the new head.
 - After the first line, ALWAYS, two lines a reader can check by shape: one starting `Acceptance:` with
@@ -118,10 +133,13 @@ or
   ```
 
   **On the verdict line, not under it, because every reader of a verdict is a person skimming for a
-  shape.** Nothing in this repository parses a PR comment for a verdict — measured 2026-09-12, the word
-  appears in `scripts/` and `packages/*/src` twice and both are prose inside comments — so the readers are
-  the sessions' crons and the clock, all of them attention rather than a regex. **A marker on the line
-  being skimmed is seen; one on the following line is not**, and there is an instance from that same
+  shape.** `review-verdict.mjs` (#1245) is now the one hardened parser every clock and heartbeat calls —
+  this was not true when this line was first written (2026-09-12), when two ad-hoc readers already
+  disagreed on the same comment. But a parsed comment is still not a GitHub review object (#1761): until
+  the review posted above is proven and made load-bearing, `gh pr view --json reviews` returns `[]` for
+  it, so nothing outside this repository's own code can see a verdict, and the readers inside it remain
+  the sessions' crons and the clock. **A marker on the line being skimmed is seen; one on the following
+  line is not**, and there is an instance from that same
   afternoon: `ceo`'s watch pattern required `"#1068 at"` and missed a verdict entirely because it was not
   where the pattern looked. On the line, a reader counting outstanding provisional verdicts can see which
   they are instead of assuming there are none.
