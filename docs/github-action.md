@@ -26,7 +26,6 @@ jobs:
         with:
           url: https://example.com/contact
           task: Send an enquiry
-          fail-on: never           # report first; gate when your team asks for it
       # Keep the evidence: the rendered report and the full result, transcript included. Guarded on the
       # output existing, so a run that failed does not also fail the upload.
       - uses: actions/upload-artifact@v4
@@ -39,7 +38,7 @@ jobs:
           if-no-files-found: warn
 ```
 
-Save it as `.github/workflows/a11ign.yml`. It runs on every pull request, and `workflow_dispatch` also lets you start it by hand from the repository's Actions tab (or `gh workflow run a11ign.yml`).
+Save it as `.github/workflows/a11ign.yml`. It runs on every pull request, and `workflow_dispatch` also lets you start it by hand from the repository's Actions tab (or `gh workflow run a11ign.yml`) — `workflow_dispatch` resolves the workflow from the default branch as GitHub sees it at dispatch time, so trigger it only after the push that changed the workflow has landed, not in the same breath as the push.
 
 **`timeout-minutes: 20` bounds a run that will not finish** — a job that hangs or loses its runner leaves
 no log and no artifact, and any diagnostic step you add with `if: always()` does not run either; see
