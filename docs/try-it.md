@@ -71,7 +71,7 @@ jobs:
           if-no-files-found: warn
 ```
 
-Save it as `.github/workflows/a11ign.yml`. It runs on every pull request, and `workflow_dispatch` also lets you start it by hand from the repository's Actions tab (or `gh workflow run a11ign.yml`).
+Save it as `.github/workflows/a11ign.yml`. It runs on every pull request, and `workflow_dispatch` also lets you start it by hand from the repository's Actions tab (or `gh workflow run a11ign.yml`) — `workflow_dispatch` resolves the workflow from the default branch as GitHub sees it at dispatch time, so trigger it only after the push that changed the workflow has landed, not in the same breath as the push.
 
 **Not on a pull request, no comment.** A run started by hand or by a push has nothing to comment on: the log's last line is the count (`a11ign: N finding(s)`), with a line before it for anything that bounds that count (an examination that ended early, a capture spanning more than one document, criteria resting on an examination known to be partial), the report is in the run's job summary, and the full result, transcript included, is the `a11ign-result` artifact the upload step saves.
 
