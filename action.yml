@@ -164,10 +164,15 @@ outputs:
     value: ${{ steps.report.outputs.task-completable }}
   result-json:
     description: >-
-      Path to the full run result, for a later step or an artifact upload. Upload it: it is also the
-      only route a CI-only consumer has to this run's report, since GitHub exposes job summaries through
-      neither REST nor GraphQL (see docs/github-action.md).
+      Path to the full run result -- the transcript behind every finding -- for a later step or an
+      artifact upload. Upload it: GitHub exposes job summaries through neither REST nor GraphQL (see
+      docs/github-action.md), so this and summary-md are what a CI-only consumer has.
     value: ${{ steps.capture.outputs.result-json }}
+  summary-md:
+    description: >-
+      Path to the rendered report -- the same markdown written to the job summary -- so a CI-only
+      consumer can read it without a browser. Upload it alongside result-json.
+    value: ${{ steps.report.outputs.summary-md }}
 
 runs:
   using: composite
@@ -513,6 +518,7 @@ runs:
           --marker=a11ign || status=$?
         # Outputs are set BEFORE propagating the failure, so a failing check still exposes its numbers to
         # later steps. Reading them from the result rather than re-deriving keeps one source of truth.
+        echo "summary-md=$RUNNER_TEMP/a11ign-summary.md" >> "$GITHUB_OUTPUT"
         node -e '
           const r = require(process.argv[1]);
           const fs = require("fs");
