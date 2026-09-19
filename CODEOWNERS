@@ -1,0 +1,28 @@
+# #916: replaces the retired "crossing into another session's lane" CI check
+# (.github/workflows/ci.yml's `deliberateRefusals`, retired 2026-09-15) for the one lane
+# docs/lane-ownership.json currently defines: "the pipeline", owner `ceo`, over `.github/workflows/`.
+#
+# This is NOT docs/owned-path-facts.json's corpus-invalidating list (packages/nvda-worker/ and friends) --
+# that mechanism stays a PR-body fact sign-off (the `ownedPaths` CI job) by ceo's own 2026-09-07 ruling
+# (packages/agent-org/src/owned-path-signoff.mjs's header): every session here pushes as one of a small
+# number of shared accounts, so a review would have caught none of the failures those paths have actually
+# had, and a review someone can rubber-stamp is weaker than a check that demands a stated fact. This file
+# is for the OTHER thing lane-ownership.json protects: trunk health and the merge queue, where the
+# question is not "did you name a fact" but "did the owner see this before it landed."
+#
+# ceo's GitHub login is `@DanBeckDev` -- ceo, product-manager and orchestrator all push as that account;
+# the three engineer sessions push as the shared `a11ign-ai-workers` account (2026-09-13). So naming
+# `@DanBeckDev` here does what "the other engineer must approve" was reaching for in #916's own text: an
+# engineer's PR touching the pipeline requests review from a DIFFERENT account than the one that opened
+# it, which a `ceo`/`DanBeckDev` PR touching its own lane cannot do (GitHub will not request a review from
+# a PR's own author) -- same shape as the retired check's `ceo/` branch exemption, not a new gap.
+#
+# `codeowners-lane-sync.test.ts` pins this file's entries against docs/lane-ownership.json's `paths` and
+# `except`, so the two cannot drift the way #939 found nine independent spellings of "what changed" could.
+#
+# `.github/workflows/consumer-gate.yml` is carved out below with NO owner: lane-ownership.json's own
+# `except` says it is generated from README.md by scripts/generate-consumer-gate.mjs, so it is not the
+# pipeline's to own even though it lives in the pipeline's directory. CODEOWNERS applies the LAST matching
+# pattern for a given path, so the narrower line below overrides the directory line above it.
+/.github/workflows/ @DanBeckDev
+/.github/workflows/consumer-gate.yml

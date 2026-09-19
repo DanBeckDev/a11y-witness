@@ -1428,3 +1428,39 @@ review, and for tables with a column you can predict, rather than for vigilance.
 ## A branch count read from `refs/remotes/origin` without pruning counts deleted branches
 
 Measured 2026-09-13T12:40Z: `npm run branches:inventory` read 208 remote-tracking refs where `git fetch --prune` left 202, because a remote-tracking ref is a local cache that a fetch without `--prune` never removes, so the report now prunes before every branch read and says so in its header (#1282).
+
+## "ownedPaths" names two unrelated mechanisms, and #916's own prose used the word for the wrong one
+
+#916's body reads "CODEOWNERS replaces the ownedPaths job" and "the other engineer must approve" — read
+literally, that is the corpus-invalidating fact sign-off (`docs/owned-path-facts.json`, the `ownedPaths`
+job in `ci.yml`, owner `orchestrator`), and ceo's own ruling of 2026-09-07
+(`packages/agent-org/src/owned-path-signoff.mjs`'s header) already rejected turning THAT one into a
+CODEOWNERS review, on measured grounds: a reviewer catches none of the failures those paths have actually
+had, because each was a correct-looking change whose consequence was invisible at the diff. Building #916
+as written would have reversed a ruling it never named.
+
+**What #916 actually targets, read against the code rather than the prose:** the RETIRED "crossing into
+another session's lane" check (`deliberateRefusals` in `ci.yml`, gone 2026-09-15 per its own retirement
+comment), which protected `docs/lane-ownership.json`'s "the pipeline" lane (owner `ceo`, path
+`.github/workflows/`) — a completely different file, a different owner, and a different reason (trunk
+health and the merge queue, not fact-invisibility). The Region `#916` names
+(`CODEOWNERS`, `.github/workflows/ci.yml`, `docs/`) matches the lane check's territory, not the corpus
+job's, and settles which reading is right.
+
+**Why "the other engineer must approve" is also imprecise, and what actually makes CODEOWNERS work now:**
+the three engineer sessions share one GitHub login (`a11ign-ai-workers`, since 2026-09-13's account
+split), so two engineers cannot review each other's PRs under CODEOWNERS any more than one could before
+the split — GitHub will not request a review from a PR's own author. What changed is that `ceo`,
+`product-manager` and `orchestrator` push as a DIFFERENT account (`DanBeckDev`) than the engineers, which
+is the actual mechanism that lets an engineer's PR touching the pipeline lane request — and receive — a
+review from a different account. Naming `ceo`/`@DanBeckDev` as the CODEOWNERS owner is what makes this
+work, not "the other engineer."
+
+**What is still open:** branch protection's `required_pull_request_reviews.require_code_owner_reviews` is
+`false` (checked 2026-09-19), so CODEOWNERS today produces a review REQUEST, not a merge block — weaker
+than the ownedPaths sign-off job it was never meant to replace, but a genuine upgrade over the retired
+lane check's silence. Turning enforcement on would deadlock `ceo`/`product-manager`/`orchestrator`'s own
+PRs into `.github/workflows/`, since they share the owner's account and nothing here calls `gh pr review
+--approve` on their behalf yet (the parity-reviewer role only posts a "convinced" comment). That decision —
+a bypass allowance, or building the reviewer's approval step — is #916's own natural follow-up, not
+something this row silently decided either way.
