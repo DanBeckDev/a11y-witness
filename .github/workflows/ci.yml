@@ -330,10 +330,11 @@ jobs:
   # context conclude" about a commit it is itself currently testing would read STILL_RUNNING on every
   # ordinary push, forever, and block every merge rather than only the unsafe ones. `gate` below already
   # answers "did CI pass" by construction; this answers the one question `strict` used to.
-  # #902: WHAT SURVIVES OF `mergeSafety`, AND WHY IT IS STILL REQUIRED -- THREE CHECKS A PERSON'S OWN
+  # #902: WHAT SURVIVES OF `mergeSafety`, AND WHY IT IS STILL REQUIRED -- TWO CHECKS A PERSON'S OWN
   # DECISION DRIVES, and nothing else. What it lost is its authority over the five process jobs, which is
   # the trim itself. What it keeps, none of it process noise -- NONE of the last forty red `ci` runs was any
-  # of these:
+  # of these. (A third lived here -- a crossing into another session's lane -- until #916 replaced it with
+  # CODEOWNERS; see that retirement note further down.)
   #
   #   * A HELD PR MUST NOT MERGE. `hold:` is the one control a person reaches for to stop a specific pull
   #     request. `pr-hold.mjs` disarms auto-merge when it takes a hold and `auto-arm.yml` will not arm a
@@ -343,11 +344,16 @@ jobs:
   #     and ask whether the declaration is WELL FORMED; only this step has a token and asks whether it
   #     matches what GitHub will actually close. Different questions, and the acceptance job still has no
   #     token by design.
-  #   * A CROSSING INTO ANOTHER SESSION'S LANE IS ASSIGNED OR REFUSED. ceo ruled this one twice on
-  #     2026-09-11: first that it could go, since ceo owns the pipeline lane and assigns every crossing with
-  #     a `Lane-exception:` line -- then, on worker-capture's objection, that the first ruling covered only
-  #     ASSIGNED crossings. An UNASSIGNED one would merge silently, and the record ceo relies on IS the line
-  #     this check enforces. #916 retires it with CODEOWNERS on the 15th; until then it stays required.
+  #   (A CROSSING INTO ANOTHER SESSION'S LANE used to be assigned or refused here. ceo ruled this one twice
+  #     on 2026-09-11: first that it could go, since ceo owns the pipeline lane and assigns every crossing
+  #     with a `Lane-exception:` line -- then, on worker-capture's objection, that the first ruling covered
+  #     only ASSIGNED crossings. An UNASSIGNED one would merge silently, and the record ceo relied on was
+  #     the line this check enforced. Its 2026-09-15 retirement date passed with no replacement built, so
+  #     it was retired anyway -- accepting the gap rather than blocking every PR forever on a rule nobody
+  #     could satisfy. #916 is that replacement: `CODEOWNERS` at the repo root now requests ceo's review
+  #     (`@DanBeckDev`) on any PR touching `.github/workflows/`, GitHub-native rather than a CI job, so a
+  #     merge with `required_pull_request_reviews` off still SHOWS the crossing even though it cannot yet
+  #     block one -- see the file's own header for what would have to change to make it block.)
   #
   # The hold refusal arrives through `merge-guard.mjs --ci-gate`, which also carries #294's head-vs-tip race
   # (does this head match what GitHub recorded for the branch). That is NOT #277's "behind main", which
@@ -395,12 +401,16 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: node packages/agent-org/src/closes-mismatch-check.mjs ${{ github.event.pull_request.number }}
       # THE LANE CHECK WAS HERE, AND IS RETIRED (#916's date, 2026-09-15, passed without its CODEOWNERS
-      # replacement being built). It refused any PR touching `.github/workflows/` unless it came from a
-      # `ceo/` branch or carried a `Lane-exception:` line naming an assigner -- which an outside
-      # contributor cannot produce, and it was the only guard in `gate`'s needs that they could not satisfy.
+      # replacement being built -- built afterward, in #916 itself). It refused any PR touching
+      # `.github/workflows/` unless it came from a `ceo/` branch or carried a `Lane-exception:` line naming
+      # an assigner -- which an outside contributor cannot produce, and it was the only guard in `gate`'s
+      # needs that they could not satisfy.
       # `docs/lane-ownership.json` survives as DATA: `row-file.mjs` still derives a row's `lane:<owner>`
       # label from it through `packages/agent-org/src/lane-ownership.mjs`. A lane is still a recorded fact
-      # about who owns a path; it is no longer a wall in CI.
+      # about who owns a path -- it is no longer a wall in CI, but the root `CODEOWNERS` file now reads the
+      # same fact (the pipeline lane's owner and its `except` carve-out) so a PR touching `.github/workflows/`
+      # requests review rather than passing unnoticed. `codeowners-lane-sync.test.ts` pins the two against
+      # each other so they cannot drift back apart the way #939 warned about for the check this replaced.
 
   # #353 (pipeline unit 2): NOTHING HAS EVER RUN A ROW'S ACCEPTANCE COMMAND. Every PR body carries an
   # `Acceptance:` line and argues its own case; the only thing that has ever executed it is the author,
