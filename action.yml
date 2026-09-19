@@ -163,7 +163,10 @@ outputs:
     description: Whether the judge thinks a screen-reader user could complete the stated task.
     value: ${{ steps.report.outputs.task-completable }}
   result-json:
-    description: Path to the full run result, for a later step or an artifact upload.
+    description: >-
+      Path to the full run result, for a later step or an artifact upload. Upload it: it is also the
+      only route a CI-only consumer has to this run's report, since GitHub exposes job summaries through
+      neither REST nor GraphQL (see docs/github-action.md).
     value: ${{ steps.capture.outputs.result-json }}
 
 runs:
