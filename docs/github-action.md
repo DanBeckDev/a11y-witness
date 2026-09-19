@@ -385,6 +385,7 @@ pressing submit part-way through filling would attribute the evidence to a state
 | `findings` | Count of lived-experience findings. |
 | `task-completable` | Whether the judge thinks a screen-reader user could finish the stated task. On the default `local` backend this only means nothing scored as a blocker, a coarse proxy. |
 | `result-json` | Path to the full result, including the transcript. Worth uploading as an artifact — the transcript is the evidence behind every finding. |
+| `summary-md` | Path to the rendered report — the same markdown written to the job summary. Worth uploading alongside `result-json`: it is the route a CI-only consumer, with no access to the job summary, has to the human-readable report. |
 
 `findings` counts every lived-experience finding, referred ones included; `fail-on` counts only the asserted ones. The log's count line splits them:
 `a11ign: 3 finding(s) (2 asserted: 1 serious, 1 moderate; 1 referred); fail-on=<your fail-on>`.
