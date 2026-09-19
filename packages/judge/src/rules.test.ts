@@ -1096,7 +1096,16 @@ const REHEARSAL_OUTLINE = "Outline, menu button, focused, collapsed, sub Menu";
 const stateChange = (control: string, after: string) =>
   ({ transcript: [], interaction: { stateChanges: [{ control, after }] } });
 
-test("#812: two different controls sharing a state word produce NO 4.1.2 finding", () => {
+// #828/#1773 -- THIS is `sameControlAnnounced`'s own mutation coverage, not just #812's regression test.
+// Platform and Outline announce the SAME expandable state (`collapsed`), so if the identity gate below were
+// deleted, `readDisclosurePair` would return `{from: "collapsed", to: "collapsed"}` -- `pair.from === pair.to`
+// -- which `addSilentStateChanges` reads as a silent state change and asserts, against Platform, from
+// evidence that is actually about Outline. Verified by hand, 2026-09-19: deleting the
+// `if (!sameControlAnnounced(...)) return null;` line turns exactly this test red, by name, with
+// `ruleFindings` now returning one 4.1.2 finding quoting Platform's own announcement -- the wrong-control
+// assertion #828 measured 82 times in the corpus without ever exercising this gate.
+test("#812/#1773 MUTATION TARGET: two different controls announcing the SAME expandable state produce "
+  + "NO 4.1.2 finding", () => {
   assert.deepEqual(ruleFindings(stateChange(REHEARSAL_PLATFORM, REHEARSAL_OUTLINE)), [],
     "both sides say `collapsed`, which is a true statement about two strings describing two controls — "
     + "the capture never re-read Platform, so nothing here is evidence about Platform's state");
