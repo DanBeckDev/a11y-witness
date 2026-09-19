@@ -26,13 +26,15 @@ jobs:
         with:
           url: https://example.com/contact
           task: Send an enquiry
-      # Keep the evidence: the full result, including the transcript behind every finding. Guarded on the
+      # Keep the evidence: the rendered report and the full result, transcript included. Guarded on the
       # output existing, so a run that failed does not also fail the upload.
       - uses: actions/upload-artifact@v4
         if: always() && steps.a11ign.outputs.result-json != ''
         with:
           name: a11ign-result
-          path: ${{ steps.a11ign.outputs.result-json }}
+          path: |
+            ${{ steps.a11ign.outputs.result-json }}
+            ${{ steps.a11ign.outputs.summary-md }}
           if-no-files-found: warn
 ```
 
@@ -101,20 +103,22 @@ new ignore rule with a negation under it.
 so a busy PR gets one comment that changes rather than one per push. The comment step runs `always()`, so
 the report still arrives when the check is failing — which is precisely when someone wants to read it.
 
-**Not on a pull request, no comment.** A run started by hand or by a push has nothing to comment on: the log's last line is the count (`a11ign: N finding(s)`), with a line before it for anything that bounds that count (an examination that ended early, a capture spanning more than one document, criteria resting on an examination known to be partial), the report is in the run's job summary, and the full result, transcript included, is the `a11ign-result` artifact the upload step saves.
+**Not on a pull request, no comment.** A run started by hand or by a push has nothing to comment on: the log's last line is the count (`a11ign: N finding(s)`), with a line before it for anything that bounds that count (an examination that ended early, a capture spanning more than one document, criteria resting on an examination known to be partial), and the report is in the `a11ign-result` artifact the upload step saves above — both the rendered report (`summary-md`) and the full result, transcript included (`result-json`).
 
-**A CI-only consumer — no browser, nothing rendered — cannot reach that job summary either.**
-GitHub exposes Actions job summaries (`$GITHUB_STEP_SUMMARY`, which is what the step above writes)
-through neither the REST nor the GraphQL API. Confirmed directly: `GET
+**The same rendered report is also written to the run's job summary, but a CI-only consumer — no browser,
+nothing rendered — cannot reach that.** GitHub exposes Actions job summaries (`$GITHUB_STEP_SUMMARY`,
+which the Report step also writes) through neither the REST nor the GraphQL API. Confirmed directly: `GET
 /repos/{owner}/{repo}/actions/runs/{run_id}/jobs` returns no `summary` field on a job at all, and
 GraphQL's `CheckRun.summary` — which reads like the same thing — is a distinct field, populated only by
 the separate Checks API's own `output.summary`, and stays `null` for a run whose only summary came from
 `$GITHUB_STEP_SUMMARY`. A marker written to the job summary does not appear anywhere in either API's
-response for that run. The only route left is the browser's own "Summary" tab on the run page.
+response for that run. The only route to the job summary itself is the browser's own "Summary" tab on
+the run page — the artifact below is what a CLI-only reader uses instead.
 
 **The artifact is the route that works headlessly — it is an ordinary REST download.** The workflow
-above already uploads `a11ign-result`, guarded on the output existing so a run that failed before
-producing one cannot upload nothing. Fetch it the same way any CI-only consumer fetches any artifact:
+above already uploads `a11ign-result` with both files in it, guarded on `result-json` existing so a run
+that failed before producing one cannot upload nothing. Fetch it the same way any CI-only consumer
+fetches any artifact:
 
 ```bash
 # gh CLI, which wraps the REST call:
@@ -126,9 +130,11 @@ artifact_id=$(gh api "repos/<owner>/<repo>/actions/runs/<run-id>/artifacts" \
 gh api "repos/<owner>/<repo>/actions/artifacts/$artifact_id/zip" > result.zip
 ```
 
-Either way what comes back is the exact file `result-json` names — the schema is below
-(`verdict.findings`, `verdict.taskCompletable`, `captureVerified`, ...) — which is strictly more than
-the job summary itself ever carried, needs no browser, and needs no `pull-requests: write` permission.
+Either way what comes back is a directory holding both files: `a11ign-summary.md`, the exact rendered
+report the job summary carries, readable in a terminal with no further processing; and the file
+`result-json` names, the schema below (`verdict.findings`, `verdict.taskCompletable`,
+`captureVerified`, ...) — the transcript behind every finding. Neither needs a browser or
+`pull-requests: write` permission.
 
 **"Not run" is never rendered as "clean".** If you set `axe: false`, the report says the visual criteria
 are *unchecked*, not that they passed. This is the one thing the tool must never get wrong, and it did:
@@ -379,6 +385,7 @@ pressing submit part-way through filling would attribute the evidence to a state
 | `findings` | Count of lived-experience findings. |
 | `task-completable` | Whether the judge thinks a screen-reader user could finish the stated task. On the default `local` backend this only means nothing scored as a blocker, a coarse proxy. |
 | `result-json` | Path to the full result, including the transcript. Worth uploading as an artifact — the transcript is the evidence behind every finding. |
+| `summary-md` | Path to the rendered report — the same markdown written to the job summary. Worth uploading alongside `result-json`: it is the route a CI-only consumer, with no access to the job summary, has to the human-readable report. |
 
 `findings` counts every lived-experience finding, referred ones included; `fail-on` counts only the asserted ones. The log's count line splits them:
 `a11ign: 3 finding(s) (2 asserted: 1 serious, 1 moderate; 1 referred); fail-on=<your fail-on>`.
