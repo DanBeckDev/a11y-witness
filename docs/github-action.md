@@ -149,6 +149,20 @@ in `action.yml`:
 | Suppress Edge's first-run experience | A fresh profile shows a welcome/sign-in surface. On a page with no elements of a given type, NVDA's quick-nav escapes the document into that browser UI and produces phantom findings about Microsoft's own chrome. |
 | Poll `/health.ready`, not `ok` | `ok` means only that the HTTP server is answering. A worker answered `ok` while NVDA could not start, which is how the capture pool's dominant failure hid for a day. |
 
+**What this step does not prevent.** Rehearsal 2's two artifacts (#915, runs `34767932873` and `34768529975`)
+recorded a focus order that reaches `New Tab`, `Refresh`, `View site information`, `Favorites`, `Profile 1`,
+`Settings and more` and Copilot's `Chat`/`Guide` — real, permanent Edge chrome, not the first-run surface
+this step suppresses, and present whether or not a profile is fresh. Measured (#1364): both walks start
+already ON `youtube.com`, because the sweep's first control was the page's embedded YouTube player, task-word
+matched, and activating it announced "Opening new window" (`interaction.formChanges[0]`) before the tab-order
+walk began — the chrome is YouTube's own window, reached by walking clean off the `w3.org` document the setup
+step has no bearing on. That is the excursion #1363 fixed: `interaction.leftSite`, recorded the moment an
+activation's announcement or URL shows a changed origin, now stops the sweep and skips the focus pass entirely
+(`site.ended()`, `capture-probes.mjs`), so neither rehearsal capture's own tab order is walked on a build with
+that fix. Both artifacts predate it — `interaction.leftSite` is absent in each, which is how they still serve
+as #1363's acceptance fixtures (`packages/cli/src/left-site-acceptance.test.ts`). This table row's own claim
+was never wrong; the rehearsal account read it as covering an escape it does not name.
+
 ## What is verified, and what is not
 
 Verified locally: 12 tests over the renderer and the pass/fail policy; the exit contract exercised four
