@@ -88,6 +88,34 @@ whether they are followed.
   behind it is then a real cost of the decision rather than an accident of the path rule. Full ruling and
   the per-row reasoning: `docs/lane-ownership.json`'s `_claimVsAuthorRuling`, and #1320/#1257/#1397/#1452.
 
+## A reviewer verdict also posts as a GitHub review; requiring one is deferred (ceo's ruling, 2026-09-19)
+
+- **Measured 2026-09-19: 0 of the last 25 merged PRs carried a GitHub review.** Every verdict is prose in
+  a PR comment (`**Review of #<n> at \`<head8>\`, by reviewer: convinced.**`), read by `review-verdict.mjs`
+  (#1245) and the org's own clocks — but never by GitHub itself. `gh pr view --json reviews` returns `[]`
+  on every one of them, so the merge-queue ruleset and branch protection cannot require an approval, and
+  no tool outside this repository's code can see whether a PR was reviewed. #1761 is the full measurement.
+- **Ruling: verdict-as-review is YES, ruleset-requires-review is NOT YET, and `(provisional)` gets no
+  separate GitHub state.**
+  1. `packages/agent-org/docs/roles/reviewer.md` now instructs `reviewer`/`reviewer-2` to post
+     `gh pr review <n> --approve` (on `convinced`, provisional or not) or `--request-changes` (on
+     `not convinced`) alongside the existing comment, body-first-lined with the same verdict. The comment
+     is unchanged and stays the evidence (`Acceptance:`, `Mutation:`, findings); the review is the
+     GitHub-visible signal, not a replacement.
+  2. **The merge-queue ruleset and branch protection require nothing from this review yet.** A bot account
+     that also opens PRs (`a11ign-ai-workers` opens every PR here) may find GitHub refuses its own review
+     as self-approval — untested, because testing it needs the reviewer's own credentials, which `ceo`
+     does not hold. Requiring a review before that is proven would block every merge outright the moment
+     it happened to be true. The next real review posted after this rule lands **is** that proof: watch
+     `gh pr view --json reviews` on it, and only then open a row to add the requirement.
+  3. `(provisional)` stays a word in the comment and the review body. GitHub's approval is binary and this
+     repo's own five-in-a-row rule (`reviewer.md`, "Since the line lifted…") already treats a provisional
+     `convinced` as the actionable verdict, so there is no second state left for a review object to carry.
+- **Why `ceo` ruled rather than referring it:** it changes the merge-queue ruleset's future shape, which is
+  `ceo`'s lane per `docs/lane-ownership.json`, and per the 2026-09-18 ruling above (`lane:ceo` protects
+  review, not authorship) this is a genuine decision between behaviours (whether GitHub's own machinery
+  owns "was this approved") rather than a path needing review only.
+
 ## Routing — who reads what (chairman's direction, 2026-09-14)
 
 - **`product-manager` is the first reader for rows, the queue and process, and rules on them:** filing and
