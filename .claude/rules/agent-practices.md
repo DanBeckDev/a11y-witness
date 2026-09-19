@@ -116,6 +116,35 @@ whether they are followed.
   review, not authorship) this is a genuine decision between behaviours (whether GitHub's own machinery
   owns "was this approved") rather than a path needing review only.
 
+## A waiting condition is DATA, not a sentence (chairman's direction, 2026-09-19)
+
+- **If a conclusion changes what should happen next, it goes in a field, not a comment.** The comment
+  stays as the reasoning; the field is what moves the org. Every session in this org reads structured
+  state and writes prose, and that open loop is the reason the chairman keeps having to intervene:
+  **the org can act on what GitHub records, and cannot act on anything it learns.**
+- **Measured 2026-09-19: 0 open rows carried a machine-readable blocker; 5 stated one in prose.** Three
+  hours of that day, each the same shape — `orchestrator` wrote *"blocked by #1772"* in a comment, #1772
+  closed 64 minutes later, and it sat idle with a healthy fleet and five runnable rows; `ceo` wrote
+  *"no need to re-check before tomorrow's fire"* on #1234 and was re-woken 2h later for ~18 more
+  identical answers; `orchestrator` worked out the control-plane SSH route, wrote it down, and stopped.
+- **Waiting on another row → `gh issue edit <n> --add-blocked-by <m>`** (or `--blocked-by` at filing).
+  This is **GitHub's own dependency edge**, not a convention this repo invented: the UI renders it and
+  `gh issue list --json blockedBy` returns it in the call the gate already makes.
+- **Waiting on a date → a `Not-before: YYYY-MM-DD` line in the row body**, because GitHub has no native
+  equivalent. A body field and not a label, because a `not-before:<date>` label mints one label per date
+  into a vocabulary that already shows that rot (`branch:agent/…`, `worktree:/private/tmp/…`). It follows
+  `Acceptance:`/`Closes:` — this repo's own proven pattern of a declared, parsed, tested body field.
+- **Both CLEAR THEMSELVES, and that is the whole point.** `blocked` is a claim with **no referent**: it
+  says something blocks this row and never says what, so nothing can check it and only a human re-reading
+  the row can lift it — which is why 11 rows carried it that day, several waiting on conditions that had
+  long since become true. **A waiting condition must name what it waits on, in a form a machine can
+  evaluate.** Prefer these two over `blocked`; use `blocked` only for a wait neither can express, and say
+  in the same breath what would clear it.
+- **No new cause was needed, and that is the evidence the seam is right.** A waiting row leaves its
+  owner's population; when the condition clears it re-enters, the owner's count changes, the causeKey
+  changes, the wake ledger's dedupe stops matching, and the existing cause fires. A shelved `ready` row
+  is reported on the tick log with its reason, never dropped silently.
+
 ## Routing — who reads what (chairman's direction, 2026-09-14)
 
 - **`product-manager` is the first reader for rows, the queue and process, and rules on them:** filing and
