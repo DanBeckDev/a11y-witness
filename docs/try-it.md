@@ -118,24 +118,32 @@ this tool exists to hear actually happen.
 
 <!-- TIMING:BEGIN -->
 
-**Expect four to eight minutes for a real page.** Measured on five real-page runs that reached the page
-(#311, #915): 4 m 38 s, 4 m 50 s, 5 m 48 s, 7 m 52 s and 7 m 54 s. **There is a floor — the fastest run that
-reached the page was 4 m 38 s — and above it the spread is wide:** the slowest of the five is seventy per
-cent longer than the fastest, so a simpler page does not reliably mean a shorter run, and the range is a
-bound rather than a prediction for your page — and, per the runs below, not a guaranteed lower bound
-either. Most of it is the screen reader reading, and that time is not parallelisable or recoverable.
+**Expect three to eight minutes for a real page.** Measured on eleven real-page runs (#311, #915): 3 m 14 s,
+3 m 45 s, 4 m 14 s, 4 m 32 s, 4 m 38 s, 4 m 50 s, 5 m 48 s, 5 m 52 s, 6 m 35 s, 7 m 52 s and 7 m 54 s. **There
+is a floor — the fastest run that reached the page was 3 m 14 s — and above it the spread is wide:** the
+slowest of the eleven is 144 per cent longer than the fastest, so a simpler page does not reliably mean a
+shorter run, and the range is a bound rather than a prediction for your page — and, per the runs below, not
+a guaranteed lower bound either. Most of it is the screen reader reading, and that time is not
+parallelisable or recoverable.
 
 <!-- TIMING:END -->
 
-**A sixth run took 3 m 45 s and that is not a faster run, it is a failed one** — it opened on a consent
-overlay and read almost none of the page. **The 4 m 38 s figure above is not a floor either: a clean run on
-this exact page finished its capture-and-judge step in 4 m 22 s** (run 34774692947, 2026-09-13), **its
-result byte-identical to a 5 m 08 s run the same day** (34774183433); **a separate clean run elsewhere
-finished its capture alone, excluding judging, in 3 m 48.9 s, transcript byte-identical to a 4 m 44.7 s
-one** (runs 34782000257 and 34781484432). **So duration alone does not tell you which happened — check
-the report itself:** if it shows almost nothing on a page you know is large, you are looking at the banner
-(see the check below); a fast, full report is a good run. The range above has no ceiling of its own — the
-workflow's own limit on a run that will not finish at all is stated below.
+**A run finishing well under four minutes is not necessarily a shorter examination — check the report
+itself before reading speed as good news.** Two of the eleven are fast because they failed: `hubspot.com`
+opened on a consent overlay Escape did not dismiss and read almost none of the page, on two separate runs
+(4 m 50 s and, later, 3 m 45 s). The genuinely fastest of the eleven, `notion.com` at 3 m 14 s, completed
+cleanly with 84 announcements and no overlay — so a fast run is not itself the tell; the report is. **Nor
+is any figure above a guaranteed floor: a clean run on this exact page finished its capture-and-judge
+step in 4 m 22 s** (run 34774692947, 2026-09-13), **its result byte-identical to a 5 m 08 s run the same
+day** (34774183433); **a separate clean run elsewhere finished its capture alone, excluding judging, in
+3 m 48.9 s, transcript byte-identical to a 4 m 44.7 s one** (runs 34782000257 and 34781484432). **So
+duration alone does not tell you which happened — check the report itself:** if it shows almost nothing on
+a page you know is large, you are looking at the banner (see the check below); a fast, full report is a
+good run. **If a site redirects you to a regional page, pass that regional URL instead** — the tool refuses
+a page it was not asked for, so a global homepage that redirects (`stripe.com` from the UK, for one) stops
+within a minute with `wrong-page`; the regional URL it redirects to (`stripe.com/gb`) captures normally.
+The range above has no ceiling of its own — the workflow's own limit on a run that will not finish at all
+is stated below.
 
 **Those are capture times, not the job you are billed for.** Setup comes on top. The two most recent jobs measured at a single build, both at `3bb1fddf` with warm caches (V1 rehearsal 4, runs 34781484432 and 34782000257, 2026-09-13), took 6 m 42 s and 5 m 56 s for the whole job. The only cold-cache job measured is older and at a different build, `0e809d13` (V1 rehearsal 1, run 34764686304, the same day): setup 85.3 s, capture and judging 7 m 30 s, and 9 m 20 s for the whole job. Budget runner time for the job, not the capture. The snippets above set `timeout-minutes: 20` on the job — a bit over twice the slowest one measured (9 m 20 s) — so a run that will not finish says so at 20, not after GitHub's own much longer job default.
 
@@ -254,9 +262,9 @@ point the run at the page with the form on it.
 
 ### How long a large page takes
 
-**Expect four to eight minutes**, per the measurement above (#311, #915) — the floor is fixed regardless
+**Expect three to eight minutes**, per the measurement above (#311, #915) — the floor is fixed regardless
 of shape, because the time is a screen reader reading and that is not parallelisable or recoverable. The
-range above it is not: the slowest measured run is seventy per cent longer than the fastest. A very large page can still exhaust our capture budget beyond that
+range above it is not: the slowest measured run is 144 per cent longer than the fastest. A very large page can still exhaust our capture budget beyond that
 range, and if it does you will get a partial result that **says** it is partial rather than a short one
 that looks complete. The log adds a line above its count of findings,
 `a11ign: N criteria rest on an examination known to be partial -- see the artifact`, and the job summary's
