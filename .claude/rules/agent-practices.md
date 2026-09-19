@@ -128,8 +128,15 @@ whether they are followed.
 - **`orchestrator` is the first reader for fleet and lab questions** — a capture's history, a worker fact,
   a lab reading. Engineers ask directly; the answer is posted on the row.
 - **The author of a draft prompts its parity reviewer** the moment the PR opens and again after every push
-  that changes the head: `herdr --session org agent prompt reviewer "Draft #<n> (odd) …"` for odd numbers,
-  `reviewer-2` for even. `ceo`'s tick no longer does it; a draft with no verdict 30 minutes after the
+  that changes the head: `npm run prompt:session -- reviewer "Draft #<n> (odd) …"` for odd numbers,
+  `reviewer-2` for even. **`prompt:session` CLEARS THE SESSION FIRST, and the raw
+  `herdr ... agent prompt` this line used to name does not** — that is the whole reason it exists.
+  `wake.mjs` has cleared before every order it delivers since #912 (690k → 37k input tokens on a real
+  session, an 18× cut), but an author calling `herdr` directly bypassed it. Measured 2026-09-19 on a real
+  `reviewer` transcript: six reviews in one unbroken session — #1765, #1767, #1769, #1771, #1775, #1777 —
+  only #1765 delivered by the gate, 2.29M cached input tokens carried, and at least one auto-compact. Use
+  the raw call only for a RE-prompt about the same draft, where the reviewer's existing context is the
+  point. `ceo`'s tick no longer does it; a draft with no verdict 30 minutes after the
   author's prompt is reported to `product-manager`, who re-prompts once and then tells `ceo`.
 - **`ceo` keeps:** the publish order and every freeze decision, reviewer spot-checks, the board edition read,
   rulings that reach it through `product-manager`, and the chairman.
