@@ -107,10 +107,26 @@ jobs:
     needs: [action-smoke, capture-regression, consumer-gate]
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      # `write` SINCE 2026-09-19, AND THE FIRST PUBLISH IS WHY. This read `read`, scoped deliberately so
+      # the job could not push -- and `changeset publish` creates a git tag per published package, which
+      # it therefore could not do. The result was measured rather than predicted: `a11ign@0.1.0` and five
+      # scoped packages went live at `b373d1d7`, and origin carried NO tag naming that commit. Zero
+      # non-`stranded/` tags existed at all.
+      #
+      # THAT GAP IS NOT COSMETIC. A GitHub Actions consumer pins with `uses: a11ign/a11ign@v0.1.0`, which
+      # resolves a GIT REF -- npm has no part in it. So the published Action could not be pinned to the
+      # version that was published, and #1346 ("flip every public snippet from `@main` to `@v0.1.0`")
+      # could not be done without pointing every documented example at a ref that did not exist.
+      #
+      # WHAT IT WIDENS, STATED PLAINLY RATHER THAN BURIED: this workflow is `workflow_dispatch`-only and
+      # `ceo` dispatches it, so an agent-triggered run can now write to the repository. The narrowing this
+      # replaces was a real protection. What makes the trade acceptable is that the write is the tag the
+      # publish already implies -- a ref naming a commit that is, by then, already public on npm and
+      # unchangeable -- and that everything destructive stays out of reach: branch protection still
+      # refuses a force-push, and `contents: write` grants no bypass of it.
+      contents: write
       # REQUIRED BY PROVENANCE, and only by it. npm signs the attestation with a short-lived OIDC token
-      # from this job; without the claim it fails the publish rather than shipping unsigned. Scoped to
-      # exactly this and nothing else -- `contents` stays read, so the job still cannot push.
+      # from this job; without the claim it fails the publish rather than shipping unsigned.
       id-token: write
     steps:
       - uses: actions/checkout@v4
