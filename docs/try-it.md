@@ -166,7 +166,11 @@ No capture worker answered at http://localhost:8765 (nothing was configured, so 
 A screen reader is a Windows application, so nothing runs here without one. Set A11Y_WORKER to point at a
 worker you have, or see docs/getting-started.md to set one up (~20 minutes with a Windows machine already,
 or use the GitHub Action if you have none).
+(connect ECONNREFUSED 127.0.0.1:8765)
 ```
+
+That last line is the reason the connection failed — `ECONNREFUSED` here, since nothing is listening; a
+firewall or a different local setup will say something else.
 
 **Three ways past it, cheapest first:**
 

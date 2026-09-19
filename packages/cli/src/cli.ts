@@ -377,19 +377,24 @@ export function errorReason(error: unknown): string {
  * worker that is merely busy or still warming up -- exactly the documented local-worker-on-8765 setup
  * this must not break.
  */
+/**
+ * Exported as a pure builder, not just the throw site, because `docs/try-it.md` quotes this text
+ * verbatim as "the most likely first result" -- `quoted-cli-output.test.ts` calls this function to
+ * derive the expected quote rather than comparing two independently retyped literals.
+ */
+export function noWorkerMessage({ worker, reason }: { worker: string; reason: string }): string {
+  return `No capture worker answered at ${worker} (nothing was configured, so this address was a guess).\n`
+    + `A screen reader is a Windows application, so nothing runs here without one. Set A11Y_WORKER to `
+    + `point at a worker you have, or see docs/getting-started.md to set one up (~20 minutes with a `
+    + `Windows machine already, or use the GitHub Action if you have none).\n(${reason})`;
+}
+
 async function refuseIfNothingListening(worker: string): Promise<void> {
   let health: unknown;
   try {
     health = (await requestJson(`${worker}/health`, { timeoutMs: WORKER_PROBE_TIMEOUT_MS })).json;
   } catch (error) {
-    const reason = errorReason(error);
-    throw new Error(
-      `No capture worker answered at ${worker} (nothing was configured, so this address was a guess).\n`
-      + `A screen reader is a Windows application, so nothing runs here without one. Set A11Y_WORKER to `
-      + `point at a worker you have, or see docs/getting-started.md to set one up (~20 minutes with a `
-      + `Windows machine already, or use the GitHub Action if you have none).\n(${reason})`,
-      { cause: error },
-    );
+    throw new Error(noWorkerMessage({ worker, reason: errorReason(error) }), { cause: error });
   }
   // It answered, so something is really there -- proceed exactly as before this fix existed. A worker
   // reporting busy or still warming up is NOT refused: `workerIsUsable` decides whether to DISPATCH a
