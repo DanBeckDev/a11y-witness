@@ -18,9 +18,10 @@ jobs:
       pull-requests: write       # for the PR comment below; omit it and the report still runs, only quieter
     steps:
       - uses: actions/checkout@v4
-      - uses: a11ign/a11ign@main
-        # Pin it: @main moves under you. Use the full 40-character commit SHA if your CI must not
-        # change -- GitHub refuses an abbreviated one outright, it does not just discourage it.
+      - uses: a11ign/a11ign@v0.1.0
+        # Pinned to v0.1.0, the first tagged release. Use the full 40-character commit SHA instead if
+        # your CI must not move even across a release -- GitHub refuses an abbreviated one outright, it
+        # does not just discourage it.
         id: a11ign
         with:
           url: https://example.com/contact
@@ -43,11 +44,12 @@ no log and no artifact, and any diagnostic step you add with `if: always()` does
 [the account of one, and what to do about it](./try-it.md#the-fastest-route-a-github-actions-run) in
 `docs/try-it.md`.
 
-> **Pin this deliberately.** There is no tagged release yet, so `@main` is the only ref that resolves —
-> and it moves. If your CI must not change under you, pin the full commit SHA — all 40 characters;
+> **This pins the first tagged release.** `v0.1.0` is the earliest of the `0.x` releases ADR 0007 commits
+> this project to until it reaches `1.0.0` — deliberate, not a placeholder: `0.x` means a breaking change
+> costs a minor bump, not a major-version apology, while nothing external has consumed the API yet. If
+> your CI must not move even across a release, pin the full commit SHA instead — all 40 characters;
 > GitHub refuses an abbreviated one outright rather than merely discouraging it
-> (`uses: a11ign/a11ign@<sha>`), which is what GitHub itself recommends for third-party actions.
-> A `@v1` tag is a release decision this project has not taken; see
+> (`uses: a11ign/a11ign@<sha>`), which is what GitHub itself recommends for third-party actions. See
 > [ADR 0007](./adr/0007-versioning-and-release.md).
 
 No API key. The default judge is this project's **own trained scorer** — 27 KB of heads shipped in the
@@ -278,9 +280,10 @@ error handling most needs reviewing. On such a page 3.3.1, 3.3.3 and 4.1.3 are n
 `forms` names a config that says how to operate it (ADR 0024):
 
 ```yaml
-- uses: a11ign/a11ign@main
-  # Pin it: @main moves under you. Use the full 40-character commit SHA if your CI must not
-  # change -- GitHub refuses an abbreviated one outright, it does not just discourage it.
+- uses: a11ign/a11ign@v0.1.0
+  # Pinned to v0.1.0, the first tagged release. Use the full 40-character commit SHA instead if your
+  # CI must not move even across a release -- GitHub refuses an abbreviated one outright, it does not
+  # just discourage it.
   with:
     url: https://staging.example.com/signup
     task: "Create an account"
