@@ -43,6 +43,16 @@ RULES WORTH KNOWING BEFORE YOU WRITE ONE
     for anything reading `runs/` (`rules:gate`, `rules:coverage`, `check-signals`, `corpus:starvation`,
     `scorer:shortcuts`) -- gitignored here, so the gate would examine nothing and report cleanly. Name it
     and say who runs it.
+  - NAME WHAT PROVES *THIS ROW*, NOT THE WHOLE SUITE. `ci.yml`'s `ts` job ALREADY runs every test the
+    diff reaches, in parallel with this one, on the same tree -- so `npm run test:org` or `npm test` here
+    is a second full run of tests that are already running, and it pays for itself twice. Measured
+    2026-09-19 across four runs: `ts` 154-176 s and `acceptance` 186-193 s, side by side, for one change.
+    Name the file, the guard, or the command whose output IS the row's claim:
+        node packages/guards/src/assert-glob-not-empty.mjs "packages/lab/src/packaging/wake.test.ts" \
+          --min=1 --run --runner=rstest
+    A whole-suite command is right only when the row's claim genuinely IS "the whole suite still passes"
+    -- a runner upgrade, a dependency bump, a config change with no single owner. That is rare, and when
+    it is true, say why on the row so the next reader can tell it from a habit.
   - Genuinely nothing to run? `Acceptance: none — <reason>`. The em dash matters: `none -- reason` parses the reason as "- reason". The reason is REQUIRED, because "nobody wrote
     one" and "this one deliberately has none" must stay different states.
 
