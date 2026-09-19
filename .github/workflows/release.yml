@@ -296,7 +296,18 @@ jobs:
         # conditionally rather than always passed.
         run: npx changeset publish${{ inputs.dist-tag != '' && format(' --tag {0}', inputs.dist-tag) || '' }}
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # NO `NODE_AUTH_TOKEN`, AND ITS ABSENCE IS THE POINT (#63 step 11, 2026-09-19). All six packages
+          # now name this repository and this workflow as a TRUSTED PUBLISHER on npm, so each publish
+          # authenticates with a short-lived OIDC token minted for this workflow run rather than with a
+          # long-lived registry credential stored as a secret. Setting `NODE_AUTH_TOKEN` here would make
+          # npm use the token and never exercise OIDC, so leaving it would mean the trusted-publisher
+          # configuration was never actually tested -- green, and proving nothing.
+          #
+          # `id-token: write` on the job (above) is what makes this work, and it was already there for
+          # provenance. THE SECRET ITSELF IS NOT REVOKED BY THIS CHANGE: if the first OIDC publish fails,
+          # restoring this one line is the whole rollback. Revoke `NPM_TOKEN` only after a real publish
+          # has succeeded without it -- the failure mode here is at publish time, which this file's own
+          # header calls "the moment they are least able to check the result".
           NPM_CONFIG_PROVENANCE: "true"
 
       - name: Say plainly what happened
